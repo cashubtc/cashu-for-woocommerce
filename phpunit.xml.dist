@@ -1,13 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <phpunit
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/12.0/phpunit.xsd"
+    xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/10.5/phpunit.xsd"
     bootstrap="tests/bootstrap.php"
     colors="true"
+    cacheDirectory=".phpunit.cache"
 >
     <testsuites>
-        <testsuite name="all">
-            <directory suffix="Test.php">tests</directory>
+        <testsuite name="unit">
+            <directory suffix="Test.php">tests/Helpers</directory>
+            <file>tests/sampleTest.php</file>
+        </testsuite>
+        <testsuite name="integration">
+            <directory suffix="Test.php">tests/Integration</directory>
         </testsuite>
     </testsuites>
 </phpunit>

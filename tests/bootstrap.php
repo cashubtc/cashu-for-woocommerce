@@ -25,14 +25,47 @@ if (!defined('CASHU_WC_BASE')) {
 if (!defined('HOUR_IN_SECONDS')) {
 	define('HOUR_IN_SECONDS', 3600);
 }
+if (!defined('MINUTE_IN_SECONDS')) {
+	define('MINUTE_IN_SECONDS', 60);
+}
+if (!defined('DAY_IN_SECONDS')) {
+	define('DAY_IN_SECONDS', 86400);
+}
+if (!defined('ARRAY_A')) {
+	define('ARRAY_A', 'ARRAY_A');
+}
 
 // 3. Minimal stubs for the WordPress functions touched by pure helpers in src/.
-//    Anything that needs a real database, HTTP client, or order object should
-//    be exercised inside wp-env, not here.
+//    Tests that need richer WP/WC behaviour use Brain\Monkey + Mockery via
+//    Cashu\WC\Tests\IntegrationTestCase. Tests under tests/Helpers/ run as
+//    plain PHPUnit and rely only on these stubs.
 if (!function_exists('wp_hash')) {
 	function wp_hash(string $data, string $scheme = 'auth'): string {
 		// Deterministic hex output, enough for derivation-helper tests.
 		return hash_hmac('md5', $data, $scheme . '|cashu-test-salt');
+	}
+}
+
+// 4. Skeleton WC_Order class so Mockery can mock instances. Only methods the
+//    plugin actually calls are listed; tests that need other methods extend
+//    via Mockery::mock(WC_Order::class)->shouldReceive('newMethod').
+if (!class_exists('WC_Order')) {
+	class WC_Order {
+		public function get_id(): int { return 0; }
+		public function get_status(): string { return ''; }
+		public function get_total(): string { return '0'; }
+		public function get_currency(): string { return 'USD'; }
+		public function get_order_key(): string { return ''; }
+		public function get_meta(string $key, bool $single = true) { return ''; }
+		public function update_meta_data(string $key, $value): void {}
+		public function delete_meta_data(string $key): void {}
+		public function save(): int { return 0; }
+		public function update_status(string $status, string $note = ''): bool { return true; }
+		public function payment_complete(string $txn_id = ''): bool { return true; }
+		public function add_order_note(string $note, int $is_customer_note = 0, bool $added_by_user = false): int { return 0; }
+		public function has_status($status): bool { return false; }
+		public function is_paid(): bool { return false; }
+		public function get_checkout_payment_url(bool $on_checkout = false): string { return ''; }
 	}
 }
 

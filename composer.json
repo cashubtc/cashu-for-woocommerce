@@ -7,6 +7,11 @@
       "Cashu\\WC\\": "src/"
     }
   },
+  "autoload-dev": {
+    "psr-4": {
+      "Cashu\\WC\\Tests\\": "tests/"
+    }
+  },
   "authors": [
     {
       "name": "Rob Woodgate",
@@ -19,11 +24,17 @@
     "php-stubs/wordpress-stubs": "^6.9",
     "wp-coding-standards/wpcs": "^3.3",
     "phpcompatibility/phpcompatibility-wp": "^2.1",
-    "dealerdirect/phpcodesniffer-composer-installer": "*"
+    "dealerdirect/phpcodesniffer-composer-installer": "*",
+    "phpunit/phpunit": "^10",
+    "brain/monkey": "^2",
+    "mockery/mockery": "^1.6"
   },
   "scripts": {
     "lint:check": "vendor/bin/phpcs",
-    "lint:fix": "sh -c 'vendor/bin/phpcbf; ec=$?; [ $ec -le 1 ]'"
+    "lint:fix": "sh -c 'vendor/bin/phpcbf; ec=$?; [ $ec -le 1 ]'",
+    "test": "vendor/bin/phpunit",
+    "test:unit": "vendor/bin/phpunit --testsuite=unit",
+    "test:integration": "vendor/bin/phpunit --testsuite=integration"
   },
   "config": {
     "allow-plugins": {
