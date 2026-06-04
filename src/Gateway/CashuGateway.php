@@ -152,6 +152,16 @@ class CashuGateway extends \WC_Payment_Gateway {
 				'claim_route'   => 'claim-melt-quote',
 				'symbol'        => CASHU_WC_BIP177_SYMBOL,
 
+				// Per-tab QR centre-icon overlay. JS swaps src by currentMode;
+				// unified hides the overlay entirely because the BIP-321 payload
+				// is dual-protocol — branding it with either logo would mislead,
+				// and the extra payload data also leaves less error-correction
+				// headroom for an opaque centre cutout.
+				'qr_icons'      => array(
+					'cashu'     => esc_url_raw( CASHU_WC_URL . 'assets/images/cashu-logo.png' ),
+					'lightning' => esc_url_raw( CASHU_WC_URL . 'assets/images/lightning_badge.svg' ),
+				),
+
 				'i18n'          => array(
 					// General / bootstrap
 					'data_incomplete'      => __( 'Payment data incomplete, please refresh and try again.', 'cashu-for-woocommerce' ),
@@ -1089,7 +1099,7 @@ class CashuGateway extends \WC_Payment_Gateway {
 						<!-- JS renders QR here, canvas or img is fine -->
 					</div>
 
-					<div class="cashu-qr-icon" aria-hidden="true">
+					<div class="cashu-qr-icon" data-cashu-qr-icon hidden aria-hidden="true">
 						<img src="<?php echo esc_url( $this->icon ); ?>" alt="">
 					</div>
 				</div>

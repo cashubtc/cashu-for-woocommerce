@@ -113,6 +113,10 @@
   max-width: 100%;
 }
 
+.cashu-qr-icon[hidden] {
+  display: none;
+}
+
 .cashu-qr-icon {
   align-items: center;
   background: #fff;
