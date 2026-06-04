@@ -277,7 +277,7 @@ class CashuGateway extends \WC_Payment_Gateway {
 				$this->setup_cashu_payment( $order );
 			} catch ( \Throwable $e ) {
 				Logger::error( 'Could not setup Cashu payment: ' . $e->getMessage() );
-				wc_add_notice( __( 'Cashu payment setup failed, please try again.', 'cashu-for-woocommerce' ), 'error' );
+				wc_add_notice( $this->classify_setup_error( $e ), 'error' );
 				return array( 'result' => 'failure' );
 			}
 		}
@@ -378,6 +378,39 @@ class CashuGateway extends \WC_Payment_Gateway {
 		} finally {
 			OrderLock::release( $order_id, 'setup' );
 		}
+	}
+
+	/**
+	 * Map a setup failure into a customer-facing message. Avoids leaking
+	 * raw mint/LN errors but tells the user enough to know whether to
+	 * retry or contact the store.
+	 */
+	private function classify_setup_error( \Throwable $e ): string {
+		$msg = $e->getMessage();
+
+		if ( false !== stripos( $msg, 'lightning address' )
+			|| false !== stripos( $msg, 'LNURL' )
+			|| false !== stripos( $msg, 'invoice' )
+		) {
+			return __( "We couldn't fetch a Lightning invoice for your payment. Please contact the store — the merchant's Lightning address may need attention.", 'cashu-for-woocommerce' );
+		}
+
+		if ( false !== stripos( $msg, 'mint quote request failed' )
+			|| false !== stripos( $msg, 'mint melt request failed' )
+			|| false !== stripos( $msg, 'response is not json' )
+		) {
+			return __( "We couldn't reach the Cashu mint right now. Please reload to try again, or contact the store if this keeps happening.", 'cashu-for-woocommerce' );
+		}
+
+		if ( false !== stripos( $msg, 'price quote' ) ) {
+			return __( "We couldn't fetch a current BTC price. Please reload to try again.", 'cashu-for-woocommerce' );
+		}
+
+		if ( false !== stripos( $msg, 'not configured' ) ) {
+			return __( 'Cashu payment is temporarily unavailable. Please contact the store.', 'cashu-for-woocommerce' );
+		}
+
+		return __( 'Cashu payment setup failed, please try again.', 'cashu-for-woocommerce' );
 	}
 
 	/**
@@ -499,6 +532,11 @@ class CashuGateway extends \WC_Payment_Gateway {
 		$order->update_meta_data( '_cashu_melt_quote_id', $quote_id );
 		$order->update_meta_data( '_cashu_melt_quote_expiry', $expiry );
 		$order->update_meta_data( '_cashu_melt_mint', $this->trusted_mint );
+		// Snapshot the LN address that the invoice was actually fetched
+		// against. mark_paid's order note should reflect *that* address,
+		// not whatever's in the option at settlement time — the admin may
+		// have rotated the address between quote and payment.
+		$order->update_meta_data( '_cashu_invoice_ln_address', $this->ln_address );
 
 		// Stash the invoice's payment_hash so the browser-claim endpoint can
 		// verify a preimage cryptographically (no mint round-trip).
@@ -889,6 +927,7 @@ class CashuGateway extends \WC_Payment_Gateway {
 		$mint_quote_id = (string) $order->get_meta( '_cashu_mint_quote_id', true );
 		$spot_time     = absint( $order->get_meta( '_cashu_spot_time', true ) );
 		$spot_expiry   = $spot_time + self::QUOTE_EXPIRY_SECS;
+		$setup_error   = '';
 		if ( $spot_expiry < time()
 			|| $quote_expiry < $spot_expiry
 			|| '' === $mint_quote_id
@@ -899,8 +938,8 @@ class CashuGateway extends \WC_Payment_Gateway {
 				$spot_time   = absint( $order->get_meta( '_cashu_spot_time', true ) );
 				$spot_expiry = $spot_time + self::QUOTE_EXPIRY_SECS;
 			} catch ( \Throwable $e ) {
+				$setup_error = $this->classify_setup_error( $e );
 				Logger::error( 'Could not setup Cashu payment on receipt page: ' . $e->getMessage() );
-				wc_add_notice( __( 'Cashu payment setup failed, please try again.', 'cashu-for-woocommerce' ), 'error' );
 			}
 		}
 
@@ -911,6 +950,23 @@ class CashuGateway extends \WC_Payment_Gateway {
 		$mint_quote_request = (string) $order->get_meta( '_cashu_mint_quote_request', true );
 		$mint_quote_amount  = absint( $order->get_meta( '_cashu_mint_quote_amount', true ) );
 		$mint_quote_expiry  = absint( $order->get_meta( '_cashu_mint_quote_expiry', true ) );
+
+		// If setup failed (or never ran) and the essential meta is missing,
+		// rendering the JS widget would either show a broken QR or, worse,
+		// hand the JS a spot_expiry of 900 (epoch + 15 min) which the
+		// polling loop reads as already-expired and silently redirects the
+		// customer back to the cart. Render an explicit error UI instead.
+		$payment_data_missing = ( 0 === $spot_time || '' === $mint_quote_id || '' === $quote_id || $melt_total <= 0 );
+		if ( $payment_data_missing ) {
+			$message = '' !== $setup_error
+				? $setup_error
+				: __( 'Cashu payment data is missing for this order. Please reload the page to retry, or contact the store if the problem persists.', 'cashu-for-woocommerce' );
+			echo '<p class="woocommerce-error" role="alert">' . esc_html( $message ) . '</p>';
+			echo '<p><a class="button" href="' . esc_url( $order->get_checkout_payment_url() ) . '">';
+			echo esc_html__( 'Retry payment', 'cashu-for-woocommerce' );
+			echo '</a></p>';
+			return;
+		}
 
 		$order_key   = $order->get_order_key();
 		$pay_route   = sprintf( 'cashu-wc/v1/pay/%d/%s', $order_id, $order_key );

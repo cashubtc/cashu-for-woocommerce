@@ -18,7 +18,10 @@ use WP_REST_Server;
  *      Cheap polling endpoint: just answers "is this order paid?". Both legs
  *      poll this; cashu-leg orders flip to paid synchronously inside
  *      PayController, lightning-leg orders flip via the claim endpoint below.
- *      Never contacts the mint — scales with traffic.
+ *      Does not hit the mint in the steady state. Exception: if the cashu-leg
+ *      melt is in PENDING-at-mint state (PayController stashed the quote id),
+ *      one cached state check per poll resolves it — bounded at ~6 mint hits
+ *      per pending minute per order, zero once resolved.
  *
  *  POST /claim-melt-quote
  *      Lightning-leg one-shot finalizer. Called by the browser once after
@@ -386,13 +389,54 @@ final class ConfirmMeltQuoteController {
 			return;
 		}
 
-		if ( null !== $preimage && '' !== $preimage ) {
-			$order->update_meta_data( '_cashu_payment_preimage', sanitize_text_field( $preimage ) );
-		}
-		$order->payment_complete( $quote_id );
+		$order_id = $order->get_id();
 
-		$lightning_address = (string) get_option( 'cashu_lightning_address', '' );
-		$amount_for_note   = ( null !== $amount && '' !== $amount )
+		// Share the 'pay' scope with PayController so the cashu-leg and
+		// lightning-leg can't both call payment_complete on the same
+		// order — that would fire WC's payment-complete actions (emails,
+		// stock, etc.) twice. The is_paid() check above guards the
+		// in-process case; the lock + re-check below covers cross-process
+		// races where each process has its own WC object cache.
+		if ( ! OrderLock::acquire( $order_id, 'pay', 30 ) ) {
+			OrderLock::wait_for_release( $order_id, 'pay', 15 );
+			$fresh = wc_get_order( $order_id );
+			if ( $fresh && $fresh->is_paid() ) {
+				return;
+			}
+			if ( ! OrderLock::acquire( $order_id, 'pay', 30 ) ) {
+				Logger::error( 'mark_paid lock contention timeout for order ' . $order_id );
+				return;
+			}
+		}
+
+		try {
+			$fresh = wc_get_order( $order_id );
+			if ( ! $fresh || $fresh->is_paid() ) {
+				return;
+			}
+
+			if ( null !== $preimage && '' !== $preimage ) {
+				$fresh->update_meta_data( '_cashu_payment_preimage', sanitize_text_field( $preimage ) );
+			}
+			$fresh->payment_complete( $quote_id );
+
+			$this->add_paid_order_note( $fresh, $quote_id, $preimage, $amount );
+
+			// Keep the caller's $order reference in sync.
+			$order->read_meta_data( true );
+		} finally {
+			OrderLock::release( $order_id, 'pay' );
+		}
+	}
+
+	private function add_paid_order_note( WC_Order $order, string $quote_id, ?string $preimage, ?string $amount ): void {
+		// Prefer the LN address snapshotted at quote creation; fall back
+		// to the current option for legacy orders that pre-date that snapshot.
+		$lightning_address = (string) $order->get_meta( '_cashu_invoice_ln_address', true );
+		if ( '' === $lightning_address ) {
+			$lightning_address = (string) get_option( 'cashu_lightning_address', '' );
+		}
+		$amount_for_note = ( null !== $amount && '' !== $amount )
 			? $amount
 			: (string) absint( $order->get_meta( '_cashu_melt_total', true ) );
 
