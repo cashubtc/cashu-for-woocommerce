@@ -209,6 +209,7 @@ final class ConfirmMeltQuoteController {
 				: '';
 			$amount   = isset( $mint_response['amount'] ) ? (string) $mint_response['amount'] : '';
 
+			Logger::debug( 'resolve_pending_melt PENDING->PAID for order ' . $order->get_id() . ', quote ' . $pending_quote_id );
 			$this->mark_paid( $order, $pending_quote_id, $preimage, $amount );
 			$order->delete_meta_data( '_cashu_melt_pending_quote_id' );
 			$order->delete_meta_data( '_cashu_melt_pending_at' );
@@ -398,6 +399,7 @@ final class ConfirmMeltQuoteController {
 		// in-process case; the lock + re-check below covers cross-process
 		// races where each process has its own WC object cache.
 		if ( ! OrderLock::acquire( $order_id, 'pay', 30 ) ) {
+			Logger::debug( 'mark_paid waiting on pay lock for order ' . $order_id );
 			OrderLock::wait_for_release( $order_id, 'pay', 15 );
 			$fresh = wc_get_order( $order_id );
 			if ( $fresh && $fresh->is_paid() ) {

@@ -315,6 +315,7 @@ class CashuGateway extends \WC_Payment_Gateway {
 			// Another request is currently doing setup. Wait for it to
 			// finish, then refresh the caller's meta from DB so they see
 			// what the holder just wrote.
+			Logger::debug( 'setup_cashu_payment waiting on setup lock for order ' . $order_id );
 			if ( ! OrderLock::wait_for_release( $order_id, 'setup', 30 ) ) {
 				Logger::error( 'setup_cashu_payment lock contention timed out for order ' . $order_id );
 			}

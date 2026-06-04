@@ -207,6 +207,7 @@ final class PayController {
 		// quote-melt POST would be rejected (single-use quote) but the
 		// wallet's proofs may end up in an ambiguous state at the mint.
 		if ( ! OrderLock::acquire( $order_id, 'pay', self::PAY_LOCK_TTL ) ) {
+			Logger::debug( 'PayController::pay 409 cashu_in_flight on order ' . $order_id );
 			return new WP_Error(
 				'cashu_in_flight',
 				'Another payment for this order is currently being processed.',
