@@ -36,6 +36,15 @@ final class ConfirmMeltQuoteController {
 
 	private const REST_NAMESPACE = 'cashu-wc/v1';
 
+	/**
+	 * Per-order rate limit on the claim endpoint. Each attempt either passes
+	 * the cryptographic preimage check (fast path, no mint hit) or talks to
+	 * the mint exactly once. Bounding to 30/hour stops a leaked order_key
+	 * from being used to amplify mint traffic.
+	 */
+	private const CLAIM_RATE_LIMIT_MAX = 30;
+	private const CLAIM_RATE_LIMIT_TTL = HOUR_IN_SECONDS;
+
 	public function register_routes(): void {
 		register_rest_route(
 			self::REST_NAMESPACE,
@@ -172,13 +181,20 @@ final class ConfirmMeltQuoteController {
 			return null;
 		}
 
+		// Use the mint the quote was issued at, not the current gateway setting,
+		// so an admin-side mint change doesn't route the lookup to the wrong host.
+		$order_mint = (string) $order->get_meta( '_cashu_melt_mint', true );
+		if ( '' === $order_mint ) {
+			return null;
+		}
+
 		$cache_key = 'cashu_melt_state_' . md5( $pending_quote_id );
 		$cached    = get_transient( $cache_key );
 		if ( false !== $cached && is_array( $cached ) ) {
 			$mint_response = $cached;
 		} else {
 			$gateway       = new CashuGateway();
-			$mint_response = $gateway->fetch_melt_quote_state_safely( $pending_quote_id );
+			$mint_response = $gateway->fetch_melt_quote_state_safely( $pending_quote_id, $order_mint );
 			set_transient( $cache_key, $mint_response, 10 );
 		}
 
@@ -228,7 +244,11 @@ final class ConfirmMeltQuoteController {
 
 	/**
 	 * Browser claim. Verifies the preimage cryptographically when supplied;
-	 * falls back to a single mint round-trip when not.
+	 * falls back to a single mint round-trip when the client doesn't supply
+	 * one. A supplied preimage that doesn't hash to the stored payment_hash
+	 * is treated as a lying client and rejected — we do NOT then fall back
+	 * to the mint, otherwise a leaked order_key would let an attacker
+	 * amplify mint traffic via this endpoint.
 	 */
 	public function claim_melt_quote( WP_REST_Request $request ): WP_REST_Response|WP_Error {
 		$order = $this->load_order( $request );
@@ -246,6 +266,11 @@ final class ConfirmMeltQuoteController {
 			);
 		}
 
+		// Rate-limit before any work that could touch the mint.
+		if ( ! $this->check_claim_rate_limit( $order->get_id() ) ) {
+			return new WP_Error( 'cashu_rate_limited', 'Too many attempts.', array( 'status' => 429 ) );
+		}
+
 		$quote_id = (string) $order->get_meta( '_cashu_melt_quote_id', true );
 		if ( '' === $quote_id ) {
 			return new WP_Error( 'cashu_no_quote', 'Missing melt quote id on order.', array( 'status' => 400 ) );
@@ -254,25 +279,34 @@ final class ConfirmMeltQuoteController {
 		$preimage     = trim( (string) $request->get_param( 'preimage' ) );
 		$payment_hash = (string) $order->get_meta( '_cashu_payment_hash', true );
 
-		// Fast path: preimage hashes to the invoice's payment_hash.
-		if ( '' !== $preimage && '' !== $payment_hash && $this->preimage_matches( $preimage, $payment_hash ) ) {
-			$this->mark_paid( $order, $quote_id, $preimage, null );
-			return rest_ensure_response(
-				array(
-					'ok'       => true,
-					'state'    => 'PAID',
-					'redirect' => $order->get_checkout_order_received_url(),
-				)
-			);
+		// If the client supplied a preimage, we MUST verify it cryptographically
+		// before doing anything else. A correct preimage marks the order paid
+		// with zero mint traffic. An incorrect preimage is treated as malicious
+		// or buggy — reject outright; do not silently fall back to a mint hit
+		// (that's the amplification vector).
+		if ( '' !== $preimage ) {
+			if ( '' !== $payment_hash && $this->preimage_matches( $preimage, $payment_hash ) ) {
+				$this->mark_paid( $order, $quote_id, $preimage, null );
+				return rest_ensure_response(
+					array(
+						'ok'       => true,
+						'state'    => 'PAID',
+						'redirect' => $order->get_checkout_order_received_url(),
+					)
+				);
+			}
+			return new WP_Error( 'cashu_bad_preimage', 'Preimage does not match invoice payment hash.', array( 'status' => 400 ) );
 		}
 
-		// Fallback: ask the mint once.
-		$trusted_mint = trim( (string) get_option( 'cashu_trusted_mint', '' ) );
-		if ( '' === $trusted_mint ) {
-			return new WP_Error( 'cashu_no_mint', 'Trusted mint not configured.', array( 'status' => 500 ) );
+		// No preimage supplied — ask the mint once. Use the order's stored
+		// mint URL, not the current setting, so an admin-side mint change
+		// doesn't route this to the wrong host.
+		$order_mint = (string) $order->get_meta( '_cashu_melt_mint', true );
+		if ( '' === $order_mint ) {
+			return new WP_Error( 'cashu_no_mint', 'Order has no recorded mint URL.', array( 'status' => 500 ) );
 		}
 
-		$url = rtrim( $trusted_mint, '/' ) . '/v1/melt/quote/bolt11/' . rawurlencode( $quote_id );
+		$url = rtrim( $order_mint, '/' ) . '/v1/melt/quote/bolt11/' . rawurlencode( $quote_id );
 		$res = wp_remote_get(
 			$url,
 			array(
@@ -319,6 +353,16 @@ final class ConfirmMeltQuoteController {
 				'redirect' => $order->get_checkout_order_received_url(),
 			)
 		);
+	}
+
+	private function check_claim_rate_limit( int $order_id ): bool {
+		$key   = 'cashu_wc_claim_attempts_' . $order_id;
+		$count = (int) get_transient( $key );
+		if ( $count >= self::CLAIM_RATE_LIMIT_MAX ) {
+			return false;
+		}
+		set_transient( $key, $count + 1, self::CLAIM_RATE_LIMIT_TTL );
+		return true;
 	}
 
 	/**
