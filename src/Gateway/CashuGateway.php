@@ -563,6 +563,10 @@ class CashuGateway extends \WC_Payment_Gateway {
 		$order->update_meta_data( '_cashu_melt_quote_id', $quote_id );
 		$order->update_meta_data( '_cashu_melt_quote_expiry', $expiry );
 		$order->update_meta_data( '_cashu_melt_mint', $this->trusted_mint );
+		// Snapshot the underlying BOLT11 so the melt archive (and any out-
+		// of-band forensic flow) can reconstruct what was actually being
+		// paid — without this, an orphaned PAID merchant melt is opaque.
+		$order->update_meta_data( '_cashu_melt_quote_request', $invoice );
 		// Snapshot the LN address that the invoice was actually fetched
 		// against. mark_paid's order note should reflect *that* address,
 		// not whatever's in the option at settlement time — the admin may
@@ -744,9 +748,12 @@ class CashuGateway extends \WC_Payment_Gateway {
 		$archive   = '' !== $raw ? (array) json_decode( $raw, true ) : array();
 		$archive[] = array(
 			'quote'        => $current,
+			'request'      => (string) $order->get_meta( '_cashu_melt_quote_request', true ),
 			'expiry'       => absint( $order->get_meta( '_cashu_melt_quote_expiry', true ) ),
 			'mint'         => (string) $order->get_meta( '_cashu_melt_mint', true ),
+			'amount'       => absint( $order->get_meta( '_cashu_melt_total', true ) ),
 			'payment_hash' => (string) $order->get_meta( '_cashu_payment_hash', true ),
+			'ln_address'   => (string) $order->get_meta( '_cashu_invoice_ln_address', true ),
 		);
 		$encoded   = wp_json_encode( $archive );
 		if ( is_string( $encoded ) ) {
@@ -831,11 +838,18 @@ class CashuGateway extends \WC_Payment_Gateway {
 	 * @param string $quote_id The mint's melt quote id (stored on the order).
 	 * @param array  $proofs   Array of proofs as decoded from the wallet's POST body.
 	 *                         Each proof must contain id, amount, secret, C; witness optional.
+	 * @param string $mint_url Mint to route the melt to. Defaults to the gateway's
+	 *                         currently configured mint; callers with an order in
+	 *                         hand should pass the order's stored _cashu_melt_mint
+	 *                         so a settings change between quote creation and
+	 *                         settlement doesn't route the melt to a host that
+	 *                         doesn't know the quote.
 	 *
 	 * @throws \RuntimeException on transport or mint error.
 	 */
-	public function request_melt_bolt11( string $quote_id, array $proofs ): array {
-		$endpoint = rtrim( $this->trusted_mint, '/' ) . '/v1/melt/bolt11';
+	public function request_melt_bolt11( string $quote_id, array $proofs, string $mint_url = '' ): array {
+		$base     = '' !== $mint_url ? $mint_url : $this->trusted_mint;
+		$endpoint = rtrim( $base, '/' ) . '/v1/melt/bolt11';
 
 		// Coerce amounts to int — wallets may emit decimal-string or numeric per NUT-18.
 		$inputs = array_map(

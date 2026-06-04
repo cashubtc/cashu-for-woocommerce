@@ -497,6 +497,15 @@ jQuery(function ($) {
     const mq = mintQuote;
     const wallet = await trustedWalletP;
 
+    // The effective deadline is the tighter of the spot quote window
+    // (server-enforced) and the mint quote's own expiry. If the mint quote
+    // expires before the spot window, keep watching past mint expiry is
+    // pointless — the BOLT11 is dead. If the spot expires first, keep
+    // watching past spot is also pointless — the server will reject.
+    const mintExpiryMs =
+      data.mintQuote.expiry !== null ? data.mintQuote.expiry * 1000 : Infinity;
+    const deadlineMs = () => Math.min(data.quoteExpiryMs || Infinity, mintExpiryMs);
+
     // Immediate state check on page load: if the customer paid before we got
     // here (e.g., they reloaded or returned to the page after closing it),
     // claim straight away rather than waiting for the WS subscription or
@@ -538,7 +547,7 @@ jQuery(function ($) {
       const WS_MAX_ATTEMPTS = 3;
       const WS_BACKOFFS_MS = [1000, 2000];
       for (let attempt = 0; attempt < WS_MAX_ATTEMPTS; attempt++) {
-        const expiryMs = data.quoteExpiryMs - Date.now();
+        const expiryMs = deadlineMs() - Date.now();
         if (expiryMs <= 0 || ac.signal.aborted) return false;
         try {
           await wallet.on.onceMintPaid(mq.quote, {
@@ -548,7 +557,7 @@ jQuery(function ($) {
           return true;
         } catch (e) {
           if (ac.signal.aborted) return false;
-          const remaining = data.quoteExpiryMs - Date.now();
+          const remaining = deadlineMs() - Date.now();
           const isLastAttempt = attempt === WS_MAX_ATTEMPTS - 1;
           if (remaining <= 1000 || isLastAttempt) {
             console.warn(
@@ -572,7 +581,7 @@ jQuery(function ($) {
     // under typical mint rate limits.
     const pollPaid = async (): Promise<boolean> => {
       try {
-        while (!ac.signal.aborted && Date.now() < data.quoteExpiryMs) {
+        while (!ac.signal.aborted && Date.now() < deadlineMs()) {
           await delay(12_000);
           const q = await wallet.checkMintQuoteBolt11(mq.quote);
           if (q.state === 'PAID') return true;
