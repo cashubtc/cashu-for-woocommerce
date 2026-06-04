@@ -748,8 +748,35 @@ jQuery(function ($) {
 
     setStatus(t('paying_invoice'));
 
+    let quote: MeltQuoteBolt11Response;
     try {
-      const quote = await trustedWallet.checkMeltQuoteBolt11(data.quoteId);
+      quote = await trustedWallet.checkMeltQuoteBolt11(data.quoteId);
+    } catch (e) {
+      console.error(getErrorMessage(e));
+      showRecovery(token);
+      setStatus(t('payment_failed'), true);
+      return;
+    }
+
+    // The melt may have completed in a prior session that died before
+    // clearing the stranded-proof snapshot — typical refresh loop after a
+    // successful payment. Re-attempting meltProofsBolt11 against a PAID
+    // quote returns "melt quote is not unpaid: paid" and we'd surface a
+    // recovery UI for proofs the mint has already spent. Instead, drop
+    // the stale snapshot and hand the preimage straight to claim so the
+    // customer redirects to thank-you.
+    if (quote.state === MeltQuoteState.PAID) {
+      clearStrandedProofs(data.mintQuote.id);
+      const paidPreimage =
+        typeof (quote as any).payment_preimage === 'string'
+          ? (quote as any).payment_preimage
+          : '';
+      setStatus(t('confirming_payment'));
+      void claimMeltPaid(paidPreimage);
+      return;
+    }
+
+    try {
       meltRes = await trustedWallet.meltProofsBolt11(quote, proofs);
     } catch (e) {
       console.error(getErrorMessage(e));
