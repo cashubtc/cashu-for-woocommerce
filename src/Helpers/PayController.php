@@ -27,6 +27,14 @@ final class PayController {
 	private const RATE_LIMIT_TTL = HOUR_IN_SECONDS;
 
 	/**
+	 * In-flight lock TTL covering the mint round-trip + meta writes.
+	 * Sized generously vs. a normal LN settle so a slow mint doesn't
+	 * trip the stale-lock cleanup, but short enough that a crashed PHP
+	 * process self-clears within a couple of minutes.
+	 */
+	private const PAY_LOCK_TTL = 120;
+
+	/**
 	 * Hard cap on proof count per POST. Any reasonable wallet uses an optimal
 	 * (popcount) split — 64 proofs covers amounts up to 2^64-1 sats. A wallet
 	 * sending many more than that is either using 1-sat denominations (which
@@ -188,75 +196,113 @@ final class PayController {
 			return new WP_Error( 'cashu_no_quote', 'Missing melt quote on order.', array( 'status' => 500 ) );
 		}
 
-		// Hand off to the mint.
-		$gateway = new CashuGateway();
-		try {
-			$mint_response = $gateway->request_melt_bolt11( $quote_id, $proofs );
-		} catch ( \Throwable $e ) {
-			Logger::debug( 'Cashu melt failed: ' . $e->getMessage() );
-			return new WP_Error( 'cashu_mint_error', 'Mint melt failed.', array( 'status' => 502 ) );
-		}
-
-		$state = isset( $mint_response['state'] )
-			? (string) $mint_response['state']
-			: ( ! empty( $mint_response['paid'] ) ? 'PAID' : '' );
-
-		// PENDING means the mint accepted the proofs and is mid-LN-payment;
-		// returning an error here would tell the wallet the payment failed
-		// while the proofs are actually still locked at the mint. Instead,
-		// record the pending state so the polling endpoint can detect when
-		// the mint finishes settling, and reply 200 with status=pending so
-		// the wallet treats the payment as accepted-but-in-flight.
-		if ( 'PENDING' === $state ) {
-			$order->update_meta_data( '_cashu_melt_pending_quote_id', $quote_id );
-			$order->update_meta_data( '_cashu_melt_pending_at', time() );
-			$order->save();
-			Logger::debug( 'Cashu melt PENDING for order ' . $order->get_id() . ', quote ' . $quote_id );
-			return rest_ensure_response(
-				array(
-					'status' => 'pending',
-					'id'     => $expected_id,
-				)
+		// Serialise concurrent POSTs against the same order. Two wallets
+		// posting near-simultaneously must not both pass the is_paid()
+		// check above and both hand proof sets to the mint — the second
+		// quote-melt POST would be rejected (single-use quote) but the
+		// wallet's proofs may end up in an ambiguous state at the mint.
+		if ( ! OrderLock::acquire( $order_id, 'pay', self::PAY_LOCK_TTL ) ) {
+			return new WP_Error(
+				'cashu_in_flight',
+				'Another payment for this order is currently being processed.',
+				array( 'status' => 409 )
 			);
 		}
 
-		if ( 'PAID' !== $state ) {
-			Logger::debug( 'Mint returned non-PAID state: ' . wp_json_encode( $mint_response ) );
-			return new WP_Error( 'cashu_unpaid', 'Mint did not settle the invoice.', array( 'status' => 502 ) );
+		try {
+			// Re-read the order under the lock — the previous holder may
+			// have just finished settling, in which case we want the
+			// idempotent fast path, not another mint call.
+			$order = wc_get_order( $order_id );
+			if ( ! $order ) {
+				return new WP_Error( 'cashu_no_order', 'Order not found.', array( 'status' => 404 ) );
+			}
+			if ( $order->is_paid() ) {
+				return rest_ensure_response(
+					array(
+						'status' => 'ok',
+						'id'     => $expected_id,
+					)
+				);
+			}
+
+			$quote_id = (string) $order->get_meta( '_cashu_melt_quote_id', true );
+			if ( '' === $quote_id ) {
+				return new WP_Error( 'cashu_no_quote', 'Missing melt quote on order.', array( 'status' => 500 ) );
+			}
+
+			// Hand off to the mint.
+			$gateway = new CashuGateway();
+			try {
+				$mint_response = $gateway->request_melt_bolt11( $quote_id, $proofs );
+			} catch ( \Throwable $e ) {
+				Logger::debug( 'Cashu melt failed: ' . $e->getMessage() );
+				return new WP_Error( 'cashu_mint_error', 'Mint melt failed.', array( 'status' => 502 ) );
+			}
+
+			$state = isset( $mint_response['state'] )
+				? (string) $mint_response['state']
+				: ( ! empty( $mint_response['paid'] ) ? 'PAID' : '' );
+
+			// PENDING means the mint accepted the proofs and is mid-LN-payment;
+			// returning an error here would tell the wallet the payment failed
+			// while the proofs are actually still locked at the mint. Instead,
+			// record the pending state so the polling endpoint can detect when
+			// the mint finishes settling, and reply 200 with status=pending so
+			// the wallet treats the payment as accepted-but-in-flight.
+			if ( 'PENDING' === $state ) {
+				$order->update_meta_data( '_cashu_melt_pending_quote_id', $quote_id );
+				$order->update_meta_data( '_cashu_melt_pending_at', time() );
+				$order->save();
+				Logger::debug( 'Cashu melt PENDING for order ' . $order->get_id() . ', quote ' . $quote_id );
+				return rest_ensure_response(
+					array(
+						'status' => 'pending',
+						'id'     => $expected_id,
+					)
+				);
+			}
+
+			if ( 'PAID' !== $state ) {
+				Logger::debug( 'Mint returned non-PAID state: ' . wp_json_encode( $mint_response ) );
+				return new WP_Error( 'cashu_unpaid', 'Mint did not settle the invoice.', array( 'status' => 502 ) );
+			}
+
+			// Persist preimage + change.
+			if ( isset( $mint_response['payment_preimage'] ) && is_string( $mint_response['payment_preimage'] ) && '' !== $mint_response['payment_preimage'] ) {
+				$order->update_meta_data( '_cashu_payment_preimage', sanitize_text_field( $mint_response['payment_preimage'] ) );
+			}
+			$change = isset( $mint_response['change'] ) && is_array( $mint_response['change'] ) ? $mint_response['change'] : array();
+
+			$order->payment_complete( $quote_id );
+
+			$lightning_address = (string) get_option( 'cashu_lightning_address', '' );
+			$paid_amount       = isset( $mint_response['amount'] )
+				? (string) $mint_response['amount']
+				: (string) $expected_amount;
+
+			$order->add_order_note(
+				sprintf(
+					/* translators: %1$s: BTC Symbol, %2$s: amount, %3$s: Lightning Address, %4$s: Melt Quote ID, %5$s: Payment preimage */
+					__( "Cashu payment (NUT-18): %1\$s%2\$s\nSent to: %3\$s\nMelt quote: %4\$s\nPayment preimage: %5\$s", 'cashu-for-woocommerce' ),
+					CASHU_WC_BIP177_SYMBOL,
+					$paid_amount,
+					$lightning_address,
+					$quote_id,
+					(string) ( $mint_response['payment_preimage'] ?? '' )
+				)
+			);
+
+			return rest_ensure_response(
+				array(
+					'status' => 'ok',
+					'id'     => $expected_id,
+					'change' => $change,
+				)
+			);
+		} finally {
+			OrderLock::release( $order_id, 'pay' );
 		}
-
-		// Persist preimage + change.
-		if ( isset( $mint_response['payment_preimage'] ) && is_string( $mint_response['payment_preimage'] ) && '' !== $mint_response['payment_preimage'] ) {
-			$order->update_meta_data( '_cashu_payment_preimage', sanitize_text_field( $mint_response['payment_preimage'] ) );
-		}
-		$change = isset( $mint_response['change'] ) && is_array( $mint_response['change'] ) ? $mint_response['change'] : array();
-
-		$order->payment_complete( $quote_id );
-
-		$lightning_address = (string) get_option( 'cashu_lightning_address', '' );
-		$paid_amount       = isset( $mint_response['amount'] )
-			? (string) $mint_response['amount']
-			: (string) $expected_amount;
-
-		$order->add_order_note(
-			sprintf(
-				/* translators: %1$s: BTC Symbol, %2$s: amount, %3$s: Lightning Address, %4$s: Melt Quote ID, %5$s: Payment preimage */
-				__( "Cashu payment (NUT-18): %1\$s%2\$s\nSent to: %3\$s\nMelt quote: %4\$s\nPayment preimage: %5\$s", 'cashu-for-woocommerce' ),
-				CASHU_WC_BIP177_SYMBOL,
-				$paid_amount,
-				$lightning_address,
-				$quote_id,
-				(string) ( $mint_response['payment_preimage'] ?? '' )
-			)
-		);
-
-		return rest_ensure_response(
-			array(
-				'status' => 'ok',
-				'id'     => $expected_id,
-				'change' => $change,
-			)
-		);
 	}
 
 	private function read_json_body( WP_REST_Request $request ): mixed {

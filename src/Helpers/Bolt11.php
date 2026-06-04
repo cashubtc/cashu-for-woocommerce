@@ -18,11 +18,12 @@ namespace Cashu\WC\Helpers;
  */
 final class Bolt11 {
 
-	private const BECH32_ALPHABET  = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
-	private const TAG_PAYMENT_HASH = 1;
-	private const SIGNATURE_GROUPS = 104;  // 520 bits / 5
-	private const CHECKSUM_GROUPS  = 6;    // 30 bits / 5
-	private const TIMESTAMP_GROUPS = 7;    // 35 bits / 5
+	private const BECH32_ALPHABET     = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
+	private const TAG_PAYMENT_HASH    = 1;
+	private const PAYMENT_HASH_GROUPS = 52;  // 256-bit hash packed into 52 × 5-bit groups
+	private const SIGNATURE_GROUPS    = 104; // 520 bits / 5
+	private const CHECKSUM_GROUPS     = 6;   // 30 bits / 5
+	private const TIMESTAMP_GROUPS    = 7;   // 35 bits / 5
 
 	/**
 	 * Return the lowercase hex payment_hash for the invoice, or null if it
@@ -64,7 +65,11 @@ final class Bolt11 {
 				return null;
 			}
 
-			if ( self::TAG_PAYMENT_HASH === $tag ) {
+			// Per BOLT-11: payment_hash p-tag MUST have data_length=52.
+			// Readers must skip any tag whose data is non-conforming, so a
+			// p-tag of a different length is treated as not-payment-hash
+			// rather than silently truncated/padded.
+			if ( self::TAG_PAYMENT_HASH === $tag && self::PAYMENT_HASH_GROUPS === $len ) {
 				return self::groupsToHex( array_slice( $values, $i, $len ), 256 );
 			}
 

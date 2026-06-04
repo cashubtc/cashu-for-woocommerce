@@ -9,6 +9,7 @@ use Cashu\WC\Helpers\Bolt11;
 use Cashu\WC\Helpers\CashuHelper;
 use Cashu\WC\Helpers\Logger;
 use Cashu\WC\Helpers\LightningAddress;
+use Cashu\WC\Helpers\OrderLock;
 use Cashu\WC\Helpers\PayController;
 use WC_Order;
 
@@ -274,9 +275,10 @@ class CashuGateway extends \WC_Payment_Gateway {
 		} else {
 			try {
 				$this->setup_cashu_payment( $order );
-			} catch ( \Error $e ) {
+			} catch ( \Throwable $e ) {
 				Logger::error( 'Could not setup Cashu payment: ' . $e->getMessage() );
 				wc_add_notice( __( 'Cashu payment setup failed, please try again.', 'cashu-for-woocommerce' ), 'error' );
+				return array( 'result' => 'failure' );
 			}
 		}
 
@@ -294,42 +296,88 @@ class CashuGateway extends \WC_Payment_Gateway {
 	 * @param WC_Order $order Order.
 	 */
 	private function setup_cashu_payment( WC_Order $order ): void {
-		/**
-		 * Filter the order status for cashu payment (Default: 'pending').
-		 *
-		 * @since 3.6.0
-		 *
-		 * @param string $status The default status.
-		 * @param object $order  The order object.
-		 */
-		$process_payment_status = apply_filters(
-			'woocommerce_cashu_process_payment_order_status',
-			OrderStatus::PENDING,
-			$order
-		);
+		// Refuse to (re-)initialise a paid order. Calling update_status below
+		// would silently regress 'processing' or 'completed' back to 'pending',
+		// orphaning the customer's already-settled payment.
+		if ( $order->is_paid() ) {
+			Logger::error( 'setup_cashu_payment called on already-paid order ' . $order->get_id() . '; refusing to overwrite payment state.' );
+			return;
+		}
 
-		// Set order status.
-		$order->update_status(
-			$process_payment_status,
-			_x( 'Awaiting Cashu payment', 'Cashu payment method', 'cashu-for-woocommerce' )
-		);
+		$order_id = $order->get_id();
 
-		// Determine invoice amount in sats (merchant receives this).
-		$order_total_sats = $this->get_total_sats( $order );
+		// Serialise concurrent setup against the same order. Two browser
+		// tabs hitting /checkout/order-pay/{id} simultaneously can both
+		// find meta stale and both call this method, racing on the mint
+		// POSTs and meta writes — the second wins the save() and orphans
+		// the first tab's quote at the mint.
+		if ( ! OrderLock::acquire( $order_id, 'setup', 60 ) ) {
+			// Another request is currently doing setup. Wait for it to
+			// finish, then refresh the caller's meta from DB so they see
+			// what the holder just wrote.
+			if ( ! OrderLock::wait_for_release( $order_id, 'setup', 30 ) ) {
+				Logger::error( 'setup_cashu_payment lock contention timed out for order ' . $order_id );
+			}
+			$order->read_meta_data( true );
+			return;
+		}
 
-		// Create or reuse melt quote (vendor payment side), store fee reserve,
-		// set the headline _cashu_melt_total = amount + fee_reserve + input buffer.
-		$this->ensure_melt_quote_for_order( $order, $order_total_sats );
+		try {
+			// Re-fetch the order under the lock. A previous holder may
+			// have just finished — re-doing setup would needlessly burn
+			// another mint quote.
+			$fresh = wc_get_order( $order_id );
+			if ( ! $fresh ) {
+				Logger::error( 'setup_cashu_payment could not re-fetch order ' . $order_id );
+				return;
+			}
+			if ( $fresh->is_paid() ) {
+				return;
+			}
 
-		// Create or reuse mint quote (customer payment side). The customer pays
-		// this BOLT11 via LN; the quote_id is what the browser uses to claim
-		// proofs from the mint. Locking this server-side means a page reload
-		// or browser switch can never lose the quote_id and orphan the
-		// customer's payment.
-		$melt_total = absint( $order->get_meta( '_cashu_melt_total', true ) );
-		$this->ensure_mint_quote_for_order( $order, $melt_total );
+			/**
+			 * Filter the order status for cashu payment (Default: 'pending').
+			 *
+			 * @since 3.6.0
+			 *
+			 * @param string $status The default status.
+			 * @param object $order  The order object.
+			 */
+			$process_payment_status = apply_filters(
+				'woocommerce_cashu_process_payment_order_status',
+				OrderStatus::PENDING,
+				$fresh
+			);
 
-		$order->save();
+			// Set order status.
+			$fresh->update_status(
+				$process_payment_status,
+				_x( 'Awaiting Cashu payment', 'Cashu payment method', 'cashu-for-woocommerce' )
+			);
+
+			// Determine invoice amount in sats (merchant receives this).
+			$order_total_sats = $this->get_total_sats( $fresh );
+
+			// Create or reuse melt quote (vendor payment side), store fee reserve,
+			// set the headline _cashu_melt_total = amount + fee_reserve + input buffer.
+			$this->ensure_melt_quote_for_order( $fresh, $order_total_sats );
+
+			// Create or reuse mint quote (customer payment side). The customer pays
+			// this BOLT11 via LN; the quote_id is what the browser uses to claim
+			// proofs from the mint. Locking this server-side means a page reload
+			// or browser switch can never lose the quote_id and orphan the
+			// customer's payment.
+			$melt_total = absint( $fresh->get_meta( '_cashu_melt_total', true ) );
+			$this->ensure_mint_quote_for_order( $fresh, $melt_total );
+
+			$fresh->save();
+
+			// Mirror writes back onto the caller's $order so they don't
+			// have to re-read from DB themselves.
+			$order->read_meta_data( true );
+		} finally {
+			OrderLock::release( $order_id, 'setup' );
+		}
 	}
 
 	/**
@@ -359,16 +407,11 @@ class CashuGateway extends \WC_Payment_Gateway {
 		$order->update_meta_data( '_cashu_spot_btc', $quote['btc_price'] );
 		$order->update_meta_data( '_cashu_spot_source', $quote['source'] );
 
-		// Remove any old melt quotes. Mint quote meta is intentionally NOT cleared
-		// here — once a mint quote BOLT11 has been issued to the customer, we must
-		// preserve it (potentially in archive) so a paid quote can always be linked
-		// back to the order. ensure_mint_quote_for_order handles archival when it
-		// genuinely needs to rotate.
-		$order->delete_meta_data( '_cashu_melt_quote_id' );
-		$order->delete_meta_data( '_cashu_melt_quote_expiry' );
-		$order->delete_meta_data( '_cashu_melt_total' );
-		$order->delete_meta_data( '_cashu_melt_mint' );
-		$order->delete_meta_data( '_cashu_payment_hash' );
+		// Melt and mint quote meta is intentionally NOT cleared here — once
+		// either has been issued against this order it may already be PAID or
+		// PENDING at the mint, and deleting it would orphan the customer's
+		// payment. ensure_melt_quote_for_order / ensure_mint_quote_for_order
+		// each consult the mint and archive before rotating.
 
 		$order->add_order_note(
 			sprintf(
@@ -400,28 +443,32 @@ class CashuGateway extends \WC_Payment_Gateway {
 		$quote_expiry = absint( $order->get_meta( '_cashu_melt_quote_expiry', true ) );
 		$melt_mint    = (string) $order->get_meta( '_cashu_melt_mint', true );
 
-		if ( '' !== $quote_id && $this->trusted_mint === $melt_mint ) {
-			// Hard guard: never rotate a quote that has proofs bound to it.
-			// PENDING means the mint is mid-LN-payment with the customer's
-			// proofs locked; rotating would orphan the customer's payment.
-			// PAID means the mint already settled — the customer already paid
-			// the vendor; we just need to detect it via the existing quote_id.
-			$mint_state   = $this->fetch_melt_quote_state_safely( $quote_id );
-			$state_string = isset( $mint_state['state'] ) ? (string) $mint_state['state'] : '';
-			if ( 'PAID' === $state_string || 'PENDING' === $state_string ) {
-				return;
+		if ( '' !== $quote_id ) {
+			// Only consult the mint that issued the quote.
+			if ( $melt_mint === $this->trusted_mint ) {
+				// Hard guard: never rotate a quote with proofs bound to it.
+				// PENDING means the mint is mid-LN-payment; rotating would
+				// orphan the customer's payment. PAID means the mint already
+				// settled. Unknown state (empty) means the mint was unreachable
+				// — preserve, since rotating on a network blip would orphan a
+				// possibly-paid quote (recovery would have to come through the
+				// admin archive meta-box).
+				$mint_state   = $this->fetch_melt_quote_state_safely( $quote_id );
+				$state_string = isset( $mint_state['state'] ) ? (string) $mint_state['state'] : '';
+				if ( 'PAID' === $state_string || 'PENDING' === $state_string || '' === $state_string ) {
+					return;
+				}
+
+				// UNPAID — keep if the BOLT11 is still valid at the mint.
+				if ( $quote_expiry > time() ) {
+					return;
+				}
 			}
 
-			// Otherwise (UNPAID or unknown), keep the quote if it hasn't fully
-			// expired at the mint. We deliberately do NOT pre-emptively rotate
-			// quotes that are about to expire — same reasoning, the customer
-			// may be mid-pay.
-			if ( $quote_expiry > time() ) {
-				return;
-			}
-
-			// Genuinely expired and unpaid — archive before rotating so any
-			// orphan can still be traced for forensics.
+			// Genuinely rotating: either UNPAID + expired at the same mint, or
+			// the admin changed the trusted mint setting (in which case we
+			// cannot safely query the original mint from here). Archive first
+			// so an orphan can still be traced forensically.
 			$this->archive_melt_quote( $order );
 		}
 
@@ -499,6 +546,7 @@ class CashuGateway extends \WC_Payment_Gateway {
 		$existing_id     = (string) $order->get_meta( '_cashu_mint_quote_id', true );
 		$existing_expiry = absint( $order->get_meta( '_cashu_mint_quote_expiry', true ) );
 		$existing_amount = absint( $order->get_meta( '_cashu_mint_quote_amount', true ) );
+		$existing_mint   = (string) $order->get_meta( '_cashu_mint_quote_mint', true );
 
 		if ( '' !== $existing_id && $existing_amount === $amount_sats ) {
 			// Keep the existing quote if it hasn't fully expired at the mint.
@@ -514,11 +562,22 @@ class CashuGateway extends \WC_Payment_Gateway {
 		// quote_id and rotating would orphan them in _cashu_archived_mint_quotes
 		// where the browser's auto-recovery doesn't look. If the mint says the
 		// quote is PAID or ISSUED, the time/amount checks above are irrelevant —
-		// the quote is the customer's payment, full stop.
+		// the quote is the customer's payment, full stop. An empty/unknown
+		// return means the mint was unreachable (or the trusted mint setting
+		// changed since the quote was issued, in which case we can't safely
+		// query) — preserve too, since rotating on a network blip risks
+		// orphaning a paid quote.
 		if ( '' !== $existing_id ) {
-			$state = $this->fetch_mint_quote_state_safely( $existing_id );
-			if ( 'PAID' === $state || 'ISSUED' === $state ) {
-				return;
+			// _cashu_mint_quote_mint was introduced after some orders shipped;
+			// fall back to the current trusted mint so legacy orders still
+			// consult something (assumed to be the same mint they were
+			// originally issued at, since that's the only mint we knew).
+			$lookup_mint = '' !== $existing_mint ? $existing_mint : $this->trusted_mint;
+			if ( $lookup_mint === $this->trusted_mint ) {
+				$state = $this->fetch_mint_quote_state_safely( $existing_id, $lookup_mint );
+				if ( 'PAID' === $state || 'ISSUED' === $state || '' === $state ) {
+					return;
+				}
 			}
 		}
 
@@ -531,10 +590,14 @@ class CashuGateway extends \WC_Payment_Gateway {
 			$archive[]   = array(
 				'quote'   => $existing_id,
 				'request' => (string) $order->get_meta( '_cashu_mint_quote_request', true ),
+				'mint'    => $existing_mint,
 				'amount'  => $existing_amount,
 				'expiry'  => $existing_expiry,
 			);
-			$order->update_meta_data( '_cashu_archived_mint_quotes', (string) wp_json_encode( $archive ) );
+			$encoded     = wp_json_encode( $archive );
+			if ( is_string( $encoded ) ) {
+				$order->update_meta_data( '_cashu_archived_mint_quotes', $encoded );
+			}
 		}
 
 		$quote = $this->request_mint_quote_bolt11( $amount_sats );
@@ -551,6 +614,7 @@ class CashuGateway extends \WC_Payment_Gateway {
 		$order->update_meta_data( '_cashu_mint_quote_request', $quote_request );
 		$order->update_meta_data( '_cashu_mint_quote_amount', $amount_sats );
 		$order->update_meta_data( '_cashu_mint_quote_expiry', $quote_expiry );
+		$order->update_meta_data( '_cashu_mint_quote_mint', $this->trusted_mint );
 
 		$order->add_order_note(
 			sprintf(
@@ -564,13 +628,19 @@ class CashuGateway extends \WC_Payment_Gateway {
 	}
 
 	/**
-	 * Best-effort fetch of a NUT-05 melt-quote state from the trusted mint.
-	 * See fetch_mint_quote_state_safely for the same rationale — never throws,
-	 * empty return means "unknown" and callers should err on the side of
-	 * preserving the existing quote.
+	 * Best-effort fetch of a NUT-05 melt-quote state from a specific mint.
+	 * Defaults to the gateway's currently configured mint when no URL is
+	 * passed; callers with an order in hand should pass the order's stored
+	 * _cashu_melt_mint so a settings change mid-order doesn't route the
+	 * lookup to the wrong host. Never throws; empty return means "unknown"
+	 * and callers should err on the side of preserving the existing quote.
 	 */
-	public function fetch_melt_quote_state_safely( string $quote_id ): array {
-		$url = rtrim( $this->trusted_mint, '/' ) . '/v1/melt/quote/bolt11/' . rawurlencode( $quote_id );
+	public function fetch_melt_quote_state_safely( string $quote_id, string $mint_url = '' ): array {
+		$base = '' !== $mint_url ? $mint_url : $this->trusted_mint;
+		if ( '' === $base ) {
+			return array();
+		}
+		$url = rtrim( $base, '/' ) . '/v1/melt/quote/bolt11/' . rawurlencode( $quote_id );
 		$res = wp_remote_get(
 			$url,
 			array(
@@ -609,18 +679,26 @@ class CashuGateway extends \WC_Payment_Gateway {
 			'mint'         => (string) $order->get_meta( '_cashu_melt_mint', true ),
 			'payment_hash' => (string) $order->get_meta( '_cashu_payment_hash', true ),
 		);
-		$order->update_meta_data( '_cashu_archived_melt_quotes', (string) wp_json_encode( $archive ) );
+		$encoded   = wp_json_encode( $archive );
+		if ( is_string( $encoded ) ) {
+			$order->update_meta_data( '_cashu_archived_melt_quotes', $encoded );
+		}
 	}
 
 	/**
-	 * Best-effort fetch of a NUT-04 mint-quote state from the trusted mint.
-	 * Returns the state string (e.g. UNPAID, PAID, ISSUED) or empty string
-	 * if the lookup fails. Never throws — callers treat an empty return as
-	 * "unknown" rather than letting a single network hiccup orphan a paid
-	 * quote.
+	 * Best-effort fetch of a NUT-04 mint-quote state from a specific mint.
+	 * Defaults to the gateway's currently configured mint when no URL is
+	 * passed. Returns the state string (e.g. UNPAID, PAID, ISSUED) or empty
+	 * string if the lookup fails. Never throws — callers treat an empty
+	 * return as "unknown" and preserve the existing quote rather than
+	 * letting a single network hiccup orphan a paid one.
 	 */
-	private function fetch_mint_quote_state_safely( string $quote_id ): string {
-		$url = rtrim( $this->trusted_mint, '/' ) . '/v1/mint/quote/bolt11/' . rawurlencode( $quote_id );
+	public function fetch_mint_quote_state_safely( string $quote_id, string $mint_url = '' ): string {
+		$base = '' !== $mint_url ? $mint_url : $this->trusted_mint;
+		if ( '' === $base ) {
+			return '';
+		}
+		$url = rtrim( $base, '/' ) . '/v1/mint/quote/bolt11/' . rawurlencode( $quote_id );
 		$res = wp_remote_get(
 			$url,
 			array(
@@ -791,6 +869,18 @@ class CashuGateway extends \WC_Payment_Gateway {
 			return;
 		}
 
+		// Already paid — never re-run setup (which would call update_status to
+		// pending and silently un-pay the order). Show a notice and link the
+		// admin/customer to the order-received page instead. The admin recovery
+		// meta-box uses this same URL, so paid orders need to land here safely.
+		if ( $order->is_paid() ) {
+			echo '<p>' . esc_html__( 'This order has already been paid.', 'cashu-for-woocommerce' ) . '</p>';
+			echo '<p><a class="button" href="' . esc_url( $order->get_checkout_order_received_url() ) . '">';
+			echo esc_html__( 'View order', 'cashu-for-woocommerce' );
+			echo '</a></p>';
+			return;
+		}
+
 		// Fallback: ensure both quotes are present and not stale. We retry setup
 		// when the spot quote expired, or when either the melt quote or the mint
 		// quote is missing (e.g. an earlier setup failed mid-way because the mint
@@ -808,7 +898,7 @@ class CashuGateway extends \WC_Payment_Gateway {
 				// Reset spot expiry
 				$spot_time   = absint( $order->get_meta( '_cashu_spot_time', true ) );
 				$spot_expiry = $spot_time + self::QUOTE_EXPIRY_SECS;
-			} catch ( \Error $e ) {
+			} catch ( \Throwable $e ) {
 				Logger::error( 'Could not setup Cashu payment on receipt page: ' . $e->getMessage() );
 				wc_add_notice( __( 'Cashu payment setup failed, please try again.', 'cashu-for-woocommerce' ), 'error' );
 			}
