@@ -244,6 +244,94 @@ function loadChangePayload(key: string): ChangePayload {
 }
 
 // ------------------------------
+// Stranded-proof recovery (Option B: localStorage persistence)
+// ------------------------------
+// After mintProofsBolt11 transitions a mint quote PAID -> ISSUED, the proofs
+// only exist in JS memory until meltProofsBolt11 spends them. A refresh in
+// that window strands the customer: the mint has issued, the merchant has
+// not been paid, and the ephemeral wallet can't re-derive the blinded
+// secrets to recover (no NUT-09 seed). We persist the proofs to localStorage
+// the instant mintProofsBolt11 returns and clear them after melt succeeds.
+// On reload, the ISSUED branch of startMintQuoteWatcher re-enters the melt
+// step instead of stranding.
+
+const STRANDED_KEY_PREFIX = 'cashu_wc_minted_';
+// Slightly longer than the typical mint quote / merchant melt quote lifetime
+// so a customer who refreshes well into a stalled flow can still recover.
+const STRANDED_TTL_MS = 24 * 60 * 60 * 1000;
+
+type PersistedMintProofs = {
+  v: 1;
+  created: number;
+  quote: string;
+  mint: string;
+  expected: number;
+  proofs: Proof[];
+};
+
+function strandedKey(quoteId: string): string {
+  return STRANDED_KEY_PREFIX + quoteId;
+}
+
+function loadStrandedProofs(quoteId: string): Proof[] | null {
+  const parsed = loadJson<PersistedMintProofs>(strandedKey(quoteId));
+  if (!parsed || parsed.v !== 1) return null;
+  if (Date.now() - parsed.created > STRANDED_TTL_MS) {
+    deleteJson(strandedKey(quoteId));
+    return null;
+  }
+  if (parsed.quote !== quoteId) return null;
+  if (!Array.isArray(parsed.proofs) || parsed.proofs.length === 0) return null;
+  return parsed.proofs;
+}
+
+function saveStrandedProofs(
+  quoteId: string,
+  mint: string,
+  expected: number,
+  proofs: Proof[],
+): void {
+  if (!Array.isArray(proofs) || proofs.length === 0) return;
+  saveJson(strandedKey(quoteId), {
+    v: 1,
+    created: Date.now(),
+    quote: quoteId,
+    mint,
+    expected,
+    proofs,
+  } satisfies PersistedMintProofs);
+}
+
+function clearStrandedProofs(quoteId: string): void {
+  deleteJson(strandedKey(quoteId));
+}
+
+// Bounded sweep of localStorage for stranded-proof entries past TTL. Called
+// once at init so abandoned-order keys don't accumulate over the long tail.
+function sweepStaleStrandedProofs(): void {
+  try {
+    const stale: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith(STRANDED_KEY_PREFIX)) continue;
+      const parsed = loadJson<PersistedMintProofs>(key);
+      if (!parsed || parsed.v !== 1 || Date.now() - parsed.created > STRANDED_TTL_MS) {
+        stale.push(key);
+      }
+    }
+    for (const key of stale) {
+      try {
+        localStorage.removeItem(key);
+      } catch {
+        // ignore
+      }
+    }
+  } catch {
+    // ignore
+  }
+}
+
+// ------------------------------
 // Bootstrap checkout
 // ------------------------------
 
@@ -316,6 +404,11 @@ jQuery(function ($) {
     deleteJson('cashu_wc_recovery');
     deleteJson(ls.change);
   } catch {}
+
+  // Drop abandoned-order stranded-proof snapshots past TTL so localStorage
+  // doesn't accumulate over the long tail. Active recovery for THIS quote
+  // happens in startMintQuoteWatcher; nothing here removes that key.
+  sweepStaleStrandedProofs();
 
   void startAsyncProcesses().catch(() => {
     setStatus(t('invoice_failed'), true);
@@ -520,11 +613,19 @@ jQuery(function ($) {
         return;
       }
       if (initial.state === 'ISSUED') {
-        // Proofs were minted but the order never settled — different orphan
-        // class. We can't re-claim, but the polling loop will keep checking
-        // is_paid() in case a server-side reconciliation marks it later.
+        // Proofs were minted in a prior session. If they were persisted to
+        // localStorage before the page died (refresh-between-mint-and-melt
+        // bug), resume the melt + claim path now. Otherwise this is the
+        // genuine stranded case — different device, cleared storage, or
+        // localStorage write failed at mint time — and only admin recovery
+        // can complete the order.
+        const stranded = loadStrandedProofs(mq.quote);
+        if (stranded) {
+          void run(() => handleMintQuotePaid(mq, stranded));
+          return;
+        }
         console.warn(
-          'Mint quote already ISSUED but order not paid; recovery requires admin intervention',
+          'Mint quote already ISSUED but no local proofs; recovery requires admin intervention',
         );
         return;
       }
@@ -598,14 +699,29 @@ jQuery(function ($) {
     void run(() => handleMintQuotePaid(mq));
   }
 
-  async function handleMintQuotePaid(mq: StoredMintQuote): Promise<void> {
+  async function handleMintQuotePaid(
+    mq: StoredMintQuote,
+    knownProofs?: Proof[],
+  ): Promise<void> {
     if (mintHandleP) return mintHandleP;
 
     mintHandleP = (async () => {
       setStatus(t('payment_received'));
       await delay(500);
       const wallet = await trustedWalletP;
-      const mintedProofs = await wallet.mintProofsBolt11(data.expectedAmount, mq.quote);
+      let mintedProofs: Proof[];
+      if (knownProofs && knownProofs.length > 0) {
+        // Resume path: proofs were minted in a prior session and persisted
+        // to localStorage. Skip the mint call — it would fail anyway since
+        // the quote is already ISSUED.
+        mintedProofs = knownProofs;
+      } else {
+        mintedProofs = await wallet.mintProofsBolt11(data.expectedAmount, mq.quote);
+        // Persist synchronously before any further await so a refresh
+        // between here and meltProofsBolt11 can recover. The melt step
+        // clears the snapshot once the proofs are spent at the mint.
+        saveStrandedProofs(mq.quote, data.trustedMint, data.expectedAmount, mintedProofs);
+      }
       await meltTrustedProofsToVendor(mintedProofs, wallet);
     })();
 
@@ -641,6 +757,12 @@ jQuery(function ($) {
       setStatus(t('payment_failed'), true);
       return;
     }
+
+    // Proofs are spent at the mint — recovery snapshot is now stale and
+    // would only confuse a future reload of this same order. Safe to drop
+    // even if the subsequent claim POST never reaches the server; the
+    // background pollOrderStatus will catch the PAID transition.
+    clearStrandedProofs(data.mintQuote.id);
 
     const changeProofs = Array.isArray(meltRes?.change) ? meltRes.change : [];
     void saveProofs(changeProofs, trustedWallet);
@@ -726,6 +848,10 @@ jQuery(function ($) {
       }
 
       if (json?.state === 'PAID') {
+        // Server reached PAID independently — clear any stranded-proof
+        // snapshot so a future reload of this order doesn't try to
+        // re-melt already-spent proofs.
+        clearStrandedProofs(data.mintQuote.id);
         doConfettiBomb();
         await delay(2000);
         window.location.assign(String(json.redirect ?? data.returnUrl));
@@ -733,6 +859,9 @@ jQuery(function ($) {
       }
 
       if (json?.state === 'EXPIRED') {
+        // Quote window closed: snapshot can't help anymore and would only
+        // distract future polls.
+        clearStrandedProofs(data.mintQuote.id);
         setStatus(t('invoice_expired'), true);
         await delay(2000);
         window.location.assign(String(data.returnUrl));
