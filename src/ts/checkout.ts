@@ -95,20 +95,28 @@ const ac = new AbortController();
 window.addEventListener('pagehide', () => ac.abort(), { once: true });
 window.addEventListener('beforeunload', () => ac.abort(), { once: true });
 
-const walletCache = new Map<string, Promise<Wallet>>();
+// Wallet cache: bounded so a long-lived tab doesn't reuse a Wallet with stale
+// keyset state. Mint keyset rotations are rare but possible, and a stale
+// wallet would silently produce proofs the mint rejects on next use.
+type CachedWallet = { promise: Promise<Wallet>; createdAt: number };
+const WALLET_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const walletCache = new Map<string, CachedWallet>();
 
 function getWalletCached(mintUrl: string, unit: CurrencyUnit = 'sat'): Promise<Wallet> {
   const key = `${String(mintUrl).replace(/\/+$/, '')}|${unit}`;
   const existing = walletCache.get(key);
-  if (existing) return existing;
-  const p = (async () => {
+  if (existing && Date.now() - existing.createdAt < WALLET_CACHE_TTL_MS) {
+    return existing.promise;
+  }
+  if (existing) walletCache.delete(key);
+  const promise = (async () => {
     const w = new Wallet(mintUrl, { unit, logger: new ConsoleLogger('debug') });
     await w.loadMint();
     return w;
   })();
-  p.catch(() => walletCache.delete(key));
-  walletCache.set(key, p);
-  return p;
+  promise.catch(() => walletCache.delete(key));
+  walletCache.set(key, { promise, createdAt: Date.now() });
+  return promise;
 }
 
 function readRootData($root: JQuery<HTMLElement>): RootData {
@@ -371,6 +379,10 @@ jQuery(function ($) {
 
     const lightningUri = 'lightning:' + mq.request;
 
+    // cashu-ts v4 PaymentRequest constructor is positional. Args, in order:
+    // transport[], id, amount, unit, mints[], description, singleUse, nut10.
+    // We pass singleUse=true and nut10=undefined (no NUT-10 lock — the server
+    // enforces ownership via order_key + payment_id).
     const pr = new PaymentRequest(
       [{ type: PaymentRequestTransportType.POST, target: data.payCallback }],
       data.paymentId,
@@ -628,6 +640,7 @@ jQuery(function ($) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
+        signal: ac.signal,
         body: JSON.stringify({
           order_id: data.orderId,
           order_key: data.orderKey,
@@ -641,6 +654,7 @@ jQuery(function ($) {
         window.location.assign(String(json.redirect ?? data.returnUrl));
       }
     } catch (e) {
+      if (ac.signal.aborted) return;
       // Background pollOrderStatus will catch the settlement on the next tick.
       console.warn('Claim POST failed, falling back to poll:', getErrorMessage(e));
     }
@@ -668,9 +682,19 @@ jQuery(function ($) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
+        signal: ac.signal,
         body: JSON.stringify(payload),
       });
       const json = (await res.json()) as ConfirmPaidResponse;
+
+      // Server is the authoritative source for the spot-quote expiry. The
+      // value rendered into data-spot-quote-expiry at page load can drift
+      // if setup ran again (rare but possible after a stale-quote
+      // rotation). Trust each fresh response — `json.expiry` is unix
+      // seconds; convert to ms before comparing with Date.now().
+      if (typeof json?.expiry === 'number' && json.expiry > 0) {
+        data.quoteExpiryMs = json.expiry * 1000;
+      }
 
       if (json?.state === 'PAID') {
         doConfettiBomb();

@@ -41,6 +41,11 @@ final class PayController {
 	 * would rack up mint input fees that the merchant melt buffer cannot
 	 * absorb) or is broken/hostile. Rejecting here is cheaper than letting it
 	 * fail at the mint.
+	 *
+	 * Note: this assumes a power-of-two denomination set, which is what stock
+	 * sat mints use today. A NUT-15 mint with bespoke denominations could
+	 * legitimately need more proofs to express a payment — revisit if such a
+	 * mint enters production use.
 	 */
 	private const MAX_PROOFS_PER_PAYMENT = 64;
 
@@ -276,8 +281,13 @@ final class PayController {
 
 			$order->payment_complete( $quote_id );
 
-			$lightning_address = (string) get_option( 'cashu_lightning_address', '' );
-			$paid_amount       = isset( $mint_response['amount'] )
+			// Prefer the LN address snapshotted at quote creation; fall back
+			// to the current option for legacy orders that pre-date that snapshot.
+			$lightning_address = (string) $order->get_meta( '_cashu_invoice_ln_address', true );
+			if ( '' === $lightning_address ) {
+				$lightning_address = (string) get_option( 'cashu_lightning_address', '' );
+			}
+			$paid_amount = isset( $mint_response['amount'] )
 				? (string) $mint_response['amount']
 				: (string) $expected_amount;
 
@@ -314,10 +324,30 @@ final class PayController {
 		return $decoded;
 	}
 
+	/**
+	 * Compare two mint URLs in a way that matches the client-side
+	 * sameMint() (URL.origin + pathname-without-trailing-slash). PHP's
+	 * naive case-fold leaves explicit-default-port URLs (https://…:443/…)
+	 * looking different from their canonical form, which would reject a
+	 * wallet that round-trips through a URL library before posting.
+	 */
 	private function same_mint( string $a, string $b ): bool {
 		$norm = static function ( string $s ): string {
-			$s = rtrim( trim( $s ), '/' );
-			return strtolower( $s );
+			$s = trim( $s );
+			if ( '' === $s ) {
+				return '';
+			}
+			$parts = wp_parse_url( $s );
+			if ( ! is_array( $parts ) || empty( $parts['host'] ) ) {
+				return strtolower( rtrim( $s, '/' ) );
+			}
+			$scheme       = strtolower( (string) ( $parts['scheme'] ?? 'https' ) );
+			$host         = strtolower( (string) $parts['host'] );
+			$port         = isset( $parts['port'] ) ? (int) $parts['port'] : 0;
+			$path         = rtrim( (string) ( $parts['path'] ?? '' ), '/' );
+			$default_port = ( 'https' === $scheme ) ? 443 : ( ( 'http' === $scheme ) ? 80 : 0 );
+			$port_str     = ( $port > 0 && $port !== $default_port ) ? ':' . $port : '';
+			return $scheme . '://' . $host . $port_str . $path;
 		};
 		return $norm( $a ) === $norm( $b );
 	}
