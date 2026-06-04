@@ -326,30 +326,13 @@ final class PayController {
 
 	/**
 	 * Compare two mint URLs in a way that matches the client-side
-	 * sameMint() (URL.origin + pathname-without-trailing-slash). PHP's
-	 * naive case-fold leaves explicit-default-port URLs (https://…:443/…)
-	 * looking different from their canonical form, which would reject a
-	 * wallet that round-trips through a URL library before posting.
+	 * sameMint() (URL.origin + pathname-without-trailing-slash). Delegates
+	 * to the shared normaliser on CashuGateway so the wallet→server
+	 * boundary and internal admin-mint comparisons agree on what
+	 * "same mint" means.
 	 */
 	private function same_mint( string $a, string $b ): bool {
-		$norm = static function ( string $s ): string {
-			$s = trim( $s );
-			if ( '' === $s ) {
-				return '';
-			}
-			$parts = wp_parse_url( $s );
-			if ( ! is_array( $parts ) || empty( $parts['host'] ) ) {
-				return strtolower( rtrim( $s, '/' ) );
-			}
-			$scheme       = strtolower( (string) ( $parts['scheme'] ?? 'https' ) );
-			$host         = strtolower( (string) $parts['host'] );
-			$port         = isset( $parts['port'] ) ? (int) $parts['port'] : 0;
-			$path         = rtrim( (string) ( $parts['path'] ?? '' ), '/' );
-			$default_port = ( 'https' === $scheme ) ? 443 : ( ( 'http' === $scheme ) ? 80 : 0 );
-			$port_str     = ( $port > 0 && $port !== $default_port ) ? ':' . $port : '';
-			return $scheme . '://' . $host . $port_str . $path;
-		};
-		return $norm( $a ) === $norm( $b );
+		return CashuGateway::normalize_mint_url( $a ) === CashuGateway::normalize_mint_url( $b );
 	}
 
 	private function check_rate_limit( int $order_id ): bool {

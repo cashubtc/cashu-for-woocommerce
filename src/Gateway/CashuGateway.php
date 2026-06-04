@@ -381,6 +381,32 @@ class CashuGateway extends \WC_Payment_Gateway {
 	}
 
 	/**
+	 * Canonical form of a mint URL for equality comparisons. Matches the
+	 * JS sameMint() shape (`URL.origin + pathname`, trailing slashes
+	 * stripped): scheme + host lowercased, default ports elided, IPv6
+	 * brackets preserved, path's trailing `/` trimmed. Falls back to
+	 * case-fold + rtrim when parsing fails so a slightly-malformed URL
+	 * still produces a stable key (rather than rejecting the comparison).
+	 */
+	public static function normalize_mint_url( string $url ): string {
+		$url = trim( $url );
+		if ( '' === $url ) {
+			return '';
+		}
+		$parts = wp_parse_url( $url );
+		if ( ! is_array( $parts ) || empty( $parts['host'] ) ) {
+			return strtolower( rtrim( $url, '/' ) );
+		}
+		$scheme       = strtolower( (string) ( $parts['scheme'] ?? 'https' ) );
+		$host         = strtolower( (string) $parts['host'] );
+		$port         = isset( $parts['port'] ) ? (int) $parts['port'] : 0;
+		$path         = rtrim( (string) ( $parts['path'] ?? '' ), '/' );
+		$default_port = ( 'https' === $scheme ) ? 443 : ( ( 'http' === $scheme ) ? 80 : 0 );
+		$port_str     = ( $port > 0 && $port !== $default_port ) ? ':' . $port : '';
+		return $scheme . '://' . $host . $port_str . $path;
+	}
+
+	/**
 	 * Map a setup failure into a customer-facing message. Avoids leaking
 	 * raw mint/LN errors but tells the user enough to know whether to
 	 * retry or contact the store.
@@ -477,8 +503,12 @@ class CashuGateway extends \WC_Payment_Gateway {
 		$melt_mint    = (string) $order->get_meta( '_cashu_melt_mint', true );
 
 		if ( '' !== $quote_id ) {
-			// Only consult the mint that issued the quote.
-			if ( $melt_mint === $this->trusted_mint ) {
+			// Only consult the mint that issued the quote. Normalise on
+			// both sides so a slightly-different but logically-equivalent
+			// option value (re-saved with a capitalised host, default
+			// port, etc.) doesn't fall into the rotation branch and risk
+			// orphaning a paid quote.
+			if ( self::normalize_mint_url( $melt_mint ) === self::normalize_mint_url( $this->trusted_mint ) ) {
 				// Hard guard: never rotate a quote with proofs bound to it.
 				// PENDING means the mint is mid-LN-payment; rotating would
 				// orphan the customer's payment. PAID means the mint already
@@ -611,7 +641,7 @@ class CashuGateway extends \WC_Payment_Gateway {
 			// consult something (assumed to be the same mint they were
 			// originally issued at, since that's the only mint we knew).
 			$lookup_mint = '' !== $existing_mint ? $existing_mint : $this->trusted_mint;
-			if ( $lookup_mint === $this->trusted_mint ) {
+			if ( self::normalize_mint_url( $lookup_mint ) === self::normalize_mint_url( $this->trusted_mint ) ) {
 				$state = $this->fetch_mint_quote_state_safely( $existing_id, $lookup_mint );
 				if ( 'PAID' === $state || 'ISSUED' === $state || '' === $state ) {
 					return;
