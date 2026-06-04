@@ -75,6 +75,7 @@ final class CashuWCPlugin {
 		if ( is_admin() ) {
 			add_action( 'admin_init', array( $this, 'registerAdminNotices' ) );
 			\Cashu\WC\Admin\ValidateGlobalSettings::init();
+			\Cashu\WC\Admin\OrderMetaBox::register();
 		}
 	}
 

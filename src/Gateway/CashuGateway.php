@@ -489,6 +489,19 @@ class CashuGateway extends \WC_Payment_Gateway {
 			}
 		}
 
+		// Before rotating, ask the mint for the existing quote's state. We must
+		// NEVER abandon a paid quote — the customer's funds are bound to that
+		// quote_id and rotating would orphan them in _cashu_archived_mint_quotes
+		// where the browser's auto-recovery doesn't look. If the mint says the
+		// quote is PAID or ISSUED, the time/amount checks above are irrelevant —
+		// the quote is the customer's payment, full stop.
+		if ( '' !== $existing_id ) {
+			$state = $this->fetch_mint_quote_state_safely( $existing_id );
+			if ( 'PAID' === $state || 'ISSUED' === $state ) {
+				return;
+			}
+		}
+
 		// Archive the outgoing quote (if any) before rotating.
 		if ( '' !== $existing_id ) {
 			$archive_raw = (string) $order->get_meta( '_cashu_archived_mint_quotes', true );
@@ -528,6 +541,38 @@ class CashuGateway extends \WC_Payment_Gateway {
 				$quote_id
 			)
 		);
+	}
+
+	/**
+	 * Best-effort fetch of a NUT-04 mint-quote state from the trusted mint.
+	 * Returns the state string (e.g. UNPAID, PAID, ISSUED) or empty string
+	 * if the lookup fails. Never throws — callers treat an empty return as
+	 * "unknown" rather than letting a single network hiccup orphan a paid
+	 * quote.
+	 */
+	private function fetch_mint_quote_state_safely( string $quote_id ): string {
+		$url = rtrim( $this->trusted_mint, '/' ) . '/v1/mint/quote/bolt11/' . rawurlencode( $quote_id );
+		$res = wp_remote_get(
+			$url,
+			array(
+				'timeout' => 10,
+				'headers' => array( 'Accept' => 'application/json' ),
+			)
+		);
+		if ( is_wp_error( $res ) ) {
+			Logger::debug( 'Mint quote state lookup failed: ' . $res->get_error_message() );
+			return '';
+		}
+		$code = (int) wp_remote_retrieve_response_code( $res );
+		if ( 200 !== $code ) {
+			Logger::debug( 'Mint quote state lookup HTTP ' . $code );
+			return '';
+		}
+		$json = json_decode( (string) wp_remote_retrieve_body( $res ), true );
+		if ( ! is_array( $json ) || empty( $json['state'] ) ) {
+			return '';
+		}
+		return (string) $json['state'];
 	}
 
 	private function request_mint_quote_bolt11( int $amount_sats ): array {
