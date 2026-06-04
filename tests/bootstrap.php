@@ -46,7 +46,39 @@ if (!function_exists('wp_hash')) {
 	}
 }
 
-// 4. Skeleton WC_Order class so Mockery can mock instances. Only methods the
+// 4. Skeleton WC_Payment_Gateway so CashuGateway can be loaded under tests.
+//    Real WP gateways extend WC's class which itself extends WC_Settings_API,
+//    both of which we replace with minimal no-op shims here. Tests that need
+//    gateway-level behaviour mock through Mockery on top of this skeleton.
+if (!class_exists('WC_Payment_Gateway')) {
+	class WC_Payment_Gateway {
+		public $id = '';
+		public $icon = '';
+		public $method_title = '';
+		public $method_description = '';
+		public $has_fields = false;
+		public $supports = array();
+		public $title = '';
+		public $description = '';
+		public $enabled = 'no';
+		public $form_fields = array();
+		public $settings = array();
+		public function init_settings(): void {}
+		public function process_admin_options(): bool { return true; }
+		public function get_option( string $key, $default = '' ) {
+			return $this->settings[ $key ] ?? $default;
+		}
+		public function update_option( string $key, $value = '' ): bool {
+			$this->settings[ $key ] = $value;
+			return true;
+		}
+		public function generate_settings_html( array $form_fields = array(), bool $echo = true ) {
+			return '';
+		}
+	}
+}
+
+// 5. Skeleton WC_Order class so Mockery can mock instances. Only methods the
 //    plugin actually calls are listed; tests that need other methods extend
 //    via Mockery::mock(WC_Order::class)->shouldReceive('newMethod').
 if (!class_exists('WC_Order')) {
