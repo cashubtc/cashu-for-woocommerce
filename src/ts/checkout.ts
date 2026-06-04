@@ -685,6 +685,12 @@ jQuery(function ($) {
         window.location.assign(String(data.returnUrl));
         return json;
       }
+      if (json?.state === 'PENDING') {
+        // Server saw the wallet's POST go through but the mint is still
+        // routing LN. Polling continues; show progress so the customer
+        // knows it's working, not stuck.
+        setStatus(t('settling_at_mint'));
+      }
       if (json?.expiry) {
         const msg = t('invoice_expires_in', formatCountdown(json.expiry));
         const seconds = json.expiry - Date.now() / 1000;
