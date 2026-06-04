@@ -379,6 +379,11 @@ jQuery(function ($) {
 
   // Pre-computed QR payloads (filled in by renderQr once the mint quote is ready)
   let qrTexts: Record<QrMode, string> = { unified: '', cashu: '', lightning: '' };
+  // Copy-on-click target per tab. Differs from qrTexts on the lightning tab:
+  // the QR carries `LIGHTNING:LNBC1...` so a camera scan OS-routes into a
+  // wallet; the clipboard gets raw `lnbc1...` so paste-into-wallet matches
+  // every wallet's "paste invoice" field shape.
+  let copyTexts: Record<QrMode, string> = { unified: '', cashu: '', lightning: '' };
   let currentMode: QrMode = 'unified';
 
   let chain: Promise<any> = Promise.resolve();
@@ -499,7 +504,12 @@ jQuery(function ($) {
   async function renderQr(): Promise<void> {
     const mq = mintQuote;
 
-    const lightningUri = 'lightning:' + mq.request;
+    // Uppercase the BOLT11 (and scheme) so the QR encoder picks alphanumeric
+    // mode (5.5 bits/char) instead of byte mode (8 bits/char) — same payload,
+    // denser QR, easier scan. bech32 forbids mixed case so the whole token
+    // must be one case; bolt11 is case-insensitive, so all-upper is valid.
+    const lightningInvoice = mq.request;
+    const lightningUri = 'LIGHTNING:' + lightningInvoice.toUpperCase();
 
     // cashu-ts v4 PaymentRequest constructor is positional. Args, in order:
     // transport[], id, amount, unit, mints[], description, singleUse, nut10.
@@ -528,13 +538,21 @@ jQuery(function ($) {
       cashu: creq,
       lightning: lightningUri,
     };
+    copyTexts = {
+      // Unified (BIP-321) is intentionally a URI for both QR and copy —
+      // paste targets that understand BIP-321 want the scheme.
+      unified: unifiedUri,
+      cashu: creq,
+      // Raw invoice for paste; QR keeps the LIGHTNING: scheme.
+      lightning: lightningInvoice,
+    };
 
     drawQr(qrTexts[currentMode]);
 
-    // Copy current QR text on click
+    // Copy current tab's paste-friendly text on click.
     const $qrWrap = $qr.parent();
     $qrWrap.off('click').on('click', async () => {
-      const txt = qrTexts[currentMode];
+      const txt = copyTexts[currentMode];
       if (!txt) return;
       copyTextToClipboard(txt);
       setStatus(t('copied'));
