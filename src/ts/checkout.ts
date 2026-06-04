@@ -528,24 +528,44 @@ jQuery(function ($) {
 
     // Primary: WS subscription via cashu-ts. onceMintPaid auto-unsubscribes on
     // resolve/reject and accepts its own timeoutMs — no Promise.race needed.
+    // We give the WS a few retries with short backoff before falling through
+    // to polling: in practice the mint's WS is reliable on reconnect, and
+    // bounding retries means the polling fallback still kicks in within
+    // ~7s if the connection genuinely can't recover. A normal deadline
+    // expiry is distinguished from a connection drop by checking remaining
+    // budget — no retry once the quote window is essentially over.
     const wsPaid = async (): Promise<boolean> => {
-      const expiryMs = data.quoteExpiryMs - Date.now();
-      if (expiryMs <= 0 || ac.signal.aborted) return false;
-      try {
-        await wallet.on.onceMintPaid(mq.quote, {
-          signal: ac.signal,
-          timeoutMs: expiryMs,
-        });
-        return true;
-      } catch (e) {
-        if (!ac.signal.aborted) {
+      const WS_MAX_ATTEMPTS = 3;
+      const WS_BACKOFFS_MS = [1000, 2000];
+      for (let attempt = 0; attempt < WS_MAX_ATTEMPTS; attempt++) {
+        const expiryMs = data.quoteExpiryMs - Date.now();
+        if (expiryMs <= 0 || ac.signal.aborted) return false;
+        try {
+          await wallet.on.onceMintPaid(mq.quote, {
+            signal: ac.signal,
+            timeoutMs: expiryMs,
+          });
+          return true;
+        } catch (e) {
+          if (ac.signal.aborted) return false;
+          const remaining = data.quoteExpiryMs - Date.now();
+          const isLastAttempt = attempt === WS_MAX_ATTEMPTS - 1;
+          if (remaining <= 1000 || isLastAttempt) {
+            console.warn(
+              'Cashu WS mint watcher exhausted, falling back to polling:',
+              getErrorMessage(e),
+            );
+            return false;
+          }
           console.warn(
-            'Cashu WS mint watcher failed, falling back to polling:',
+            `Cashu WS dropped (attempt ${attempt + 1}/${WS_MAX_ATTEMPTS}), retrying in ${WS_BACKOFFS_MS[attempt]}ms:`,
             getErrorMessage(e),
           );
+          await delay(WS_BACKOFFS_MS[attempt]);
+          if (ac.signal.aborted) return false;
         }
-        return false;
       }
+      return false;
     };
 
     // Fallback: slow polling of the mint. 12s × ~15min = ~75 requests, well
