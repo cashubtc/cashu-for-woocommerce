@@ -331,6 +331,10 @@ msgid "Confirming payment..."
 msgstr "Confirmation du paiement…"
 
 #: src/Gateway/CashuGateway.php:181
+msgid "Payment confirmed!"
+msgstr "Paiement confirmé !"
+
+#: src/Gateway/CashuGateway.php:182
 msgid "Mint is settling the Lightning payment..."
 msgstr "Le mint règle le paiement Lightning…"
 

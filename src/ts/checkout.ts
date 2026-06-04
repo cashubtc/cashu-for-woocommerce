@@ -874,6 +874,7 @@ jQuery(function ($) {
       });
       const json = (await res.json()) as ConfirmPaidResponse;
       if (json?.state === 'PAID') {
+        setStatus(t('payment_confirmed'));
         doConfettiBomb();
         await delay(2000);
         window.location.assign(String(json.redirect ?? data.returnUrl));
@@ -926,6 +927,7 @@ jQuery(function ($) {
         // snapshot so a future reload of this order doesn't try to
         // re-melt already-spent proofs.
         clearStrandedProofs(data.mintQuote.id);
+        setStatus(t('payment_confirmed'));
         doConfettiBomb();
         await delay(2000);
         window.location.assign(String(json.redirect ?? data.returnUrl));

@@ -188,6 +188,7 @@ class CashuGateway extends \WC_Payment_Gateway {
 					'payment_received'     => __( 'Payment received by our mint...', 'cashu-for-woocommerce' ),
 					'paying_invoice'       => __( 'Paying invoice...', 'cashu-for-woocommerce' ),
 					'confirming_payment'   => __( 'Confirming payment...', 'cashu-for-woocommerce' ),
+					'payment_confirmed'    => __( 'Payment confirmed!', 'cashu-for-woocommerce' ),
 					'settling_at_mint'     => __( 'Mint is settling the Lightning payment...', 'cashu-for-woocommerce' ),
 
 					// Change
