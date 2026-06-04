@@ -48,6 +48,28 @@ final class ConfirmMeltQuoteController {
 	private const CLAIM_RATE_LIMIT_MAX = 30;
 	private const CLAIM_RATE_LIMIT_TTL = HOUR_IN_SECONDS;
 
+	/**
+	 * Per-order rate limit on the polling endpoint. Mint amplification is
+	 * already bounded by the 10s transient cache on pending-melt lookups,
+	 * but each request still hits the WP REST stack + DB. The 5s legitimate
+	 * poll cadence over a 15-minute payment window is ~180 polls. 720/hour
+	 * (= 12/min) leaves generous headroom for tab visibility cycles and
+	 * absorbs the WS-fallback poll bursts without ever pinching a real user.
+	 */
+	private const CONFIRM_RATE_LIMIT_MAX = 720;
+	private const CONFIRM_RATE_LIMIT_TTL = HOUR_IN_SECONDS;
+
+	/**
+	 * Maximum age of a `_cashu_melt_pending_quote_id` marker before we
+	 * stop probing the mint and let the order fall back to UNPAID/EXPIRED.
+	 * Real LN payments settle in seconds to a few minutes; a marker still
+	 * present an hour past creation means either the mint is genuinely
+	 * stuck or its state endpoint isn't returning a terminal answer. We
+	 * prefer to stop burning mint hits (6/min/order while any browser
+	 * polls) and surface the failure rather than spinning forever.
+	 */
+	private const PENDING_MARKER_MAX_AGE = HOUR_IN_SECONDS;
+
 	public function register_routes(): void {
 		register_rest_route(
 			self::REST_NAMESPACE,
@@ -128,6 +150,8 @@ final class ConfirmMeltQuoteController {
 			return $order;
 		}
 
+		// PAID short-circuit before the rate-limit so a polling browser that
+		// just settled gets the redirect even if it ran out of budget.
 		if ( $order->is_paid() ) {
 			return rest_ensure_response(
 				array(
@@ -136,6 +160,10 @@ final class ConfirmMeltQuoteController {
 					'redirect' => $order->get_checkout_order_received_url(),
 				)
 			);
+		}
+
+		if ( ! $this->check_confirm_rate_limit( $order->get_id() ) ) {
+			return new WP_Error( 'cashu_rate_limited', 'Too many polls.', array( 'status' => 429 ) );
 		}
 
 		// If a cashu-leg melt is mid-flight at the mint, resolve it.
@@ -184,6 +212,19 @@ final class ConfirmMeltQuoteController {
 			return null;
 		}
 
+		// Stale-marker TTL. A genuinely stuck LN payment will sit in PENDING
+		// indefinitely otherwise, and every browser hit pays the 10s-cached
+		// mint check (~6 hits/pending minute/order). Past the TTL, drop the
+		// marker so the order falls back to UNPAID/EXPIRED.
+		$pending_at = absint( $order->get_meta( '_cashu_melt_pending_at', true ) );
+		if ( $pending_at > 0 && ( time() - $pending_at ) > self::PENDING_MARKER_MAX_AGE ) {
+			Logger::error( 'pending melt marker aged out for order ' . $order->get_id() . ', quote ' . $pending_quote_id );
+			$order->delete_meta_data( '_cashu_melt_pending_quote_id' );
+			$order->delete_meta_data( '_cashu_melt_pending_at' );
+			$order->save();
+			return null;
+		}
+
 		// Use the mint the quote was issued at, not the current gateway setting,
 		// so an admin-side mint change doesn't route the lookup to the wrong host.
 		$order_mint = (string) $order->get_meta( '_cashu_melt_mint', true );
@@ -210,7 +251,17 @@ final class ConfirmMeltQuoteController {
 			$amount   = isset( $mint_response['amount'] ) ? (string) $mint_response['amount'] : '';
 
 			Logger::debug( 'resolve_pending_melt PENDING->PAID for order ' . $order->get_id() . ', quote ' . $pending_quote_id );
-			$this->mark_paid( $order, $pending_quote_id, $preimage, $amount );
+			if ( ! $this->mark_paid( $order, $pending_quote_id, $preimage, $amount ) ) {
+				// Couldn't take the pay lock — leave the marker in place so
+				// the next poll retries. The mint state cache will short-
+				// circuit the mint hit in the meantime.
+				return rest_ensure_response(
+					array(
+						'ok'    => true,
+						'state' => 'PENDING',
+					)
+				);
+			}
 			$order->delete_meta_data( '_cashu_melt_pending_quote_id' );
 			$order->delete_meta_data( '_cashu_melt_pending_at' );
 			$order->save();
@@ -290,7 +341,17 @@ final class ConfirmMeltQuoteController {
 		// (that's the amplification vector).
 		if ( '' !== $preimage ) {
 			if ( '' !== $payment_hash && $this->preimage_matches( $preimage, $payment_hash ) ) {
-				$this->mark_paid( $order, $quote_id, $preimage, null );
+				if ( ! $this->mark_paid( $order, $quote_id, $preimage, null ) ) {
+					// Lock contention — settlement is in flight elsewhere. Tell
+					// the browser to keep polling rather than claiming PAID on
+					// an order that's still in pending status.
+					return rest_ensure_response(
+						array(
+							'ok'    => true,
+							'state' => 'PENDING',
+						)
+					);
+				}
 				return rest_ensure_response(
 					array(
 						'ok'       => true,
@@ -314,7 +375,7 @@ final class ConfirmMeltQuoteController {
 		$res = wp_remote_get(
 			$url,
 			array(
-				'timeout' => 12,
+				'timeout' => 10,
 				'headers' => array( 'Accept' => 'application/json' ),
 			)
 		);
@@ -325,12 +386,12 @@ final class ConfirmMeltQuoteController {
 		$code = (int) wp_remote_retrieve_response_code( $res );
 		$body = (string) wp_remote_retrieve_body( $res );
 		if ( 200 !== $code ) {
-			Logger::debug( 'Mint quote state HTTP ' . $code . ' body: ' . $body );
+			Logger::debug( 'Mint quote state HTTP ' . $code . ' for order ' . $order->get_id() . ', quote ' . $quote_id );
 			return new WP_Error( 'cashu_mint_http', 'Mint returned a non 200 response.', array( 'status' => 502 ) );
 		}
 		$data = json_decode( $body, true );
 		if ( ! is_array( $data ) || empty( $data['state'] ) ) {
-			Logger::debug( 'Mint quote state invalid JSON: ' . $body );
+			Logger::debug( 'Mint quote state invalid JSON for order ' . $order->get_id() . ', quote ' . $quote_id );
 			return new WP_Error( 'cashu_mint_json', 'Mint returned invalid JSON.', array( 'status' => 502 ) );
 		}
 
@@ -349,7 +410,24 @@ final class ConfirmMeltQuoteController {
 			);
 		}
 
-		$this->mark_paid( $order, $quote_id, $mint_preimage, $reported_amount );
+		// Cross-check the mint's reported preimage against the stored payment_hash
+		// before storing it. The settlement is still trustable — the mint has
+		// reported PAID via its authoritative state endpoint — but a recorded
+		// preimage that doesn't actually hash to the invoice's payment_hash
+		// is misleading audit data.
+		if ( '' !== $mint_preimage && '' !== $payment_hash && ! Bolt11::preimageMatches( $mint_preimage, $payment_hash ) ) {
+			Logger::error( 'claim_melt_quote: mint preimage does not match invoice hash for order ' . $order->get_id() );
+			$mint_preimage = '';
+		}
+
+		if ( ! $this->mark_paid( $order, $quote_id, $mint_preimage, $reported_amount ) ) {
+			return rest_ensure_response(
+				array(
+					'ok'    => true,
+					'state' => 'PENDING',
+				)
+			);
+		}
 		return rest_ensure_response(
 			array(
 				'ok'       => true,
@@ -369,25 +447,34 @@ final class ConfirmMeltQuoteController {
 		return true;
 	}
 
-	/**
-	 * sha256(preimage) == payment_hash, both compared in lowercase hex.
-	 */
-	private function preimage_matches( string $preimage_hex, string $payment_hash_hex ): bool {
-		$preimage_hex     = strtolower( $preimage_hex );
-		$payment_hash_hex = strtolower( $payment_hash_hex );
-		if ( ! ctype_xdigit( $preimage_hex ) || ! ctype_xdigit( $payment_hash_hex ) ) {
+	private function check_confirm_rate_limit( int $order_id ): bool {
+		$key   = 'cashu_wc_confirm_attempts_' . $order_id;
+		$count = (int) get_transient( $key );
+		if ( $count >= self::CONFIRM_RATE_LIMIT_MAX ) {
 			return false;
 		}
-		$bytes = hex2bin( $preimage_hex );
-		if ( false === $bytes ) {
-			return false;
-		}
-		return hash_equals( $payment_hash_hex, hash( 'sha256', $bytes ) );
+		set_transient( $key, $count + 1, self::CONFIRM_RATE_LIMIT_TTL );
+		return true;
 	}
 
-	private function mark_paid( WC_Order $order, string $quote_id, ?string $preimage, ?string $amount ): void {
+	/**
+	 * sha256(preimage) == payment_hash. Delegates to Bolt11 so the same
+	 * primitive is used in PayController too.
+	 */
+	private function preimage_matches( string $preimage_hex, string $payment_hash_hex ): bool {
+		return Bolt11::preimageMatches( $preimage_hex, $payment_hash_hex );
+	}
+
+	/**
+	 * Returns true if the order is now (or was already) paid, false if we
+	 * couldn't take the lock in a reasonable time. The caller MUST surface
+	 * the false case to the browser as a non-PAID state — claiming PAID
+	 * + redirecting on an unmarked order leaves the customer staring at
+	 * a still-pending order on the thank-you page.
+	 */
+	private function mark_paid( WC_Order $order, string $quote_id, ?string $preimage, ?string $amount ): bool {
 		if ( $order->is_paid() ) {
-			return;
+			return true;
 		}
 
 		$order_id = $order->get_id();
@@ -397,24 +484,32 @@ final class ConfirmMeltQuoteController {
 		// order — that would fire WC's payment-complete actions (emails,
 		// stock, etc.) twice. The is_paid() check above guards the
 		// in-process case; the lock + re-check below covers cross-process
-		// races where each process has its own WC object cache.
+		// races where each process has its own WC object cache. The wait
+		// budget (60s) is sized to outlast PayController's 90s in-flight
+		// mint melt only partially — we expect the holder to finish in
+		// well under that on a healthy mint, and on contention timeout
+		// we'd rather have the caller report pending than block the
+		// browser indefinitely. The caller is responsible for re-polling.
 		if ( ! OrderLock::acquire( $order_id, 'pay', 30 ) ) {
 			Logger::debug( 'mark_paid waiting on pay lock for order ' . $order_id );
-			OrderLock::wait_for_release( $order_id, 'pay', 15 );
+			OrderLock::wait_for_release( $order_id, 'pay', 60 );
 			$fresh = wc_get_order( $order_id );
 			if ( $fresh && $fresh->is_paid() ) {
-				return;
+				return true;
 			}
 			if ( ! OrderLock::acquire( $order_id, 'pay', 30 ) ) {
 				Logger::error( 'mark_paid lock contention timeout for order ' . $order_id );
-				return;
+				return false;
 			}
 		}
 
 		try {
 			$fresh = wc_get_order( $order_id );
-			if ( ! $fresh || $fresh->is_paid() ) {
-				return;
+			if ( ! $fresh ) {
+				return false;
+			}
+			if ( $fresh->is_paid() ) {
+				return true;
 			}
 
 			if ( null !== $preimage && '' !== $preimage ) {
@@ -426,6 +521,7 @@ final class ConfirmMeltQuoteController {
 
 			// Keep the caller's $order reference in sync.
 			$order->read_meta_data( true );
+			return true;
 		} finally {
 			OrderLock::release( $order_id, 'pay' );
 		}

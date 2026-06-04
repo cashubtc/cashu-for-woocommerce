@@ -105,14 +105,11 @@ final class PayController {
 			return new WP_Error( 'cashu_wrong_gateway', 'Order is not using Cashu.', array( 'status' => 400 ) );
 		}
 
-		// Rate limit before anything potentially expensive.
-		if ( ! $this->check_rate_limit( $order_id ) ) {
-			return new WP_Error( 'cashu_rate_limited', 'Too many attempts.', array( 'status' => 429 ) );
-		}
-
 		$expected_id = self::payment_id_for( $order_id, $order_key );
 
-		// Idempotent fast path.
+		// Idempotent fast path — must run before the rate-limit check so a
+		// retrying wallet that already settled the order never gets a 429
+		// back instead of the documented "already settled" 200.
 		if ( $order->is_paid() ) {
 			return rest_ensure_response(
 				array(
@@ -120,6 +117,11 @@ final class PayController {
 					'id'     => $expected_id,
 				)
 			);
+		}
+
+		// Rate limit before anything potentially expensive.
+		if ( ! $this->check_rate_limit( $order_id ) ) {
+			return new WP_Error( 'cashu_rate_limited', 'Too many attempts.', array( 'status' => 429 ) );
 		}
 
 		// Spot quote still valid?
@@ -237,10 +239,13 @@ final class PayController {
 				return new WP_Error( 'cashu_no_quote', 'Missing melt quote on order.', array( 'status' => 500 ) );
 			}
 
-			// Hand off to the mint.
+			// Hand off to the mint. Route through the mint stored on the order,
+			// not the current gateway setting — an admin-side mint change between
+			// quote creation and settlement must not redirect the melt to a host
+			// that doesn't know the quote.
 			$gateway = new CashuGateway();
 			try {
-				$mint_response = $gateway->request_melt_bolt11( $quote_id, $proofs );
+				$mint_response = $gateway->request_melt_bolt11( $quote_id, $proofs, $trusted_mint );
 			} catch ( \Throwable $e ) {
 				Logger::debug( 'Cashu melt failed: ' . $e->getMessage() );
 				return new WP_Error( 'cashu_mint_error', 'Mint melt failed.', array( 'status' => 502 ) );
@@ -270,13 +275,30 @@ final class PayController {
 			}
 
 			if ( 'PAID' !== $state ) {
-				Logger::debug( 'Mint returned non-PAID state: ' . wp_json_encode( $mint_response ) );
+				// Don't dump the full mint response — even on non-PAID states the
+				// body can carry sensitive fields (e.g. a partial preimage on
+				// some mint impls). The state + quote_id is enough to trace.
+				Logger::debug( 'Mint returned non-PAID state "' . $state . '" for order ' . $order->get_id() . ', quote ' . $quote_id );
 				return new WP_Error( 'cashu_unpaid', 'Mint did not settle the invoice.', array( 'status' => 502 ) );
 			}
 
-			// Persist preimage + change.
-			if ( isset( $mint_response['payment_preimage'] ) && is_string( $mint_response['payment_preimage'] ) && '' !== $mint_response['payment_preimage'] ) {
-				$order->update_meta_data( '_cashu_payment_preimage', sanitize_text_field( $mint_response['payment_preimage'] ) );
+			// Persist preimage + change. Verify the mint-supplied preimage
+			// against the stored payment_hash before storing it — a misbehaving
+			// or compromised mint could otherwise poison the audit trail. A
+			// mismatch isn't fatal (the proofs ARE consumed at the mint, so
+			// the merchant is paid) but the recorded preimage should not lie.
+			$raw_preimage      = isset( $mint_response['payment_preimage'] ) && is_string( $mint_response['payment_preimage'] )
+				? $mint_response['payment_preimage']
+				: '';
+			$stored_hash       = (string) $order->get_meta( '_cashu_payment_hash', true );
+			$verified_preimage = '';
+			if ( '' !== $raw_preimage ) {
+				if ( '' === $stored_hash || Bolt11::preimageMatches( $raw_preimage, $stored_hash ) ) {
+					$verified_preimage = $raw_preimage;
+					$order->update_meta_data( '_cashu_payment_preimage', sanitize_text_field( $raw_preimage ) );
+				} else {
+					Logger::error( 'PayController: mint preimage does not match invoice hash for order ' . $order->get_id() );
+				}
 			}
 			$change = isset( $mint_response['change'] ) && is_array( $mint_response['change'] ) ? $mint_response['change'] : array();
 
@@ -300,7 +322,7 @@ final class PayController {
 					$paid_amount,
 					$lightning_address,
 					$quote_id,
-					(string) ( $mint_response['payment_preimage'] ?? '' )
+					$verified_preimage
 				)
 			);
 

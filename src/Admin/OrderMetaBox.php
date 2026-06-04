@@ -47,13 +47,17 @@ final class OrderMetaBox {
 			return;
 		}
 
-		$mint          = (string) $order->get_meta( '_cashu_melt_mint', true );
-		$mint_quote_id = (string) $order->get_meta( '_cashu_mint_quote_id', true );
-		$melt_quote_id = (string) $order->get_meta( '_cashu_melt_quote_id', true );
-		$payment_url   = $order->get_checkout_payment_url();
-		$archive_raw   = (string) $order->get_meta( '_cashu_archived_mint_quotes', true );
-		$archive       = '' !== $archive_raw
-			? (array) json_decode( $archive_raw, true )
+		$mint             = (string) $order->get_meta( '_cashu_melt_mint', true );
+		$mint_quote_id    = (string) $order->get_meta( '_cashu_mint_quote_id', true );
+		$melt_quote_id    = (string) $order->get_meta( '_cashu_melt_quote_id', true );
+		$payment_url      = $order->get_checkout_payment_url();
+		$mint_archive_raw = (string) $order->get_meta( '_cashu_archived_mint_quotes', true );
+		$mint_archive     = '' !== $mint_archive_raw
+			? (array) json_decode( $mint_archive_raw, true )
+			: array();
+		$melt_archive_raw = (string) $order->get_meta( '_cashu_archived_melt_quotes', true );
+		$melt_archive     = '' !== $melt_archive_raw
+			? (array) json_decode( $melt_archive_raw, true )
 			: array();
 
 		echo '<p style="margin:0 0 10px;">';
@@ -84,10 +88,10 @@ final class OrderMetaBox {
 			echo '<p style="margin:0 0 10px;word-break:break-all;font-family:monospace;font-size:11px;">' . esc_html( $melt_quote_id ) . '</p>';
 		}
 
-		if ( ! empty( $archive ) ) {
+		if ( ! empty( $mint_archive ) ) {
 			echo '<p style="margin:0 0 4px;"><strong>' . esc_html__( 'Archived mint quotes', 'cashu-for-woocommerce' ) . '</strong></p>';
-			echo '<p style="margin:0 0 6px;font-size:11px;color:#666;">' . esc_html__( 'Previous quotes for this order, kept for out-of-band recovery if a customer paid one before rotation.', 'cashu-for-woocommerce' ) . '</p>';
-			foreach ( $archive as $entry ) {
+			echo '<p style="margin:0 0 6px;font-size:11px;color:#666;">' . esc_html__( 'Previous customer-payment quotes for this order, kept for out-of-band recovery if a customer paid one before rotation.', 'cashu-for-woocommerce' ) . '</p>';
+			foreach ( $mint_archive as $entry ) {
 				if ( ! is_array( $entry ) || empty( $entry['quote'] ) ) {
 					continue;
 				}
@@ -96,6 +100,26 @@ final class OrderMetaBox {
 					echo ' <span style="color:#666;">(' . esc_html( (string) $entry['amount'] ) . ' sat)</span>';
 				}
 				echo '</p>';
+			}
+		}
+
+		if ( ! empty( $melt_archive ) ) {
+			echo '<p style="margin:0 0 4px;"><strong>' . esc_html__( 'Archived melt quotes', 'cashu-for-woocommerce' ) . '</strong></p>';
+			echo '<p style="margin:0 0 6px;font-size:11px;color:#666;">' . esc_html__( 'Previous vendor-payout quotes for this order, with the underlying BOLT11 invoice for forensic lookup against the mint.', 'cashu-for-woocommerce' ) . '</p>';
+			foreach ( $melt_archive as $entry ) {
+				if ( ! is_array( $entry ) || empty( $entry['quote'] ) ) {
+					continue;
+				}
+				echo '<p style="margin:0 0 4px;word-break:break-all;font-family:monospace;font-size:11px;">' . esc_html( (string) $entry['quote'] );
+				if ( ! empty( $entry['amount'] ) ) {
+					echo ' <span style="color:#666;">(' . esc_html( (string) $entry['amount'] ) . ' sat)</span>';
+				}
+				echo '</p>';
+				if ( ! empty( $entry['request'] ) ) {
+					echo '<details style="margin:0 0 8px;"><summary style="font-size:11px;color:#666;cursor:pointer;">' . esc_html__( 'BOLT11 invoice', 'cashu-for-woocommerce' ) . '</summary>';
+					echo '<p style="margin:4px 0 0;word-break:break-all;font-family:monospace;font-size:10px;">' . esc_html( (string) $entry['request'] ) . '</p>';
+					echo '</details>';
+				}
 			}
 		}
 	}

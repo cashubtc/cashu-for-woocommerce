@@ -80,6 +80,27 @@ final class Bolt11 {
 	}
 
 	/**
+	 * sha256(preimage) == payment_hash, both compared in lowercase hex.
+	 * Used to cryptographically verify a settlement claim without
+	 * contacting the mint.
+	 */
+	public static function preimageMatches( string $preimage_hex, string $payment_hash_hex ): bool {
+		$preimage_hex     = strtolower( trim( $preimage_hex ) );
+		$payment_hash_hex = strtolower( trim( $payment_hash_hex ) );
+		if ( '' === $preimage_hex || '' === $payment_hash_hex ) {
+			return false;
+		}
+		if ( ! ctype_xdigit( $preimage_hex ) || ! ctype_xdigit( $payment_hash_hex ) ) {
+			return false;
+		}
+		$bytes = hex2bin( $preimage_hex );
+		if ( false === $bytes ) {
+			return false;
+		}
+		return hash_equals( $payment_hash_hex, hash( 'sha256', $bytes ) );
+	}
+
+	/**
 	 * Pack an array of 5-bit values into the leading $bits bits, returned as
 	 * lowercase hex. Used to convert the 52 5-bit groups of the 'p' tag into
 	 * the 256-bit payment_hash.
