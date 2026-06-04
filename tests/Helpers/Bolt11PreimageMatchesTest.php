@@ -69,20 +69,10 @@ final class Bolt11PreimageMatchesTest extends TestCase {
 	}
 
 	public function test_odd_length_hex_returns_false(): void {
-		// Odd-length hex can't be decoded to bytes; ctype_xdigit passes but
-		// hex2bin returns false. Documenting that we trap the failure.
-		// hex2bin emits a PHP warning on odd-length input — suppressed here
-		// because it's expected, not a sign of a test bug.
-		$prev = set_error_handler(
-			static fn ( int $errno, string $errstr ): bool =>
-				false !== strpos( $errstr, 'hex2bin' )
-		);
-		try {
-			$this->assertFalse( Bolt11::preimageMatches( '0', self::ZERO_HASH ) );
-			$this->assertFalse( Bolt11::preimageMatches( '000', self::ZERO_HASH ) );
-		} finally {
-			restore_error_handler();
-		}
+		// Odd-length hex can't decode to bytes. The strlen guard rejects it
+		// before hex2bin so PHP doesn't emit a warning into the error log.
+		$this->assertFalse( Bolt11::preimageMatches( '0', self::ZERO_HASH ) );
+		$this->assertFalse( Bolt11::preimageMatches( '000', self::ZERO_HASH ) );
 	}
 
 	public function test_uses_hash_equals_constant_time_compare(): void {

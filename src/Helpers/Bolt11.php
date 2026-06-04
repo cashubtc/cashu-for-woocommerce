@@ -93,6 +93,11 @@ final class Bolt11 {
 		if ( ! ctype_xdigit( $preimage_hex ) || ! ctype_xdigit( $payment_hash_hex ) ) {
 			return false;
 		}
+		// hex2bin emits a PHP warning on odd-length input. Guard before
+		// the call so caller noise doesn't leak into error logs.
+		if ( 0 !== strlen( $preimage_hex ) % 2 ) {
+			return false;
+		}
 		$bytes = hex2bin( $preimage_hex );
 		if ( false === $bytes ) {
 			return false;
