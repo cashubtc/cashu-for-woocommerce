@@ -5,7 +5,7 @@ msgstr ""
 "Project-Id-Version: Cashu For WooCommerce 0.1.1\n"
 "Report-Msgid-Bugs-To: "
 "https://wordpress.org/support/plugin/cashu-for-woocommerce\n"
-"POT-Creation-Date: 2026-06-04 16:33:36+00:00\n"
+"POT-Creation-Date: 2026-06-04 17:06:29+00:00\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=utf-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -61,7 +61,7 @@ msgstr ""
 msgid "A mint you trust to act as your intermediary."
 msgstr ""
 
-#: src/Admin/GlobalSettings.php:59 src/CashuWCPlugin.php:341
+#: src/Admin/GlobalSettings.php:59 src/CashuWCPlugin.php:342
 msgid "Debug log"
 msgstr ""
 
@@ -72,6 +72,55 @@ msgstr ""
 #: src/Admin/GlobalSettings.php:65
 #. translators: %s is a link to WooCommerce logs page
 msgid "Log events to the WooCommerce logs, <a href=\"%s\">view logs</a>."
+msgstr ""
+
+#: src/Admin/OrderMetaBox.php:32
+msgid "Cashu Payment"
+msgstr ""
+
+#: src/Admin/OrderMetaBox.php:46
+msgid "Not a Cashu order."
+msgstr ""
+
+#: src/Admin/OrderMetaBox.php:61
+msgid "Paid."
+msgstr ""
+
+#: src/Admin/OrderMetaBox.php:62
+msgid "Open the receipt page to verify or run recovery."
+msgstr ""
+
+#: src/Admin/OrderMetaBox.php:64
+msgid ""
+"Open the customer's receipt page in a new tab. If the payment settled at "
+"the mint but never claimed (e.g. the customer's browser died mid-payment), "
+"the page-load watcher will mint the proofs and finalize the order."
+msgstr ""
+
+#: src/Admin/OrderMetaBox.php:69
+msgid "Open customer payment page"
+msgstr ""
+
+#: src/Admin/OrderMetaBox.php:73
+msgid "Mint"
+msgstr ""
+
+#: src/Admin/OrderMetaBox.php:78
+msgid "Mint quote (customer payment)"
+msgstr ""
+
+#: src/Admin/OrderMetaBox.php:83
+msgid "Melt quote (vendor payment)"
+msgstr ""
+
+#: src/Admin/OrderMetaBox.php:88
+msgid "Archived mint quotes"
+msgstr ""
+
+#: src/Admin/OrderMetaBox.php:89
+msgid ""
+"Previous quotes for this order, kept for out-of-band recovery if a customer "
+"paid one before rotation."
 msgstr ""
 
 #: src/Admin/ValidateGlobalSettings.php:40
@@ -86,33 +135,33 @@ msgstr ""
 msgid "Lightning address must be a valid lightning address (name@domain)."
 msgstr ""
 
-#: src/CashuWCPlugin.php:163
+#: src/CashuWCPlugin.php:164
 msgid "Unauthorized"
 msgstr ""
 
-#: src/CashuWCPlugin.php:191
+#: src/CashuWCPlugin.php:192
 #. translators: 1: PHP Version string.
 msgid "Your PHP version is %s but Cashu Payment plugin requires version 7.4+."
 msgstr ""
 
-#: src/CashuWCPlugin.php:200
+#: src/CashuWCPlugin.php:201
 msgid ""
 "WooCommerce does not appear to be installed. Make sure you do before you "
 "activate Cashu Payment Gateway."
 msgstr ""
 
-#: src/CashuWCPlugin.php:208
+#: src/CashuWCPlugin.php:209
 msgid ""
 "The PHP cURL extension is not installed. Make sure it is available "
 "otherwise this plugin will not work."
 msgstr ""
 
-#: src/CashuWCPlugin.php:217
+#: src/CashuWCPlugin.php:218
 #. translators: 1: opening <a> tag to settings page 2: closing </a> tag
 msgid "Plugin not configured yet, please %1$sconfigure the plugin here%2$s"
 msgstr ""
 
-#: src/CashuWCPlugin.php:234
+#: src/CashuWCPlugin.php:235
 #. translators: 1: opening <a> tag to the donation page, 2: closing </a> tag,
 #. 3: opening <button> tag for "remind me later", 4: closing </button> tag, 5:
 #. opening <button> tag for "stop reminding forever", 6: closing </button> tag.
@@ -123,39 +172,39 @@ msgid ""
 "reminding me forever%6$s"
 msgstr ""
 
-#: src/CashuWCPlugin.php:268
+#: src/CashuWCPlugin.php:269
 msgid "Waiting payment"
 msgstr ""
 
-#: src/CashuWCPlugin.php:271
+#: src/CashuWCPlugin.php:272
 msgid "Waiting for payment settlement"
 msgstr ""
 
-#: src/CashuWCPlugin.php:274
+#: src/CashuWCPlugin.php:275
 msgid "Payment settled"
 msgstr ""
 
-#: src/CashuWCPlugin.php:277
+#: src/CashuWCPlugin.php:278
 msgid "Order completed"
 msgstr ""
 
-#: src/CashuWCPlugin.php:281
+#: src/CashuWCPlugin.php:282
 msgid "Payment failed"
 msgstr ""
 
-#: src/CashuWCPlugin.php:289
+#: src/CashuWCPlugin.php:290
 msgid "Order Status"
 msgstr ""
 
-#: src/CashuWCPlugin.php:312
+#: src/CashuWCPlugin.php:313
 msgid "Cashu Amount"
 msgstr ""
 
-#: src/CashuWCPlugin.php:333
+#: src/CashuWCPlugin.php:334
 msgid "Settings"
 msgstr ""
 
-#: src/CashuWCPlugin.php:348
+#: src/CashuWCPlugin.php:349
 msgid "Docs"
 msgstr ""
 
@@ -217,15 +266,15 @@ msgstr ""
 msgid "Connecting to mint..."
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:168 src/Gateway/CashuGateway.php:761
+#: src/Gateway/CashuGateway.php:168 src/Gateway/CashuGateway.php:806
 msgid "Auto"
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:169 src/Gateway/CashuGateway.php:768
+#: src/Gateway/CashuGateway.php:169 src/Gateway/CashuGateway.php:813
 msgid "Cashu"
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:170 src/Gateway/CashuGateway.php:775
+#: src/Gateway/CashuGateway.php:170 src/Gateway/CashuGateway.php:820
 msgid "Lightning"
 msgstr ""
 
@@ -326,7 +375,7 @@ msgstr ""
 msgid "Amount: %1$s%2$d, %3$s"
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:278 src/Gateway/CashuGateway.php:695
+#: src/Gateway/CashuGateway.php:278 src/Gateway/CashuGateway.php:740
 msgid "Cashu payment setup failed, please try again."
 msgstr ""
 
@@ -354,7 +403,7 @@ msgid ""
 "Quote ID: %5$s"
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:525
+#: src/Gateway/CashuGateway.php:538
 #. translators: %1$s: BTC symbol, %2$d: amount in sats, %3$s: mint quote id
 msgid ""
 "Cashu mint quote created:\n"
@@ -362,40 +411,40 @@ msgid ""
 "Quote ID: %3$s"
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:667
+#: src/Gateway/CashuGateway.php:712
 msgid "Order not found."
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:713
+#: src/Gateway/CashuGateway.php:758
 #. translators: %1$d: order number, %2$s: site name
 msgid "Order #%1$d at %2$s"
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:740
+#: src/Gateway/CashuGateway.php:785
 msgid "Cashu payment"
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:742
+#: src/Gateway/CashuGateway.php:787
 msgid "Amount Due"
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:750
+#: src/Gateway/CashuGateway.php:795
 msgid "Status: Waiting for payment..."
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:754
+#: src/Gateway/CashuGateway.php:799
 msgid "Payment options"
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:790
+#: src/Gateway/CashuGateway.php:835
 msgid "Copy the token below and paste it into a Cashu wallet to reclaim your sats."
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:793
+#: src/Gateway/CashuGateway.php:838
 msgid "Copy recovery token"
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:801
+#: src/Gateway/CashuGateway.php:846
 #. translators: %1$s: Mint hostname
 msgid "Payments are settled at our mint: %1$s"
 msgstr ""

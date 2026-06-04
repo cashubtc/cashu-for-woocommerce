@@ -478,3 +478,58 @@ msgstr "Rob Woodgate"
 msgctxt "Cashu payment method"
 msgid "Awaiting Cashu payment"
 msgstr "En attente d’un paiement Cashu"
+
+#: src/Admin/OrderMetaBox.php:32
+msgid "Cashu Payment"
+msgstr "Paiement Cashu"
+
+#: src/Admin/OrderMetaBox.php:46
+msgid "Not a Cashu order."
+msgstr "Cette commande n’est pas réglée en Cashu."
+
+#: src/Admin/OrderMetaBox.php:61
+msgid "Paid."
+msgstr "Réglée."
+
+#: src/Admin/OrderMetaBox.php:62
+msgid "Open the receipt page to verify or run recovery."
+msgstr "Ouvrez la page de paiement pour vérifier ou lancer une récupération."
+
+#: src/Admin/OrderMetaBox.php:64
+msgid ""
+"Open the customer's receipt page in a new tab. If the payment settled at "
+"the mint but never claimed (e.g. the customer's browser died mid-payment), "
+"the page-load watcher will mint the proofs and finalize the order."
+msgstr ""
+"Ouvre la page de paiement du client dans un nouvel onglet. Si le paiement "
+"a abouti au mint mais n’a jamais été réclamé (par exemple, le navigateur "
+"du client s’est fermé pendant le paiement), le moniteur de la page va "
+"émettre les preuves et finaliser la commande."
+
+#: src/Admin/OrderMetaBox.php:69
+msgid "Open customer payment page"
+msgstr "Ouvrir la page de paiement du client"
+
+#: src/Admin/OrderMetaBox.php:73
+msgid "Mint"
+msgstr "Mint"
+
+#: src/Admin/OrderMetaBox.php:78
+msgid "Mint quote (customer payment)"
+msgstr "Devis d’émission (paiement client)"
+
+#: src/Admin/OrderMetaBox.php:83
+msgid "Melt quote (vendor payment)"
+msgstr "Devis de fusion (paiement marchand)"
+
+#: src/Admin/OrderMetaBox.php:88
+msgid "Archived mint quotes"
+msgstr "Devis d’émission archivés"
+
+#: src/Admin/OrderMetaBox.php:89
+msgid ""
+"Previous quotes for this order, kept for out-of-band recovery if a customer "
+"paid one before rotation."
+msgstr ""
+"Devis précédents pour cette commande, conservés pour une récupération hors "
+"flux si un client a payé l’un d’eux avant rotation."
