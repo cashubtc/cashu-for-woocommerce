@@ -104,8 +104,11 @@ final class ConfirmMeltQuoteController {
 	}
 
 	/**
-	 * Cheap polling endpoint. Does NOT contact the mint — both settlement
-	 * paths flip $order->is_paid() through other entry points.
+	 * Cheap polling endpoint. Does NOT contact the mint for orders that aren't
+	 * in PENDING-melt state (both settlement paths flip is_paid() through
+	 * other entry points). For orders flagged as pending by PayController,
+	 * does ONE cached mint state check per poll so the order can finalize
+	 * once the mint completes its LN payment.
 	 */
 	public function confirm_melt_quote( WP_REST_Request $request ): WP_REST_Response|WP_Error {
 		$order = $this->load_order( $request );
@@ -121,6 +124,12 @@ final class ConfirmMeltQuoteController {
 					'redirect' => $order->get_checkout_order_received_url(),
 				)
 			);
+		}
+
+		// If a cashu-leg melt is mid-flight at the mint, resolve it.
+		$pending_check = $this->resolve_pending_melt( $order );
+		if ( null !== $pending_check ) {
+			return $pending_check;
 		}
 
 		$spot_time   = absint( $order->get_meta( '_cashu_spot_time', true ) );
@@ -142,6 +151,79 @@ final class ConfirmMeltQuoteController {
 				'expiry' => $spot_expiry,
 			)
 		);
+	}
+
+	/**
+	 * If the order carries a pending-melt marker, check the mint for the
+	 * current state of that quote (cached for 10s per quote_id so concurrent
+	 * browser polls share the cost). Returns:
+	 *
+	 *   - PAID response with redirect + marks the order paid, if mint settled
+	 *   - PENDING response (state remains pending, marker preserved)
+	 *   - null if the order is not in pending state, so the caller falls
+	 *     through to the regular UNPAID branch
+	 *
+	 * Bounded: ~6 mint hits per pending minute per order (at 5s poll + 10s
+	 * cache). Zero hits once the marker is cleared.
+	 */
+	private function resolve_pending_melt( WC_Order $order ): WP_REST_Response|WP_Error|null {
+		$pending_quote_id = (string) $order->get_meta( '_cashu_melt_pending_quote_id', true );
+		if ( '' === $pending_quote_id ) {
+			return null;
+		}
+
+		$cache_key = 'cashu_melt_state_' . md5( $pending_quote_id );
+		$cached    = get_transient( $cache_key );
+		if ( false !== $cached && is_array( $cached ) ) {
+			$mint_response = $cached;
+		} else {
+			$gateway       = new CashuGateway();
+			$mint_response = $gateway->fetch_melt_quote_state_safely( $pending_quote_id );
+			set_transient( $cache_key, $mint_response, 10 );
+		}
+
+		$state = isset( $mint_response['state'] ) ? (string) $mint_response['state'] : '';
+
+		if ( 'PAID' === $state ) {
+			$preimage = isset( $mint_response['payment_preimage'] ) && is_string( $mint_response['payment_preimage'] )
+				? $mint_response['payment_preimage']
+				: '';
+			$amount   = isset( $mint_response['amount'] ) ? (string) $mint_response['amount'] : '';
+
+			$this->mark_paid( $order, $pending_quote_id, $preimage, $amount );
+			$order->delete_meta_data( '_cashu_melt_pending_quote_id' );
+			$order->delete_meta_data( '_cashu_melt_pending_at' );
+			$order->save();
+			delete_transient( $cache_key );
+
+			return rest_ensure_response(
+				array(
+					'ok'       => true,
+					'state'    => 'PAID',
+					'redirect' => $order->get_checkout_order_received_url(),
+				)
+			);
+		}
+
+		if ( 'PENDING' === $state ) {
+			return rest_ensure_response(
+				array(
+					'ok'    => true,
+					'state' => 'PENDING',
+				)
+			);
+		}
+
+		// UNPAID or unknown — the mint either gave up routing or we
+		// couldn't reach it. Drop the marker so the order falls back to
+		// the regular UNPAID/EXPIRED flow on the next poll. The proofs
+		// (if returned to the wallet by the mint) are the customer's
+		// to retry with.
+		$order->delete_meta_data( '_cashu_melt_pending_quote_id' );
+		$order->delete_meta_data( '_cashu_melt_pending_at' );
+		$order->save();
+		delete_transient( $cache_key );
+		return null;
 	}
 
 	/**

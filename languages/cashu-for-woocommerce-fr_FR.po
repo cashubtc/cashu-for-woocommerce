@@ -252,6 +252,10 @@ msgstr "Paiement de la facture…"
 msgid "Confirming payment..."
 msgstr "Confirmation du paiement…"
 
+#: src/Gateway/CashuGateway.php:180
+msgid "Mint is settling the Lightning payment..."
+msgstr "Le mint règle le paiement Lightning…"
+
 #: src/Gateway/CashuGateway.php:162
 msgid "Change From Network Fee Reserve"
 msgstr "Rendu depuis la réserve de frais réseau"

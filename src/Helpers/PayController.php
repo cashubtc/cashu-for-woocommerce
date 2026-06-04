@@ -201,6 +201,25 @@ final class PayController {
 			? (string) $mint_response['state']
 			: ( ! empty( $mint_response['paid'] ) ? 'PAID' : '' );
 
+		// PENDING means the mint accepted the proofs and is mid-LN-payment;
+		// returning an error here would tell the wallet the payment failed
+		// while the proofs are actually still locked at the mint. Instead,
+		// record the pending state so the polling endpoint can detect when
+		// the mint finishes settling, and reply 200 with status=pending so
+		// the wallet treats the payment as accepted-but-in-flight.
+		if ( 'PENDING' === $state ) {
+			$order->update_meta_data( '_cashu_melt_pending_quote_id', $quote_id );
+			$order->update_meta_data( '_cashu_melt_pending_at', time() );
+			$order->save();
+			Logger::debug( 'Cashu melt PENDING for order ' . $order->get_id() . ', quote ' . $quote_id );
+			return rest_ensure_response(
+				array(
+					'status' => 'pending',
+					'id'     => $expected_id,
+				)
+			);
+		}
+
 		if ( 'PAID' !== $state ) {
 			Logger::debug( 'Mint returned non-PAID state: ' . wp_json_encode( $mint_response ) );
 			return new WP_Error( 'cashu_unpaid', 'Mint did not settle the invoice.', array( 'status' => 502 ) );

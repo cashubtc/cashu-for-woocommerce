@@ -177,6 +177,7 @@ class CashuGateway extends \WC_Payment_Gateway {
 					'payment_received'     => __( 'Payment received by our mint...', 'cashu-for-woocommerce' ),
 					'paying_invoice'       => __( 'Paying invoice...', 'cashu-for-woocommerce' ),
 					'confirming_payment'   => __( 'Confirming payment...', 'cashu-for-woocommerce' ),
+					'settling_at_mint'     => __( 'Mint is settling the Lightning payment...', 'cashu-for-woocommerce' ),
 
 					// Change
 					'change_from_network'  => __( 'Change From Network Fee Reserve', 'cashu-for-woocommerce' ),
@@ -398,11 +399,30 @@ class CashuGateway extends \WC_Payment_Gateway {
 		$quote_id     = (string) $order->get_meta( '_cashu_melt_quote_id', true );
 		$quote_expiry = absint( $order->get_meta( '_cashu_melt_quote_expiry', true ) );
 		$melt_mint    = (string) $order->get_meta( '_cashu_melt_mint', true );
-		if ( '' !== $quote_id
-			&& $quote_expiry > time() + self::QUOTE_EXPIRY_SECS
-			&& $this->trusted_mint === $melt_mint
-		) {
-			return;
+
+		if ( '' !== $quote_id && $this->trusted_mint === $melt_mint ) {
+			// Hard guard: never rotate a quote that has proofs bound to it.
+			// PENDING means the mint is mid-LN-payment with the customer's
+			// proofs locked; rotating would orphan the customer's payment.
+			// PAID means the mint already settled — the customer already paid
+			// the vendor; we just need to detect it via the existing quote_id.
+			$mint_state   = $this->fetch_melt_quote_state_safely( $quote_id );
+			$state_string = isset( $mint_state['state'] ) ? (string) $mint_state['state'] : '';
+			if ( 'PAID' === $state_string || 'PENDING' === $state_string ) {
+				return;
+			}
+
+			// Otherwise (UNPAID or unknown), keep the quote if it hasn't fully
+			// expired at the mint. We deliberately do NOT pre-emptively rotate
+			// quotes that are about to expire — same reasoning, the customer
+			// may be mid-pay.
+			if ( $quote_expiry > time() ) {
+				return;
+			}
+
+			// Genuinely expired and unpaid — archive before rotating so any
+			// orphan can still be traced for forensics.
+			$this->archive_melt_quote( $order );
 		}
 
 		// Create LN invoice for the headline order amount (merchant receives this).
@@ -544,6 +564,55 @@ class CashuGateway extends \WC_Payment_Gateway {
 	}
 
 	/**
+	 * Best-effort fetch of a NUT-05 melt-quote state from the trusted mint.
+	 * See fetch_mint_quote_state_safely for the same rationale — never throws,
+	 * empty return means "unknown" and callers should err on the side of
+	 * preserving the existing quote.
+	 */
+	public function fetch_melt_quote_state_safely( string $quote_id ): array {
+		$url = rtrim( $this->trusted_mint, '/' ) . '/v1/melt/quote/bolt11/' . rawurlencode( $quote_id );
+		$res = wp_remote_get(
+			$url,
+			array(
+				'timeout' => 10,
+				'headers' => array( 'Accept' => 'application/json' ),
+			)
+		);
+		if ( is_wp_error( $res ) ) {
+			Logger::debug( 'Melt quote state lookup failed: ' . $res->get_error_message() );
+			return array();
+		}
+		$code = (int) wp_remote_retrieve_response_code( $res );
+		if ( 200 !== $code ) {
+			Logger::debug( 'Melt quote state lookup HTTP ' . $code );
+			return array();
+		}
+		$json = json_decode( (string) wp_remote_retrieve_body( $res ), true );
+		return is_array( $json ) ? $json : array();
+	}
+
+	/**
+	 * Append the order's current melt quote to its archived list before
+	 * rotation, so an orphaned PAID/PENDING quote can still be discovered
+	 * after the fact.
+	 */
+	private function archive_melt_quote( \WC_Order $order ): void {
+		$current = (string) $order->get_meta( '_cashu_melt_quote_id', true );
+		if ( '' === $current ) {
+			return;
+		}
+		$raw       = (string) $order->get_meta( '_cashu_archived_melt_quotes', true );
+		$archive   = '' !== $raw ? (array) json_decode( $raw, true ) : array();
+		$archive[] = array(
+			'quote'        => $current,
+			'expiry'       => absint( $order->get_meta( '_cashu_melt_quote_expiry', true ) ),
+			'mint'         => (string) $order->get_meta( '_cashu_melt_mint', true ),
+			'payment_hash' => (string) $order->get_meta( '_cashu_payment_hash', true ),
+		);
+		$order->update_meta_data( '_cashu_archived_melt_quotes', (string) wp_json_encode( $archive ) );
+	}
+
+	/**
 	 * Best-effort fetch of a NUT-04 mint-quote state from the trusted mint.
 	 * Returns the state string (e.g. UNPAID, PAID, ISSUED) or empty string
 	 * if the lookup fails. Never throws — callers treat an empty return as
@@ -638,8 +707,12 @@ class CashuGateway extends \WC_Payment_Gateway {
 			$proofs
 		);
 
+		// Real-world LN payments via the mint can take well over the default
+		// 30s when routing is slow. 90s gives the mint room to respond
+		// synchronously without our request timing out and orphaning the
+		// melt as PENDING-without-our-knowledge.
 		$args = array(
-			'timeout' => 30,
+			'timeout' => 90,
 			'headers' => array( 'Content-Type' => 'application/json' ),
 			'body'    => wp_json_encode(
 				array(
