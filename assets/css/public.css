@@ -41,58 +41,52 @@
 }
 
 .cashu-payamount,
-.cashu-feenote,
-.payment-details {
+.cashu-feenote {
   color: var(--cashu-muted);
   font-size: 0.9rem;
   margin: 6px 0;
   text-align: center;
 }
 
-.payment-details {
-  margin: 0 auto;
-  max-width: 240px;
-}
-
-.payment-dl {
-  margin: 0;
-}
-
-.payment-row {
+.cashu-tabs {
+  background: rgb(0 0 0 / 5%);
+  border-radius: 9999px;
   display: flex;
-  gap: 1rem;
-  justify-content: space-between;
-  padding: 0.35rem 0;
+  gap: 4px;
+  margin: 14px auto 12px;
+  max-width: 320px;
+  padding: 4px;
 }
 
-.payment-row dt {
-  opacity: 0.7;
-}
-
-.payment-row dd {
-  font-weight: 600;
-  margin: 0;
-}
-
-.payment-details-toggle,
-.payment-details-toggle:hover {
+.cashu-tab,
+.cashu-tab:hover {
+  appearance: none;
   background: transparent;
   border: 0;
-  color: var(--cashu-accent);
+  border-radius: 9999px;
+  color: var(--cashu-muted);
   cursor: pointer;
-  display: inline-flex;
+  flex: 1 1 0;
+  font: inherit;
   font-size: 0.9rem;
-  padding: 0.5rem 0;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  padding: 8px 10px;
+  text-align: center;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
 }
 
-.payment-chevron {
-  display: inline-block;
-  transition: transform 160ms ease;
-  vertical-align: middle;
+.cashu-tab.is-active {
+  background: var(--cashu-surface);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
+  color: #111;
 }
 
-.payment-details-toggle.is-open .payment-chevron {
-  transform: rotate(180deg);
+.cashu-tab:focus-visible {
+  box-shadow: 0 0 0 3px var(--cashu-accent-soft);
+  outline: none;
 }
 
 .cashu-box {
@@ -141,61 +135,25 @@
   width: 52px;
 }
 
-.cashu-sep {
-  align-items: center;
-  display: flex;
-  justify-content: center;
-  margin: 16px 0;
-  width: 100%;
-}
-
-.cashu-sep::before,
-.cashu-sep::after {
-  background: rgb(0 0 0 / 14%);
-  content: '';
-  flex: 1 1 0;
-  height: 1px;
-}
-
-.cashu-sep span {
-  color: var(--cashu-muted);
-  display: inline-block;
-  font-size: 13px;
-  letter-spacing: 0.08em;
-  margin: 0 12px;
-  text-align: center;
-  text-transform: uppercase;
-}
-
-.cashu-token {
-  display: flex;
-  flex-direction: column;
-  margin: 0;
-}
-
-.cashu-input {
-  appearance: none;
+.cashu-recovery {
   background: #fff;
-  border: 2px solid var(--cashu-border);
-  border-radius: 9999px;
-  color: #111;
-  font: inherit;
-  font-size: 16px;
-  padding: 14px 16px;
+  border: 1px solid var(--cashu-warning);
+  border-radius: 12px;
+  margin-top: 16px;
+  padding: 12px;
+  text-align: center;
 }
 
-.cashu-input::placeholder {
-  color: rgb(0 0 0 / 45%);
+.cashu-recovery-label {
+  color: var(--cashu-warning);
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin-bottom: 10px;
+  text-align: left;
 }
 
-.cashu-input:focus {
-  border-color: var(--cashu-accent);
-  box-shadow: 0 0 0 3px var(--cashu-accent-soft);
-  outline: none;
-}
-
-.cashu-paybtn,
-.cashu-paybtn:hover {
+.cashu-recovery-copy,
+.cashu-recovery-copy:hover {
   appearance: none;
   background: var(--cashu-accent);
   border: 0;
@@ -203,19 +161,9 @@
   color: #fff;
   cursor: pointer;
   font: inherit;
-  font-size: 18px;
-  font-weight: 750;
-  margin-top: 14px;
-  padding: 14px 16px;
-}
-
-.cashu-paybtn:hover {
-  opacity: 0.9;
-}
-
-.cashu-paybtn:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
+  font-size: 1rem;
+  font-weight: 700;
+  padding: 10px 18px;
 }
 
 .cashu-status {
@@ -237,10 +185,6 @@
 
   .cashu-amount {
     font-size: 40px;
-  }
-
-  .cashu-pill {
-    min-width: 120px;
   }
 }
 

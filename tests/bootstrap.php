@@ -22,5 +22,18 @@ if (!defined('CASHU_WC_URL')) {
 if (!defined('CASHU_WC_BASE')) {
 	define('CASHU_WC_BASE', 'cashu-for-woocommerce');
 }
+if (!defined('HOUR_IN_SECONDS')) {
+	define('HOUR_IN_SECONDS', 3600);
+}
+
+// 3. Minimal stubs for the WordPress functions touched by pure helpers in src/.
+//    Anything that needs a real database, HTTP client, or order object should
+//    be exercised inside wp-env, not here.
+if (!function_exists('wp_hash')) {
+	function wp_hash(string $data, string $scheme = 'auth'): string {
+		// Deterministic hex output, enough for derivation-helper tests.
+		return hash_hmac('md5', $data, $scheme . '|cashu-test-salt');
+	}
+}
 
 echo "Bootstrap loaded – Cashu ready for testing!\n";

@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Cashu\WC\Gateway;
 
 use Automattic\WooCommerce\Enums\OrderStatus;
+use Cashu\WC\Helpers\Bolt11;
 use Cashu\WC\Helpers\CashuHelper;
 use Cashu\WC\Helpers\Logger;
 use Cashu\WC\Helpers\LightningAddress;
+use Cashu\WC\Helpers\PayController;
 use WC_Order;
 
 class CashuGateway extends \WC_Payment_Gateway {
@@ -41,7 +43,7 @@ class CashuGateway extends \WC_Payment_Gateway {
 		$this->title        = $this->get_option( 'title', 'Cashu ecash' );
 		$this->description  = $this->get_option(
 			'description',
-			__( 'Paste your cashuB… token below.', 'cashu-for-woocommerce' )
+			__( 'Scan the QR code with a Lightning or Cashu wallet to pay.', 'cashu-for-woocommerce' )
 		);
 		$this->enabled      = $this->get_option( 'enabled' );
 		$this->trusted_mint = (string) get_option( 'cashu_trusted_mint', '' );
@@ -101,6 +103,24 @@ class CashuGateway extends \WC_Payment_Gateway {
 	}
 
 	/**
+	 * Cache-buster for plugin-shipped assets. Uses the file's mtime in dev /
+	 * debug contexts so iterating doesn't require touching CASHU_WC_VERSION,
+	 * and falls back to the plugin version in production.
+	 */
+	private function asset_version( string $relative_path ): string {
+		$path = CASHU_WC_PATH . $relative_path;
+		if ( ( defined( 'WP_DEBUG' ) && WP_DEBUG ) || ( defined( 'SCRIPT_DEBUG' ) && SCRIPT_DEBUG ) ) {
+			if ( is_readable( $path ) ) {
+				$mtime = filemtime( $path );
+				if ( false !== $mtime ) {
+					return CASHU_WC_VERSION . '.' . $mtime;
+				}
+			}
+		}
+		return CASHU_WC_VERSION;
+	}
+
+	/**
 	 * Register gateway scripts / styles
 	 */
 	public function enqueue_scripts() {
@@ -109,7 +129,7 @@ class CashuGateway extends \WC_Payment_Gateway {
 			'cashu-qrcode',
 			CASHU_WC_URL . 'assets/js/frontend/qrcode.min.js',
 			array( 'jquery' ),
-			CASHU_WC_VERSION,
+			$this->asset_version( 'assets/js/frontend/qrcode.min.js' ),
 			false // head
 		);
 
@@ -118,7 +138,7 @@ class CashuGateway extends \WC_Payment_Gateway {
 			'cashu-checkout',
 			CASHU_WC_URL . 'assets/js/cashu/checkout.js',
 			array( 'jquery', 'cashu-qrcode', 'wp-i18n' ),
-			CASHU_WC_VERSION,
+			$this->asset_version( 'assets/js/cashu/checkout.js' ),
 			false // head
 		);
 
@@ -128,6 +148,7 @@ class CashuGateway extends \WC_Payment_Gateway {
 			array(
 				'rest_root'     => esc_url_raw( rest_url( 'cashu-wc/v1/' ) ),
 				'confirm_route' => 'confirm-melt-quote',
+				'claim_route'   => 'claim-melt-quote',
 				'symbol'        => CASHU_WC_BIP177_SYMBOL,
 
 				'i18n'          => array(
@@ -135,39 +156,24 @@ class CashuGateway extends \WC_Payment_Gateway {
 					'data_incomplete'      => __( 'Payment data incomplete, please refresh and try again.', 'cashu-for-woocommerce' ),
 					'invoice_failed'       => __( 'Could not prepare the invoice, please refresh and try again', 'cashu-for-woocommerce' ),
 
-					// User actions
-					'paste_token_first'    => __( 'Paste a Cashu token first...', 'cashu-for-woocommerce' ),
+					// Status
 					'payment_in_progress'  => __( 'Payment already in progress', 'cashu-for-woocommerce' ),
 
 					// QR interactions
 					'copied'               => __( 'Copied!', 'cashu-for-woocommerce' ),
 					'waiting_for_payment'  => __( 'Waiting for payment...', 'cashu-for-woocommerce' ),
-
-					// Recovery flow
-					'payment_failed'       => __( 'Payment failed. Please copy the new token from the form input below.', 'cashu-for-woocommerce' ),
-
-					// Token validation / connection
-					'checking_token'       => __( 'Checking token...', 'cashu-for-woocommerce' ),
-					'invalid_token'        => __( 'That token does not look valid', 'cashu-for-woocommerce' ),
-					'no_spendable_proofs'  => __( 'Token has no spendable proofs', 'cashu-for-woocommerce' ),
-					'not_sat_denom'        => __( 'This checkout expects sat denominated tokens', 'cashu-for-woocommerce' ),
-
 					'connecting_to_mint'   => __( 'Connecting to mint...', 'cashu-for-woocommerce' ),
-					'no_usable_proofs'     => __( 'Token has no usable proofs', 'cashu-for-woocommerce' ),
 
-					// Fees / untrusted melt path
-					'calculating_fees'     => __( "Calculating your mint's fees...", 'cashu-for-woocommerce' ),
+					// Tabs
+					'tab_unified'          => __( 'Auto', 'cashu-for-woocommerce' ),
+					'tab_cashu'            => __( 'Cashu', 'cashu-for-woocommerce' ),
+					'tab_lightning'        => __( 'Lightning', 'cashu-for-woocommerce' ),
 
-					/* translators: 1: bitcoin symbol, 2: token amount (sats), 3: required amount (sats), 4: fees (sats) */
-					'token_too_small'      => __(
-						"Token amount (%1\$s%2\$d) is too small. At least %1\$s%3\$d is required to cover your mint's fee reserve (%1\$s%4\$d)",
-						'cashu-for-woocommerce'
-					),
-
-					'sending_payment'      => __( 'Sending payment to our mint...', 'cashu-for-woocommerce' ),
+					// Recovery flow (Lightning leg)
+					'payment_failed'       => __( 'Payment failed. Please copy the recovery token below.', 'cashu-for-woocommerce' ),
 					'waiting_confirmation' => __( 'Waiting for payment confirmation...', 'cashu-for-woocommerce' ),
 
-					// Trusted mint path (mint paid, then pay vendor)
+					// Lightning leg progress
 					'payment_received'     => __( 'Payment received by our mint...', 'cashu-for-woocommerce' ),
 					'paying_invoice'       => __( 'Paying invoice...', 'cashu-for-woocommerce' ),
 					'confirming_payment'   => __( 'Confirming payment...', 'cashu-for-woocommerce' ),
@@ -310,8 +316,17 @@ class CashuGateway extends \WC_Payment_Gateway {
 		// Determine invoice amount in sats (merchant receives this).
 		$order_total_sats = $this->get_total_sats( $order );
 
-		// Create or reuse melt quote, store fee reserve, set headline expected amount.
+		// Create or reuse melt quote (vendor payment side), store fee reserve,
+		// set the headline _cashu_melt_total = amount + fee_reserve + input buffer.
 		$this->ensure_melt_quote_for_order( $order, $order_total_sats );
+
+		// Create or reuse mint quote (customer payment side). The customer pays
+		// this BOLT11 via LN; the quote_id is what the browser uses to claim
+		// proofs from the mint. Locking this server-side means a page reload
+		// or browser switch can never lose the quote_id and orphan the
+		// customer's payment.
+		$melt_total = absint( $order->get_meta( '_cashu_melt_total', true ) );
+		$this->ensure_mint_quote_for_order( $order, $melt_total );
 
 		$order->save();
 	}
@@ -343,12 +358,16 @@ class CashuGateway extends \WC_Payment_Gateway {
 		$order->update_meta_data( '_cashu_spot_btc', $quote['btc_price'] );
 		$order->update_meta_data( '_cashu_spot_source', $quote['source'] );
 
-		// Remove any old melt quotes
+		// Remove any old melt quotes. Mint quote meta is intentionally NOT cleared
+		// here — once a mint quote BOLT11 has been issued to the customer, we must
+		// preserve it (potentially in archive) so a paid quote can always be linked
+		// back to the order. ensure_mint_quote_for_order handles archival when it
+		// genuinely needs to rotate.
 		$order->delete_meta_data( '_cashu_melt_quote_id' );
 		$order->delete_meta_data( '_cashu_melt_quote_expiry' );
 		$order->delete_meta_data( '_cashu_melt_total' );
-		$order->delete_meta_data( '_cashu_melt_fees' );
 		$order->delete_meta_data( '_cashu_melt_mint' );
+		$order->delete_meta_data( '_cashu_payment_hash' );
 
 		$order->add_order_note(
 			sprintf(
@@ -414,24 +433,194 @@ class CashuGateway extends \WC_Payment_Gateway {
 		$order->update_meta_data( '_cashu_melt_quote_expiry', $expiry );
 		$order->update_meta_data( '_cashu_melt_mint', $this->trusted_mint );
 
-		// Headline amount the customer must cover.
-		$melt_total = $amount + $fee_reserve;
-		$ppk_fee    = max( 2, ceil( $melt_total * 0.02 ) );
+		// Stash the invoice's payment_hash so the browser-claim endpoint can
+		// verify a preimage cryptographically (no mint round-trip).
+		$payment_hash = Bolt11::paymentHash( $invoice );
+		if ( null !== $payment_hash ) {
+			$order->update_meta_data( '_cashu_payment_hash', $payment_hash );
+		}
+
+		// Headline amount the customer must cover: invoice + mint's lightning fee
+		// reserve + a small buffer for the trusted mint's per-proof input fees on
+		// the melt. The mint charges input_fee_ppk on every input proof it accepts;
+		// the buffer absorbs that so the melt clears. Anything not consumed by
+		// input fees is returned to the payer as change proofs (cashu-ts saves them
+		// for the lightning leg; NUT-18 wallets restore them from the merchant's
+		// response on the cashu leg). 1% / min 2 sats is well clear of typical mint
+		// fees (popcount × ppk / 1000 ≈ 0.1%) and stays inside spot-rate noise.
+		$bare_total       = $amount + $fee_reserve;
+		$input_fee_buffer = max( 2, (int) ceil( $bare_total * 0.01 ) );
+		$melt_total       = $bare_total + $input_fee_buffer;
 		$order->update_meta_data( '_cashu_melt_total', $melt_total );
-		$order->update_meta_data( '_cashu_melt_fees', $ppk_fee );
-		$total = $melt_total + $ppk_fee;
 
 		$order->add_order_note(
 			sprintf(
-				/* translators: %1$s: sats invoice amount, %2$s: fee reserve sats, %3$s: total required sats, %4$s: Melt Quote ID */
-				__( "Cashu melt quote created:\nInvoice: %1\$s\nLightning fee reserve: %2\$s\nMint fee reserve: %3\$s\nTotal: %4\$s\nQuote ID: %5\$s", 'cashu-for-woocommerce' ),
+				/* translators: %1$s: sats invoice amount, %2$s: lightning fee reserve sats, %3$s: mint input fee buffer sats, %4$s: total required sats, %5$s: Melt Quote ID */
+				__( "Cashu melt quote created:\nInvoice: %1\$s\nLightning fee reserve: %2\$s\nMint fee buffer: %3\$s\nTotal: %4\$s\nQuote ID: %5\$s", 'cashu-for-woocommerce' ),
 				(string) CASHU_WC_BIP177_SYMBOL . $amount,
 				(string) CASHU_WC_BIP177_SYMBOL . $fee_reserve,
-				(string) CASHU_WC_BIP177_SYMBOL . $ppk_fee,
-				(string) CASHU_WC_BIP177_SYMBOL . $total,
+				(string) CASHU_WC_BIP177_SYMBOL . $input_fee_buffer,
+				(string) CASHU_WC_BIP177_SYMBOL . $melt_total,
 				$quote_id,
 			)
 		);
+	}
+
+	/**
+	 * Ensure the order has an active mint quote (NUT-04) on the trusted mint so
+	 * the customer has a stable BOLT11 to pay. The quote is created server-side
+	 * and the quote_id persists on the order — page refreshes, browser switches,
+	 * or cleared local storage can never lose the link to a paid quote.
+	 *
+	 * Old quotes are archived rather than overwritten when they expire, so
+	 * forensic / reconciliation flows can still recover stranded payments.
+	 */
+	private function ensure_mint_quote_for_order( \WC_Order $order, int $amount_sats ): void {
+		$existing_id     = (string) $order->get_meta( '_cashu_mint_quote_id', true );
+		$existing_expiry = absint( $order->get_meta( '_cashu_mint_quote_expiry', true ) );
+		$existing_amount = absint( $order->get_meta( '_cashu_mint_quote_amount', true ) );
+
+		if ( '' !== $existing_id && $existing_amount === $amount_sats ) {
+			// Keep the existing quote if it hasn't fully expired at the mint.
+			// expiry == 0 means the mint doesn't advertise an expiry; treat as
+			// "still valid" — the cashu spec allows null/missing.
+			if ( 0 === $existing_expiry || $existing_expiry > time() ) {
+				return;
+			}
+		}
+
+		// Archive the outgoing quote (if any) before rotating.
+		if ( '' !== $existing_id ) {
+			$archive_raw = (string) $order->get_meta( '_cashu_archived_mint_quotes', true );
+			$archive     = is_string( $archive_raw ) && '' !== $archive_raw
+				? (array) json_decode( $archive_raw, true )
+				: array();
+			$archive[]   = array(
+				'quote'   => $existing_id,
+				'request' => (string) $order->get_meta( '_cashu_mint_quote_request', true ),
+				'amount'  => $existing_amount,
+				'expiry'  => $existing_expiry,
+			);
+			$order->update_meta_data( '_cashu_archived_mint_quotes', (string) wp_json_encode( $archive ) );
+		}
+
+		$quote = $this->request_mint_quote_bolt11( $amount_sats );
+
+		$quote_id      = sanitize_text_field( (string) ( $quote['quote'] ?? '' ) );
+		$quote_request = (string) ( $quote['request'] ?? '' );
+		$quote_expiry  = absint( $quote['expiry'] ?? 0 );
+
+		if ( '' === $quote_id || '' === $quote_request ) {
+			throw new \RuntimeException( 'Invalid mint quote response from mint.' );
+		}
+
+		$order->update_meta_data( '_cashu_mint_quote_id', $quote_id );
+		$order->update_meta_data( '_cashu_mint_quote_request', $quote_request );
+		$order->update_meta_data( '_cashu_mint_quote_amount', $amount_sats );
+		$order->update_meta_data( '_cashu_mint_quote_expiry', $quote_expiry );
+
+		$order->add_order_note(
+			sprintf(
+				/* translators: %1$s: BTC symbol, %2$d: amount in sats, %3$s: mint quote id */
+				__( "Cashu mint quote created:\nAmount: %1\$s%2\$d\nQuote ID: %3\$s", 'cashu-for-woocommerce' ),
+				CASHU_WC_BIP177_SYMBOL,
+				$amount_sats,
+				$quote_id
+			)
+		);
+	}
+
+	private function request_mint_quote_bolt11( int $amount_sats ): array {
+		$endpoint = rtrim( $this->trusted_mint, '/' ) . '/v1/mint/quote/bolt11';
+		$args     = array(
+			'timeout' => 30,
+			'headers' => array( 'Content-Type' => 'application/json' ),
+			'body'    => wp_json_encode(
+				array(
+					'amount' => $amount_sats,
+					'unit'   => 'sat',
+				)
+			),
+		);
+
+		$res = wp_remote_post( $endpoint, $args );
+		if ( is_wp_error( $res ) ) {
+			throw new \RuntimeException( 'Mint quote request failed: ' . esc_html( sanitize_text_field( $res->get_error_message() ) ) );
+		}
+
+		$code = (int) wp_remote_retrieve_response_code( $res );
+		if ( $code < 200 || $code >= 300 ) {
+			throw new \RuntimeException( 'Mint quote request failed, HTTP ' . esc_html( (string) $code ) );
+		}
+
+		$body = (string) wp_remote_retrieve_body( $res );
+		$json = json_decode( $body, true );
+		if ( ! is_array( $json ) ) {
+			throw new \RuntimeException( 'Mint quote response is not JSON.' );
+		}
+
+		return $json;
+	}
+
+	/**
+	 * Execute a NUT-05 melt: hand the mint a set of input proofs against an existing
+	 * melt quote so it pays the underlying lightning invoice and (optionally) returns
+	 * change proofs.
+	 *
+	 * @param string $quote_id The mint's melt quote id (stored on the order).
+	 * @param array  $proofs   Array of proofs as decoded from the wallet's POST body.
+	 *                         Each proof must contain id, amount, secret, C; witness optional.
+	 *
+	 * @throws \RuntimeException on transport or mint error.
+	 */
+	public function request_melt_bolt11( string $quote_id, array $proofs ): array {
+		$endpoint = rtrim( $this->trusted_mint, '/' ) . '/v1/melt/bolt11';
+
+		// Coerce amounts to int — wallets may emit decimal-string or numeric per NUT-18.
+		$inputs = array_map(
+			static function ( $p ) {
+				$proof = array(
+					'id'     => (string) ( $p['id'] ?? '' ),
+					'amount' => (int) ( is_numeric( $p['amount'] ?? null ) ? $p['amount'] : 0 ),
+					'secret' => (string) ( $p['secret'] ?? '' ),
+					'C'      => (string) ( $p['C'] ?? '' ),
+				);
+				if ( isset( $p['witness'] ) && '' !== $p['witness'] ) {
+					$proof['witness'] = $p['witness'];
+				}
+				return $proof;
+			},
+			$proofs
+		);
+
+		$args = array(
+			'timeout' => 30,
+			'headers' => array( 'Content-Type' => 'application/json' ),
+			'body'    => wp_json_encode(
+				array(
+					'quote'  => $quote_id,
+					'inputs' => $inputs,
+				)
+			),
+		);
+
+		$res = wp_remote_post( $endpoint, $args );
+		if ( is_wp_error( $res ) ) {
+			throw new \RuntimeException( 'Mint melt request failed: ' . esc_html( sanitize_text_field( $res->get_error_message() ) ) );
+		}
+
+		$code = (int) wp_remote_retrieve_response_code( $res );
+		$body = (string) wp_remote_retrieve_body( $res );
+		if ( $code < 200 || $code >= 300 ) {
+			throw new \RuntimeException( 'Mint melt request failed, HTTP ' . esc_html( (string) $code ) . ': ' . esc_html( $body ) );
+		}
+
+		$json = json_decode( $body, true );
+		if ( ! is_array( $json ) ) {
+			throw new \RuntimeException( 'Mint melt response is not JSON.' );
+		}
+
+		return $json;
 	}
 
 	private function request_melt_quote_bolt11( string $bolt11 ): array {
@@ -484,11 +673,18 @@ class CashuGateway extends \WC_Payment_Gateway {
 			return;
 		}
 
-		// Fallback: Ensure spot quote is still valid - in case page is refreshed.
-		$quote_expiry = absint( $order->get_meta( '_cashu_melt_quote_expiry', true ) );
-		$spot_time    = absint( $order->get_meta( '_cashu_spot_time', true ) );
-		$spot_expiry  = $spot_time + self::QUOTE_EXPIRY_SECS;
-		if ( $spot_expiry < time() || $quote_expiry < $spot_expiry ) {
+		// Fallback: ensure both quotes are present and not stale. We retry setup
+		// when the spot quote expired, or when either the melt quote or the mint
+		// quote is missing (e.g. an earlier setup failed mid-way because the mint
+		// was briefly unreachable).
+		$quote_expiry  = absint( $order->get_meta( '_cashu_melt_quote_expiry', true ) );
+		$mint_quote_id = (string) $order->get_meta( '_cashu_mint_quote_id', true );
+		$spot_time     = absint( $order->get_meta( '_cashu_spot_time', true ) );
+		$spot_expiry   = $spot_time + self::QUOTE_EXPIRY_SECS;
+		if ( $spot_expiry < time()
+			|| $quote_expiry < $spot_expiry
+			|| '' === $mint_quote_id
+		) {
 			try {
 				$this->setup_cashu_payment( $order );
 				// Reset spot expiry
@@ -500,25 +696,44 @@ class CashuGateway extends \WC_Payment_Gateway {
 			}
 		}
 
-		$melt_total   = absint( $order->get_meta( '_cashu_melt_total', true ) );
-		$melt_fees    = absint( $order->get_meta( '_cashu_melt_fees', true ) );
-		$quote_id     = (string) $order->get_meta( '_cashu_melt_quote_id', true );
-		$trusted_mint = (string) $order->get_meta( '_cashu_melt_mint', true );
-		$total_to_pay = $melt_total + $melt_fees;
+		$melt_total         = absint( $order->get_meta( '_cashu_melt_total', true ) );
+		$quote_id           = (string) $order->get_meta( '_cashu_melt_quote_id', true );
+		$trusted_mint       = (string) $order->get_meta( '_cashu_melt_mint', true );
+		$mint_quote_id      = (string) $order->get_meta( '_cashu_mint_quote_id', true );
+		$mint_quote_request = (string) $order->get_meta( '_cashu_mint_quote_request', true );
+		$mint_quote_amount  = absint( $order->get_meta( '_cashu_mint_quote_amount', true ) );
+		$mint_quote_expiry  = absint( $order->get_meta( '_cashu_mint_quote_expiry', true ) );
+
+		$order_key   = $order->get_order_key();
+		$pay_route   = sprintf( 'cashu-wc/v1/pay/%d/%s', $order_id, $order_key );
+		$pay_url     = rest_url( $pay_route );
+		$payment_id  = PayController::payment_id_for( $order_id, $order_key );
+		$description = sprintf(
+			/* translators: %1$d: order number, %2$s: site name */
+			__( 'Order #%1$d at %2$s', 'cashu-for-woocommerce' ),
+			$order_id,
+			get_bloginfo( 'name' )
+		);
 
 		wp_enqueue_script( 'cashu-qrcode' );
 		wp_enqueue_script( 'cashu-checkout' );
 		wp_enqueue_style( 'cashu-public' );
 
 		echo '<div id="cashu-pay-root"
-			data-order-id="' . esc_attr( $order_id ) . '"
-			data-order-key="' . esc_attr( $order->get_order_key() ) . '"
+			data-order-id="' . esc_attr( (string) $order_id ) . '"
+			data-order-key="' . esc_attr( $order_key ) . '"
 			data-return-url="' . esc_url( $this->get_return_url( $order ) ) . '"
-			data-total-to-pay="' . esc_attr( $total_to_pay ) . '"
-			data-pay-fees-sats="' . esc_attr( $melt_fees ) . '"
+			data-expected-amount="' . esc_attr( (string) $melt_total ) . '"
 			data-melt-quote-id="' . esc_attr( $quote_id ) . '"
-			data-spot-quote-expiry="' . esc_attr( $spot_expiry ) . '"
+			data-spot-quote-expiry="' . esc_attr( (string) $spot_expiry ) . '"
 			data-trusted-mint="' . esc_attr( $trusted_mint ) . '"
+			data-mint-quote-id="' . esc_attr( $mint_quote_id ) . '"
+			data-mint-quote-request="' . esc_attr( $mint_quote_request ) . '"
+			data-mint-quote-amount="' . esc_attr( (string) $mint_quote_amount ) . '"
+			data-mint-quote-expiry="' . esc_attr( (string) $mint_quote_expiry ) . '"
+			data-pay-callback="' . esc_url( $pay_url ) . '"
+			data-payment-id="' . esc_attr( $payment_id ) . '"
+			data-description="' . esc_attr( $description ) . '"
 		></div>';
 
 		?>
@@ -526,45 +741,8 @@ class CashuGateway extends \WC_Payment_Gateway {
 			<div class="cashu-amount-box cashu-center">
 				<div class="cashu-payamount"><?php esc_html_e( 'Amount Due', 'cashu-for-woocommerce' ); ?></div>
 				<h2 class="cashu-amount">
-					<?php echo esc_html( CASHU_WC_BIP177_SYMBOL . $total_to_pay ); ?>
+					<?php echo esc_html( CASHU_WC_BIP177_SYMBOL . $melt_total ); ?>
 				</h2>
-
-				<?php $details_id = 'payment-details-' . sanitize_key( $order_id ); ?>
-				<div id="<?php echo esc_attr( $details_id ); ?>" class="payment-details js-payment-details" style="display:none;">
-					<dl class="payment-dl">
-						<div class="payment-row">
-							<dt><?php esc_html_e( 'Total Price', 'cashu-for-woocommerce' ); ?></dt>
-							<dd><?php echo esc_html( CASHU_WC_BIP177_SYMBOL . $melt_total ); ?></dd>
-						</div>
-
-						<div class="payment-row">
-							<dt><?php esc_html_e( 'Network Cost (est)', 'cashu-for-woocommerce' ); ?></dt>
-							<dd><?php echo esc_html( CASHU_WC_BIP177_SYMBOL . $melt_fees ); ?></dd>
-						</div>
-
-						<div class="payment-row">
-							<dt><?php esc_html_e( 'Amount Due', 'cashu-for-woocommerce' ); ?></dt>
-							<dd><?php echo esc_html( CASHU_WC_BIP177_SYMBOL . $total_to_pay ); ?></dd>
-						</div>
-					</dl>
-					<div class="payment-row">
-						<?php
-						esc_html_e( 'Change will be given if network cost is less than estimated.', 'cashu-for-woocommerce' );
-						?>
-					</div>
-				</div>
-
-				<button
-					type="button"
-					class="payment-details-toggle js-payment-details-toggle"
-					aria-controls="<?php echo esc_attr( $details_id ); ?>"
-					aria-expanded="false"
-				>
-					<?php esc_html_e( 'View Details', 'cashu-for-woocommerce' ); ?>
-					<svg class="payment-chevron" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-					<path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-					</svg>
-				</button>
 			</div>
 			<div class="cashu-box">
 				<div id="cashu-status" class="cashu-status" role="status" aria-live="polite">
@@ -572,6 +750,31 @@ class CashuGateway extends \WC_Payment_Gateway {
 					esc_html_e( 'Status: Waiting for payment...', 'cashu-for-woocommerce' )
 					?>
 				</div>
+
+				<div class="cashu-tabs" role="tablist" aria-label="<?php echo esc_attr__( 'Payment options', 'cashu-for-woocommerce' ); ?>">
+					<button
+						type="button"
+						class="cashu-tab is-active"
+						role="tab"
+						aria-selected="true"
+						data-cashu-tab="unified"
+					><?php esc_html_e( 'Auto', 'cashu-for-woocommerce' ); ?></button>
+					<button
+						type="button"
+						class="cashu-tab"
+						role="tab"
+						aria-selected="false"
+						data-cashu-tab="cashu"
+					><?php esc_html_e( 'Cashu', 'cashu-for-woocommerce' ); ?></button>
+					<button
+						type="button"
+						class="cashu-tab"
+						role="tab"
+						aria-selected="false"
+						data-cashu-tab="lightning"
+					><?php esc_html_e( 'Lightning', 'cashu-for-woocommerce' ); ?></button>
+				</div>
+
 				<div class="cashu-qr-wrap">
 					<div class="cashu-qr" data-cashu-qr>
 						<!-- JS renders QR here, canvas or img is fine -->
@@ -582,48 +785,25 @@ class CashuGateway extends \WC_Payment_Gateway {
 					</div>
 				</div>
 
-				<div class="cashu-sep"><span><?php esc_html_e( 'OR', 'cashu-for-woocommerce' ); ?></span></div>
-
-				<form class="cashu-token">
-					<input
-						type="text"
-						class="cashu-input"
-						name="cashu_token"
-						autocomplete="off"
-						placeholder="<?php echo esc_attr__( 'Enter your cashu token…', 'cashu-for-woocommerce' ); ?>"
-						data-cashu-token-input
-					/>
-					<button type="submit" class="cashu-paybtn">
-						<?php esc_html_e( 'Pay', 'cashu-for-woocommerce' ); ?>
+				<div class="cashu-recovery" data-cashu-recovery hidden>
+					<div class="cashu-recovery-label">
+						<?php esc_html_e( 'Copy the token below and paste it into a Cashu wallet to reclaim your sats.', 'cashu-for-woocommerce' ); ?>
+					</div>
+					<button type="button" class="cashu-recovery-copy" data-cashu-recovery-copy>
+						<?php esc_html_e( 'Copy recovery token', 'cashu-for-woocommerce' ); ?>
 					</button>
-				</form>
+				</div>
+
 				<div class="cashu-feenote">
 					<?php
 					printf(
 						/* translators: %1$s: Mint hostname */
-						esc_html__( 'Tokens accepted from any mint, but fees will be lowest if you use: %1$s', 'cashu-for-woocommerce' ),
+						esc_html__( 'Payments are settled at our mint: %1$s', 'cashu-for-woocommerce' ),
 						'<strong>' . esc_html( $trusted_mint ) . '</strong>'
 					);
 					?>
 				</div>
 			</div>
-			<script>
-				jQuery(function ($) {
-					$(document).on('click', '.js-payment-details-toggle', function () {
-						var $btn = $(this);
-						var targetId = $btn.attr('aria-controls');
-						var $details = $('#' + targetId);
-
-						var isOpen = $btn.attr('aria-expanded') === 'true';
-
-						$btn.attr('aria-expanded', String(!isOpen));
-						$btn.toggleClass('is-open', !isOpen);
-
-						// drawer animation
-						$details.stop(true, true).slideToggle(180);
-					});
-				});
-			</script>
 		</section>
 		<?php
 	}
