@@ -22,6 +22,7 @@ type CashuWindow = Window & {
     confirm_route?: string;
     claim_route?: string;
     symbol: string;
+    qr_icons?: { cashu?: string; lightning?: string };
     i18n?: Record<string, string>;
   };
 };
@@ -360,6 +361,8 @@ jQuery(function ($) {
   const $tabs = $scope.find('[data-cashu-tab]');
   const $recovery = $scope.find('[data-cashu-recovery]');
   const $recoveryCopy = $scope.find('[data-cashu-recovery-copy]');
+  const $qrIcon = $scope.find('[data-cashu-qr-icon]');
+  const $qrIconImg = $qrIcon.find('img');
   let recoveryToken = '';
   const setStatus = (msg: string, isError: boolean = false) => {
     const color = isError ? 'var(--cashu-warning)' : 'var(--cashu-status)';
@@ -426,8 +429,34 @@ jQuery(function ($) {
     currentMode = mode;
     $tabs.removeClass('is-active').attr('aria-selected', 'false');
     $btn.addClass('is-active').attr('aria-selected', 'true');
+    applyQrIconForMode(mode);
     if (qrTexts[mode]) drawQr(qrTexts[mode]);
   });
+
+  // Per-tab centre-icon overlay. Unified hides entirely — the BIP-321 payload
+  // carries more bytes (less error-correction headroom for an opaque cutout)
+  // and is dual-protocol, so branding it with either logo would mislead.
+  // Cashu/Lightning tabs each show their own protocol's mark.
+  function applyQrIconForMode(mode: QrMode): void {
+    if (!$qrIcon.length) return;
+    if (mode === 'unified') {
+      $qrIcon.attr('hidden', '');
+      return;
+    }
+    const icons = window.cashu_wc?.qr_icons ?? {};
+    const src = mode === 'lightning' ? icons.lightning : icons.cashu;
+    if (!src) {
+      $qrIcon.attr('hidden', '');
+      return;
+    }
+    if ($qrIconImg.attr('src') !== src) {
+      $qrIconImg.attr('src', src);
+    }
+    $qrIcon.removeAttr('hidden');
+  }
+  // Apply the default mode's overlay immediately so the unified tab renders
+  // without an icon from first paint.
+  applyQrIconForMode(currentMode);
 
   $recoveryCopy.off('click').on('click', async () => {
     if (!recoveryToken) return;
