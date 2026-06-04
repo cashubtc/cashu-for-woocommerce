@@ -25,7 +25,36 @@ abstract class IntegrationTestCase extends TestCase {
 	protected function tearDown(): void {
 		Monkey\tearDown();
 		Mockery::close();
+		unset( $GLOBALS['wpdb'] );
 		parent::tearDown();
+	}
+
+	/**
+	 * Wire a Mockery $wpdb global into $GLOBALS so OrderLock (which calls
+	 * $wpdb->prepare/query/get_var directly) can run. INSERT IGNORE on a
+	 * fresh lock returns 1 row affected; pass $insertResult=0 to simulate
+	 * "another process already holds the lock", and $existingExpiry to
+	 * simulate the value SELECT'd back.
+	 *
+	 * Tests that need fancier $wpdb behaviour should mock it themselves
+	 * directly; this helper covers the common acquire/release fast paths.
+	 */
+	protected function setUpFakeWpdb( int $insertResult = 1, ?int $existingExpiry = null ): MockInterface {
+		$wpdb          = Mockery::mock();
+		$wpdb->options = 'wp_options';
+		$wpdb->shouldReceive( 'prepare' )
+			->andReturnUsing(
+				function ( string $sql, ...$args ): string {
+					return $sql . '|' . implode( '|', array_map( 'strval', $args ) );
+				}
+			);
+		$wpdb->shouldReceive( 'query' )->andReturn( $insertResult );
+		$wpdb->shouldReceive( 'get_var' )->andReturn(
+			null === $existingExpiry ? null : (string) $existingExpiry
+		);
+
+		$GLOBALS['wpdb'] = $wpdb;
+		return $wpdb;
 	}
 
 	/**
@@ -41,6 +70,11 @@ abstract class IntegrationTestCase extends TestCase {
 
 		$order = Mockery::mock( WC_Order::class );
 		$order->shouldReceive( 'get_id' )->andReturn( $id );
+		// Default to the cashu gateway so load_order() doesn't reject the
+		// order; tests covering wrong-gateway should override this.
+		$order->shouldReceive( 'get_payment_method' )->andReturn( 'cashu_default' )->byDefault();
+		$order->shouldReceive( 'read_meta_data' )->andReturn( null )->byDefault();
+		$order->shouldReceive( 'save' )->andReturn( $id )->byDefault();
 		$order->shouldReceive( 'get_meta' )->andReturnUsing(
 			function ( string $key, bool $single = true ) use ( &$state ) {
 				return $state[ $key ] ?? '';
@@ -56,7 +90,6 @@ abstract class IntegrationTestCase extends TestCase {
 				unset( $state[ $key ] );
 			}
 		);
-		$order->shouldReceive( 'save' )->andReturn( $id );
 
 		return $order;
 	}

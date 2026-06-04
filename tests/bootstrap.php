@@ -88,16 +88,94 @@ if (!class_exists('WC_Order')) {
 		public function get_total(): string { return '0'; }
 		public function get_currency(): string { return 'USD'; }
 		public function get_order_key(): string { return ''; }
+		public function get_payment_method(): string { return ''; }
 		public function get_meta(string $key, bool $single = true) { return ''; }
 		public function update_meta_data(string $key, $value): void {}
 		public function delete_meta_data(string $key): void {}
 		public function save(): int { return 0; }
+		public function read_meta_data(bool $force_read = false): void {}
 		public function update_status(string $status, string $note = ''): bool { return true; }
 		public function payment_complete(string $txn_id = ''): bool { return true; }
 		public function add_order_note(string $note, int $is_customer_note = 0, bool $added_by_user = false): int { return 0; }
 		public function has_status($status): bool { return false; }
 		public function is_paid(): bool { return false; }
 		public function get_checkout_payment_url(bool $on_checkout = false): string { return ''; }
+		public function get_checkout_order_received_url(): string { return ''; }
+		public function key_is_valid(string $key): bool { return true; }
+	}
+}
+
+// 6. WP_REST_Request skeleton. Only get_param() is used by the controllers
+//    under test; Mockery covers callers that need richer behaviour.
+if (!class_exists('WP_REST_Request')) {
+	class WP_REST_Request {
+		private array $params = array();
+		public function set_params(array $params): void { $this->params = $params; }
+		public function get_param(string $key) { return $this->params[$key] ?? null; }
+	}
+}
+
+// 7. WP_REST_Response stand-in — concrete class so rest_ensure_response can
+//    return one. data() reflects what controllers serialise back.
+if (!class_exists('WP_REST_Response')) {
+	class WP_REST_Response {
+		private $data;
+		private int $status;
+		public function __construct($data = null, int $status = 200) {
+			$this->data = $data;
+			$this->status = $status;
+		}
+		public function get_data() { return $this->data; }
+		public function get_status(): int { return $this->status; }
+	}
+}
+
+// 8. WP_Error skeleton. The plugin only ever calls get_error_message() on it.
+if (!class_exists('WP_Error')) {
+	class WP_Error {
+		private string $code;
+		private string $message;
+		private array $data;
+		public function __construct(string $code = '', string $message = '', array $data = array()) {
+			$this->code = $code;
+			$this->message = $message;
+			$this->data = $data;
+		}
+		public function get_error_code(): string { return $this->code; }
+		public function get_error_message(): string { return $this->message; }
+		public function get_error_data(): array { return $this->data; }
+	}
+}
+
+// 9. WP_REST_Server constants used in route registration. None of the tests
+//    register routes, but the controller's `use WP_REST_Server` requires the
+//    class to be resolvable.
+if (!class_exists('WP_REST_Server')) {
+	class WP_REST_Server {
+		const READABLE = 'GET';
+		const CREATABLE = 'POST';
+	}
+}
+
+if (!defined('CASHU_WC_BIP177_SYMBOL')) {
+	define('CASHU_WC_BIP177_SYMBOL', '₿');
+}
+
+// 10. Skeleton WC_Logger. Logger::debug/error new this up and call
+//     ->debug()/->error() on it. We don't care what it does, just that the
+//     methods exist.
+if (!class_exists('WC_Logger')) {
+	class WC_Logger {
+		public function debug(string $message, array $context = array()): void {}
+		public function error(string $message, array $context = array()): void {}
+		public function info(string $message, array $context = array()): void {}
+		public function warning(string $message, array $context = array()): void {}
+	}
+}
+
+if (!function_exists('wc_print_r')) {
+	function wc_print_r($value, bool $return = false) {
+		return print_r($value, $return);
 	}
 }
 
