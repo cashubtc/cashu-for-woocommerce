@@ -154,6 +154,55 @@ The plugin logs to the WooCommerce internal log as well. View that at inside Wor
 WordPress Admin > WooCommerce > Status > Logs
 ```
 
+### Testing the cashu wallet (NUT-18) leg over HTTPS
+
+The Lightning leg of checkout works fine on `http://localhost:8888` because it is exercised entirely from the same browser. The cashu-wallet leg is different — a real mobile (or web) cashu wallet has to POST the proofs back to the plugin's `/cashu-wc/v1/pay/...` endpoint, and:
+
+* Mobile wallets cannot reach `localhost` on your dev machine.
+* Most cashu wallets refuse non-HTTPS targets for proofs (proofs are bearer assets).
+
+The simplest fix during development is a Cloudflare quick tunnel: it exposes the wp-env site at an `https://<random>.trycloudflare.com` URL that real wallets will accept, no account or signup required.
+
+#### One-time setup
+
+```bash
+brew install cloudflared
+```
+
+#### Bring up / tear down
+
+```bash
+# wp-env must already be running (npm run wp-env:start)
+npm run wp-env:tunnel
+```
+
+The script will
+
+* Start a quick tunnel forwarding to `http://localhost:8888`
+* Parse the assigned `https://*.trycloudflare.com` URL out of cloudflared's log
+* Point `WP_SITEURL` and `WP_HOME` at the tunnel URL (see "wp-env constants" below)
+* Print the public URL and block in the foreground
+
+Tear down with **Ctrl-C** in the same terminal — a trap handler kills cloudflared and reverts `WP_SITEURL` / `WP_HOME` back to `http://localhost:8888` so the local site keeps working after.
+
+#### When things get stuck
+
+If the tunnel script dies uncleanly (kill -9, terminal crash, etc), `WP_SITEURL` will still be pointing at a dead `trycloudflare.com` host and the local storefront will 502 or redirect oddly. Reset with
+
+```bash
+npm run wp-env:tunnel-reset
+```
+
+#### wp-env constants vs DB options
+
+wp-env hardcodes `WP_SITEURL` and `WP_HOME` as PHP constants in `wp-config.php`. In WordPress those constants short-circuit `get_option('siteurl')` / `get_option('home')` before any DB read or filter — so `wp option update siteurl …` will silently no-op. The tunnel script uses `wp config set WP_SITEURL <url> --type=constant` instead, which edits the constant directly. The next `wp-env start` regenerates `wp-config.php` from scratch, so any leftover constant value gets blown away — no permanent state to worry about.
+
+#### Tips while tunneling
+
+* Load the dev browser at the tunnel URL too, not `localhost:8888`. The page itself still loads either way, but the polling `fetch()` and other `rest_url()`-derived calls go to whatever `WP_SITEURL` says — so using the tunnel URL avoids unnecessary round-trips out the tunnel and back.
+* The QR code's `data-pay-callback` is built from `rest_url()`, so it automatically picks up the tunnel URL — no code change needed.
+* The tunnel URL changes every run (anonymous quick tunnel). For a stable URL you'd need a named cloudflared tunnel bound to a Cloudflare account — overkill for local dev.
+
 ### Stopping and cleaning the environment
 
 To stop the containers without losing data
