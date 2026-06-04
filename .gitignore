@@ -13,3 +13,5 @@ var/
 *.tar.gz
 *.zip
 languages/*.mo
+PLAN.md
+PRD.md

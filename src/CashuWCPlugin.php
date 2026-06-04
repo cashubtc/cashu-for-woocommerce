@@ -8,6 +8,7 @@ use Cashu\WC\Gateway\CashuGateway;
 use Cashu\WC\Helpers\CashuHelper;
 use Cashu\WC\Helpers\ConfirmMeltQuoteController;
 use Cashu\WC\Helpers\Logger;
+use Cashu\WC\Helpers\PayController;
 
 final class CashuWCPlugin {
 
@@ -56,8 +57,8 @@ final class CashuWCPlugin {
 		add_action(
 			'rest_api_init',
 			function (): void {
-				$controller = new ConfirmMeltQuoteController();
-				$controller->register_routes();
+				( new ConfirmMeltQuoteController() )->register_routes();
+				( new PayController() )->register_routes();
 			}
 		);
 

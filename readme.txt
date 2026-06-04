@@ -13,22 +13,23 @@ License URI: https://github.com/robwoodgate/cashu-for-woocommerce/blob/main/lice
 
 Cashu For WooCommerce adds a secure Cashu payment gateway to your WooCommerce store.
 
-It allows you to receive private bitcoin payments using Cashu ecash, which is then automatically converted (melted) and sent to your bitcoin lightning address. It also allows you to receive bitcoin lighting payments from regular bitcoin wallets.
+It allows you to receive private bitcoin payments using Cashu ecash, which is automatically converted (melted) and sent to your bitcoin lightning address. It also accepts lightning payments from regular bitcoin wallets.
 
-The following payment flows are available:
+Checkout presents a single QR code that any of the following can scan and pay:
 
-- Pay by lightning / QR Code: lightning -> trusted mint -> your lightning address
-- Pay by trusted mint token: token -> trusted mint -> your lightning address
-- Pay by untrusted mint token: token -> untrusted mint -> trusted mint -> your lightning address
+- Lightning wallets: pay via the trusted mint and out to your lightning address.
+- Cashu wallets (NUT-18): post proofs directly to the plugin, which melts them at the trusted mint and pays your lightning address.
+- Wallets that understand BIP-321 unified URIs see both options at once and pick whichever they support.
 
 ==  Features ==
 
 - Receive to any lightning address: Your lightning provider doesn't need any special features.
-- Privacy, just like cash: All payments are routed through your trusted Cashu mint. Your lighting address stays private, so do your customer's payments.
-- Flexibilty: switch trusted mints at any time to find the best fees and service.
+- Privacy, just like cash: All payments are routed through your trusted Cashu mint. Your lightning address stays private, so do your customer's payments.
+- Flexibility: switch trusted mints at any time to find the best fees and service.
 - Pay via Lightning: Customers can pay from a regular bitcoin lightning wallet.
-- Pay via Cashu Token: Customers can paste a token from any mint and it will be melted to your trusted mint, then melted to your lightning address.
-- Safety: Your only have to trust one Cashu mint (your trusted mint).
+- Pay via Cashu (NUT-18): Customer wallets handle their own input fees, so the headline price is exactly what the merchant receives.
+- Wallet-agnostic QR: Unified BIP-321 QR by default, with Cashu-only and Lightning-only fallback tabs for older wallets.
+- Safety: You only have to trust one Cashu mint (your trusted mint).
 - Accurate prices: Spot rates are taken from coinbase / coingecko.
 - I18n: Checkout can be translated into any language.
 
