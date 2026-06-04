@@ -196,7 +196,7 @@ class CashuGateway extends \WC_Payment_Gateway {
 			'cashu-thanks',
 			CASHU_WC_URL . 'assets/js/frontend/thanks.js',
 			array( 'wp-i18n' ),
-			CASHU_WC_VERSION,
+			$this->asset_version( 'assets/js/frontend/thanks.js' ),
 			true
 		);
 
@@ -248,7 +248,7 @@ class CashuGateway extends \WC_Payment_Gateway {
 			'cashu-public',
 			CASHU_WC_URL . 'assets/css/public.css',
 			array(),
-			CASHU_WC_VERSION
+			$this->asset_version( 'assets/css/public.css' )
 		);
 	}
 
