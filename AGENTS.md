@@ -22,6 +22,7 @@
 - Common scripts: `npm run build`, `npm run format`, `npm run lint`, `npm run i18n`, `npm run readme`.
 - Local WP env: `npm run wp-env:start`, `npm run wp-env:seed-store`, `npm run wp-env:stop`.
 - Logs: plugin PHP log is `debug.log`; WooCommerce logs in admin.
+- **TS rebuild after edits:** `src/ts/*.ts` is built by vite into `assets/js/cashu/` (gitignored). After editing TS, run `npx vite build` so wp-env / the browser pick up the change — hard-refresh the page to bust the asset cache. PHP and admin JS (`assets/js/backend/*.js`) need no build step.
 
 ## Commit style
 
