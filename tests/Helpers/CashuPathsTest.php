@@ -79,4 +79,13 @@ final class CashuPathsTest extends TestCase {
 		$paths = array( 'unified' => false, 'cashu' => false, 'lightning' => false );
 		$this->assertSame( 'unified', CashuPaths::default_path( $paths, 'cashu' ) );
 	}
+
+	public function test_any_enabled_false_when_paths_array_empty(): void {
+		$this->assertFalse( CashuPaths::any_enabled( array() ) );
+	}
+
+	public function test_sanitize_is_idempotent_on_already_bool_input(): void {
+		$input = array( 'unified' => true, 'cashu' => false, 'lightning' => true );
+		$this->assertSame( $input, CashuPaths::sanitize( $input ) );
+	}
 }
