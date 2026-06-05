@@ -12,7 +12,7 @@ final class SettingsMigrationTest extends IntegrationTestCase {
 
 	/**
 	 * Wire up a stateful in-memory options store so update_option /
-	 * delete_option / get_option round-trip correctly. Returns the array by
+	 * delete_option / get_option round-trip correctly. Takes the array by
 	 * reference so tests can assert on its final contents.
 	 */
 	private function stubOptionsStore( array &$store ): void {
