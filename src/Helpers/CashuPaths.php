@@ -38,19 +38,27 @@ final class CashuPaths {
 		return $out;
 	}
 
+	/**
+	 * True iff at least one path key in $paths is strictly true. Expects the
+	 * output of self::sanitize().
+	 */
 	public static function any_enabled( array $paths ): bool {
 		foreach ( self::KEYS as $key ) {
-			if ( ! empty( $paths[ $key ] ) ) {
+			if ( true === ( $paths[ $key ] ?? false ) ) {
 				return true;
 			}
 		}
 		return false;
 	}
 
+	/**
+	 * Returns the subset of KEYS whose value is strictly true. Expects the
+	 * output of self::sanitize().
+	 */
 	public static function enabled_keys( array $paths ): array {
 		$out = array();
 		foreach ( self::KEYS as $key ) {
-			if ( ! empty( $paths[ $key ] ) ) {
+			if ( true === ( $paths[ $key ] ?? false ) ) {
 				$out[] = $key;
 			}
 		}
@@ -64,7 +72,7 @@ final class CashuPaths {
 	 * if every path is somehow false.
 	 */
 	public static function default_path( array $paths, string $stored ): string {
-		if ( in_array( $stored, self::KEYS, true ) && ! empty( $paths[ $stored ] ) ) {
+		if ( in_array( $stored, self::KEYS, true ) && true === ( $paths[ $stored ] ?? false ) ) {
 			return $stored;
 		}
 		$enabled = self::enabled_keys( $paths );
