@@ -148,6 +148,10 @@ final class PayController {
 
 		$trusted_mint = (string) $order->get_meta( '_cashu_melt_mint', true );
 		if ( '' === $trusted_mint || ! $this->same_mint( $body_mint, $trusted_mint ) ) {
+			Logger::debug(
+				'PayController::pay 400 cashu_bad_mint on order ' . $order_id
+				. ' — wallet sent "' . $body_mint . '", expected "' . $trusted_mint . '"'
+			);
 			return new WP_Error( 'cashu_bad_mint', 'Proofs must originate at the merchant mint.', array( 'status' => 400 ) );
 		}
 
