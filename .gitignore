@@ -16,3 +16,4 @@ languages/*.mo
 PLAN.md
 PRD.md
 .phpunit.cache/
+.claude
