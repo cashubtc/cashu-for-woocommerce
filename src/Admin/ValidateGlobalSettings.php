@@ -67,7 +67,116 @@ final class ValidateGlobalSettings {
 			return null;
 		}
 
-		return untrailingslashit( $validated );
+		$url = untrailingslashit( $validated );
+
+		// If the URL is unchanged from what's already stored, skip the NUT-06
+		// probe — we don't want to hit the mint on every "Save changes" click
+		// when the admin is editing unrelated settings.
+		$stored = untrailingslashit( (string) get_option( 'cashu_trusted_mint', '' ) );
+		if ( $url === $stored ) {
+			return $url;
+		}
+
+		$error = self::probe_mint_supports_bolt11_sat( $url );
+		if ( null !== $error ) {
+			WC_Admin_Settings::add_error( $error );
+			return null;
+		}
+
+		return $url;
+	}
+
+	/**
+	 * GET {mint}/v1/info and verify the mint advertises BOLT11/sat support
+	 * for both NUT-04 (mint quotes) and NUT-05 (melt quotes). Without both,
+	 * Lightning checkout would fail at first customer attempt with the
+	 * generic "couldn't reach the mint" error.
+	 *
+	 * Returns null on success, or a translated error string for the admin.
+	 */
+	private static function probe_mint_supports_bolt11_sat( string $mint_url ): ?string {
+		$response = wp_remote_get(
+			$mint_url . '/v1/info',
+			array(
+				'timeout' => 10,
+				'headers' => array( 'Accept' => 'application/json' ),
+			)
+		);
+
+		if ( is_wp_error( $response ) ) {
+			return sprintf(
+				/* translators: %s: mint URL */
+				__( 'Could not reach the mint at %s. Check the URL and try again.', 'cashu-for-woocommerce' ),
+				esc_html( $mint_url )
+			);
+		}
+
+		$code = (int) wp_remote_retrieve_response_code( $response );
+		if ( 200 !== $code ) {
+			return sprintf(
+				/* translators: 1: mint URL, 2: HTTP status code */
+				__( 'Mint at %1$s returned HTTP %2$d for /v1/info — is this a Cashu mint?', 'cashu-for-woocommerce' ),
+				esc_html( $mint_url ),
+				$code
+			);
+		}
+
+		$body = json_decode( (string) wp_remote_retrieve_body( $response ), true );
+		if ( ! is_array( $body ) || ! isset( $body['nuts'] ) || ! is_array( $body['nuts'] ) ) {
+			return __( 'Mint info response did not include the NUT capability list — is this a Cashu mint?', 'cashu-for-woocommerce' );
+		}
+
+		$required = array(
+			array(
+				'key'  => '4',
+				'name' => 'NUT-04',
+				'role' => __( 'customer Lightning → Cashu', 'cashu-for-woocommerce' ),
+			),
+			array(
+				'key'  => '5',
+				'name' => 'NUT-05',
+				'role' => __( 'vendor Cashu → Lightning', 'cashu-for-woocommerce' ),
+			),
+		);
+
+		foreach ( $required as $req ) {
+			$nut = $body['nuts'][ $req['key'] ] ?? null;
+
+			if ( ! is_array( $nut ) || ! empty( $nut['disabled'] ) ) {
+				return sprintf(
+					/* translators: 1: NUT identifier (e.g. NUT-04), 2: role description (e.g. customer Lightning → Cashu) */
+					__( 'Mint does not advertise %1$s (%2$s) — required for Lightning payments.', 'cashu-for-woocommerce' ),
+					$req['name'],
+					$req['role']
+				);
+			}
+
+			$methods = is_array( $nut['methods'] ?? null ) ? $nut['methods'] : array();
+			if ( ! self::methods_include_bolt11_sat( $methods ) ) {
+				return sprintf(
+					/* translators: 1: NUT identifier (e.g. NUT-04), 2: role description (e.g. customer Lightning → Cashu) */
+					__( 'Mint does not support BOLT11/sat under %1$s (%2$s) — required for Lightning payments.', 'cashu-for-woocommerce' ),
+					$req['name'],
+					$req['role']
+				);
+			}
+		}
+
+		return null;
+	}
+
+	private static function methods_include_bolt11_sat( array $methods ): bool {
+		foreach ( $methods as $m ) {
+			if (
+				is_array( $m )
+				&& isset( $m['method'], $m['unit'] )
+				&& strtolower( (string) $m['method'] ) === 'bolt11'
+				&& strtolower( (string) $m['unit'] ) === 'sat'
+			) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	public static function sanitize_lightning_address( $value ) {
