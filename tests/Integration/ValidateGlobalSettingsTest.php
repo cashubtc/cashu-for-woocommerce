@@ -37,7 +37,7 @@ final class ValidateGlobalSettingsTest extends IntegrationTestCase {
 		$result = ValidateGlobalSettings::pre_update_paths( $new, $old, 'cashu_paths' );
 
 		$this->assertSame(
-			array( 'unified' => true, 'cashu' => true, 'lightning' => true ),
+			array( 'unified' => 'yes', 'cashu' => 'yes', 'lightning' => 'yes' ),
 			$result
 		);
 		$this->assertCount( 0, WC_Admin_Settings::$errors );
@@ -45,7 +45,7 @@ final class ValidateGlobalSettingsTest extends IntegrationTestCase {
 	}
 
 	public function test_pre_update_paths_returns_old_value_when_all_off(): void {
-		$old = array( 'unified' => true, 'cashu' => true, 'lightning' => true );
+		$old = array( 'unified' => 'yes', 'cashu' => 'yes', 'lightning' => 'yes' );
 		$new = array( 'unified' => 'no', 'cashu' => 'no', 'lightning' => 'no' );
 
 		$result = ValidateGlobalSettings::pre_update_paths( $new, $old, 'cashu_paths' );
@@ -61,18 +61,21 @@ final class ValidateGlobalSettingsTest extends IntegrationTestCase {
 
 		$result = ValidateGlobalSettings::pre_update_paths( $new, false, 'cashu_paths' );
 
-		$this->assertSame( CashuPaths::DEFAULT_PATHS, $result );
+		$this->assertSame(
+			array( 'unified' => 'yes', 'cashu' => 'yes', 'lightning' => 'yes' ),
+			$result
+		);
 		$this->assertCount( 1, WC_Admin_Settings::$errors );
 	}
 
 	public function test_pre_update_paths_disables_unified_when_cashu_off(): void {
-		$old = CashuPaths::DEFAULT_PATHS;
+		$old = array( 'unified' => 'yes', 'cashu' => 'yes', 'lightning' => 'yes' );
 		$new = array( 'unified' => 'yes', 'cashu' => 'no', 'lightning' => 'yes' );
 
 		$result = ValidateGlobalSettings::pre_update_paths( $new, $old, 'cashu_paths' );
 
 		$this->assertSame(
-			array( 'unified' => false, 'cashu' => false, 'lightning' => true ),
+			array( 'unified' => 'no', 'cashu' => 'no', 'lightning' => 'yes' ),
 			$result
 		);
 		$this->assertCount( 1, WC_Admin_Settings::$messages );
@@ -80,13 +83,13 @@ final class ValidateGlobalSettingsTest extends IntegrationTestCase {
 	}
 
 	public function test_pre_update_paths_disables_unified_when_lightning_off(): void {
-		$old = CashuPaths::DEFAULT_PATHS;
+		$old = array( 'unified' => 'yes', 'cashu' => 'yes', 'lightning' => 'yes' );
 		$new = array( 'unified' => 'yes', 'cashu' => 'yes', 'lightning' => 'no' );
 
 		$result = ValidateGlobalSettings::pre_update_paths( $new, $old, 'cashu_paths' );
 
 		$this->assertSame(
-			array( 'unified' => false, 'cashu' => true, 'lightning' => false ),
+			array( 'unified' => 'no', 'cashu' => 'yes', 'lightning' => 'no' ),
 			$result
 		);
 		$this->assertCount( 1, WC_Admin_Settings::$messages );

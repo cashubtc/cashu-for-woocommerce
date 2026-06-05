@@ -98,6 +98,15 @@ final class ValidateGlobalSettings {
 	 *   enabled default if no prior value existed) and queue an error.
 	 * - Unified enabled without both legs → silently coerce Unified off and
 	 *   queue an info notice. Derived constraint, not a user mistake.
+	 *
+	 * Returns a `{unified,cashu,lightning} => 'yes'|'no'` map (NOT bools).
+	 * WC's checkbox renderer calls `checked( $value, 'yes' )` which does a
+	 * strict string comparison; storing bools would make every checkbox
+	 * appear unchecked on the next page load because `(string) true === 'yes'`
+	 * is `'1' === 'yes'` → false. Internal callers (`is_available`,
+	 * `receipt_page`) read via `CashuPaths::sanitize()` which accepts either
+	 * shape, so the yes/no storage doesn't leak past the admin save round-
+	 * trip.
 	 */
 	public static function pre_update_paths( $value, $old_value, $option = '' ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter
 		$paths = CashuPaths::sanitize( $value );
@@ -106,7 +115,14 @@ final class ValidateGlobalSettings {
 			WC_Admin_Settings::add_error(
 				__( 'Please enable at least one payment path (Unified / Cashu / Lightning).', 'cashu-for-woocommerce' )
 			);
-			return is_array( $old_value ) ? $old_value : CashuPaths::DEFAULT_PATHS;
+			if ( is_array( $old_value ) ) {
+				return $old_value;
+			}
+			return array(
+				'unified'   => 'yes',
+				'cashu'     => 'yes',
+				'lightning' => 'yes',
+			);
 		}
 
 		if ( $paths['unified'] && ( ! $paths['cashu'] || ! $paths['lightning'] ) ) {
@@ -116,7 +132,11 @@ final class ValidateGlobalSettings {
 			);
 		}
 
-		return $paths;
+		return array(
+			'unified'   => $paths['unified'] ? 'yes' : 'no',
+			'cashu'     => $paths['cashu'] ? 'yes' : 'no',
+			'lightning' => $paths['lightning'] ? 'yes' : 'no',
+		);
 	}
 
 	/**
