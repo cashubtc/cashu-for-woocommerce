@@ -12,6 +12,26 @@ class GlobalSettings extends \WC_Settings_Page {
 		$this->id    = 'cashu_settings';
 		$this->label = __( 'Cashu Settings', 'cashu-for-woocommerce' );
 		parent::__construct();
+
+		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_assets' ) );
+	}
+
+	public function enqueue_admin_assets( string $hook ): void {
+		if ( 'woocommerce_page_wc-settings' !== $hook ) {
+			return;
+		}
+		// Only on our tab — check the `tab` query arg.
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( ( $_GET['tab'] ?? '' ) !== 'cashu_settings' ) {
+			return;
+		}
+		wp_enqueue_script(
+			'cashu-settings-admin',
+			CASHU_WC_URL . 'assets/js/backend/cashu-settings.js',
+			array( 'jquery' ),
+			CASHU_WC_VERSION,
+			true
+		);
 	}
 
 	public function get_settings_for_default_section(): array {
