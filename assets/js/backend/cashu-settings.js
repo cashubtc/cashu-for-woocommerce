@@ -1,4 +1,4 @@
-/* global jQuery */
+/* global jQuery, cashuSettingsL10n */
 ( function ( $ ) {
     'use strict';
 
@@ -11,17 +11,17 @@
         return;
     }
 
-    var labels = {
-        unified:   $unified.next( 'label' ).text() || 'Unified',
-        cashu:     $cashu.next( 'label' ).text() || 'Cashu',
-        lightning: $lightning.next( 'label' ).text() || 'Lightning',
-    };
+    var l10n   = ( typeof cashuSettingsL10n !== 'undefined' ) ? cashuSettingsL10n : {};
+    var labels = ( l10n.labels && typeof l10n.labels === 'object' )
+        ? l10n.labels
+        : { unified: 'Unified', cashu: 'Cashu', lightning: 'Lightning' };
+    var requiresBoth = l10n.requiresBoth || 'Requires Cashu + Lightning';
 
     function refreshUnified() {
         var legsOn = $cashu.prop( 'checked' ) && $lightning.prop( 'checked' );
         if ( ! legsOn ) {
             $unified.prop( 'checked', false ).prop( 'disabled', true );
-            $unified.attr( 'title', 'Requires Cashu + Lightning' );
+            $unified.attr( 'title', requiresBoth );
         } else {
             $unified.prop( 'disabled', false ).removeAttr( 'title' );
         }

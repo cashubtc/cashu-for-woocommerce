@@ -32,6 +32,18 @@ class GlobalSettings extends \WC_Settings_Page {
 			CASHU_WC_VERSION,
 			true
 		);
+		wp_localize_script(
+			'cashu-settings-admin',
+			'cashuSettingsL10n',
+			array(
+				'labels' => array(
+					'unified'   => __( 'Unified (Auto)', 'cashu-for-woocommerce' ),
+					'cashu'     => __( 'Cashu', 'cashu-for-woocommerce' ),
+					'lightning' => __( 'Lightning', 'cashu-for-woocommerce' ),
+				),
+				'requiresBoth' => __( 'Requires Cashu + Lightning', 'cashu-for-woocommerce' ),
+			)
+		);
 	}
 
 	public function get_settings_for_default_section(): array {
