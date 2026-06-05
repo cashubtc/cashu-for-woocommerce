@@ -138,7 +138,9 @@ function readRootData($root: JQuery<HTMLElement>): RootData {
 
   const rawDefaultTab = String($root.data('default-tab') ?? 'unified');
   const defaultTab: QrMode =
-    rawDefaultTab === 'cashu' || rawDefaultTab === 'lightning' || rawDefaultTab === 'unified'
+    rawDefaultTab === 'cashu' ||
+    rawDefaultTab === 'lightning' ||
+    rawDefaultTab === 'unified'
       ? rawDefaultTab
       : 'unified';
 
@@ -539,8 +541,7 @@ jQuery(function ($) {
     // / bech32m so case-insensitive too). Same payload, denser QR potential,
     // identical semantics. cashu-ts already returns CREQB uppercase;
     // mq.request is lowercase from the mint, so uppercase it here.
-    const unifiedUri =
-      'BITCOIN:?LIGHTNING=' + mq.request.toUpperCase() + '&CREQ=' + creq;
+    const unifiedUri = 'BITCOIN:?LIGHTNING=' + mq.request.toUpperCase() + '&CREQ=' + creq;
 
     qrTexts = {
       unified: unifiedUri,
