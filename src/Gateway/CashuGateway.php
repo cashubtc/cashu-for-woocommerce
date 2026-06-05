@@ -1082,7 +1082,8 @@ class CashuGateway extends \WC_Payment_Gateway {
 				if ( count( $enabled_keys ) > 1 ) :
 					?>
 					<div class="cashu-tabs" role="tablist" aria-label="<?php echo esc_attr__( 'Payment options', 'cashu-for-woocommerce' ); ?>">
-						<?php foreach ( $enabled_keys as $key ) :
+						<?php
+						foreach ( $enabled_keys as $key ) :
 							$is_active = ( $key === $default_tab );
 							?>
 							<button
