@@ -102,7 +102,7 @@ class GlobalSettings extends \WC_Settings_Page {
 			// visually groups them under one "Show payment paths" label.
 			'path_unified'      => array(
 				'id'            => 'cashu_paths[unified]',
-				'title'         => __( 'Show payment paths', 'cashu-for-woocommerce' ),
+				'title'         => __( 'Show payment options', 'cashu-for-woocommerce' ),
 				'type'          => 'checkbox',
 				'desc'          => __( 'Unified (Auto) — single BIP-321 QR. Requires both Cashu and Lightning enabled.', 'cashu-for-woocommerce' ),
 				'default'       => 'yes',
