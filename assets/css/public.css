@@ -107,10 +107,15 @@
 }
 
 .cashu-qr canvas,
-.cashu-qr img {
+.cashu-qr img,
+.cashu-qr svg {
   display: block;
   height: auto;
   max-width: 100%;
+}
+
+.cashu-qr svg {
+  width: 100%;
 }
 
 .cashu-qr-icon[hidden] {

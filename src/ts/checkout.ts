@@ -10,6 +10,7 @@ import {
   PaymentRequest,
   PaymentRequestTransportType,
 } from '@cashu/cashu-ts';
+import qrcode from 'qrcode-generator';
 import { copyTextToClipboard, doConfettiBomb, delay, getErrorMessage } from './utils';
 
 // ------------------------------
@@ -29,8 +30,6 @@ type CashuWindow = Window & {
 declare const window: CashuWindow;
 
 declare const wp: { i18n: { sprintf: (format: string, ...args: any[]) => string } };
-
-declare const QRCode: any;
 
 type CurrencyUnit = 'btc' | 'sat' | 'msat' | string;
 
@@ -489,16 +488,16 @@ jQuery(function ($) {
 
   function drawQr(text: string): void {
     const el = $qr.get(0) as HTMLElement | undefined;
-    if (!el || typeof QRCode === 'undefined') return;
-    el.innerHTML = '';
-    new QRCode(el, {
-      text,
-      width: 300,
-      height: 300,
-      colorDark: '#000000',
-      colorLight: '#ffffff',
-      correctLevel: QRCode.CorrectLevel.Q,
-    });
+    if (!el) return;
+    // Type 0 = auto-pick smallest QR version; 'Q' = ~25% error correction
+    // (needed so the centre-icon overlay doesn't break scanning). addData()
+    // auto-detects Alphanumeric mode for [A-Z0-9 $%*+\-./:] payloads — which
+    // is why we uppercase the BIP-321 / LIGHTNING URIs above. Scalable SVG
+    // renders crisp at any container size.
+    const qr = qrcode(0, 'Q');
+    qr.addData(text);
+    qr.make();
+    el.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 4, scalable: true });
   }
 
   async function renderQr(): Promise<void> {
@@ -527,11 +526,13 @@ jQuery(function ($) {
     );
     const creq = pr.toEncodedCreqB();
 
+    // BIP-321 URI: fully uppercase to match CDK reference (the scheme and
+    // query keys are case-insensitive per BIP-321; BOLT11 + CREQB are bech32
+    // / bech32m so case-insensitive too). Same payload, denser QR potential,
+    // identical semantics. cashu-ts already returns CREQB uppercase;
+    // mq.request is lowercase from the mint, so uppercase it here.
     const unifiedUri =
-      'bitcoin:?lightning=' +
-      encodeURIComponent(mq.request) +
-      '&creq=' +
-      encodeURIComponent(creq);
+      'BITCOIN:?LIGHTNING=' + mq.request.toUpperCase() + '&CREQ=' + creq;
 
     qrTexts = {
       unified: unifiedUri,
