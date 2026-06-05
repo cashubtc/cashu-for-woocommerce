@@ -125,20 +125,11 @@ class CashuGateway extends \WC_Payment_Gateway {
 	 * Register gateway scripts / styles
 	 */
 	public function enqueue_scripts() {
-		// QR Code
-		wp_register_script(
-			'cashu-qrcode',
-			CASHU_WC_URL . 'assets/js/frontend/qrcode.min.js',
-			array( 'jquery' ),
-			$this->asset_version( 'assets/js/frontend/qrcode.min.js' ),
-			false // head
-		);
-
 		// Main checkout
 		wp_register_script(
 			'cashu-checkout',
 			CASHU_WC_URL . 'assets/js/cashu/checkout.js',
-			array( 'jquery', 'cashu-qrcode', 'wp-i18n' ),
+			array( 'jquery', 'wp-i18n' ),
 			$this->asset_version( 'assets/js/cashu/checkout.js' ),
 			false // head
 		);
@@ -1035,7 +1026,6 @@ class CashuGateway extends \WC_Payment_Gateway {
 			get_bloginfo( 'name' )
 		);
 
-		wp_enqueue_script( 'cashu-qrcode' );
 		wp_enqueue_script( 'cashu-checkout' );
 		wp_enqueue_style( 'cashu-public' );
 

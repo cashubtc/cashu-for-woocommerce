@@ -10,7 +10,8 @@
   "dependencies": {
     "@cashu/cashu-ts": "^4.5.1",
     "@types/canvas-confetti": "^1.9.0",
-    "canvas-confetti": "^1.9.4"
+    "canvas-confetti": "^1.9.4",
+    "qrcode-generator": "^2.0.4"
   },
   "devDependencies": {
     "@prettier/plugin-php": "^0.22.2",
