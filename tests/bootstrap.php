@@ -75,6 +75,12 @@ if (!class_exists('WC_Payment_Gateway')) {
 		public function generate_settings_html( array $form_fields = array(), bool $echo = true ) {
 			return '';
 		}
+		public function get_return_url( $order = null ): string {
+			return '/order-received/';
+		}
+		public function get_icon() {
+			return '';
+		}
 	}
 }
 
