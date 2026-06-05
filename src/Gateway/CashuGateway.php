@@ -7,6 +7,7 @@ namespace Cashu\WC\Gateway;
 use Automattic\WooCommerce\Enums\OrderStatus;
 use Cashu\WC\Helpers\Bolt11;
 use Cashu\WC\Helpers\CashuHelper;
+use Cashu\WC\Helpers\CashuPaths;
 use Cashu\WC\Helpers\Logger;
 use Cashu\WC\Helpers\LightningAddress;
 use Cashu\WC\Helpers\OrderLock;
@@ -1029,6 +1030,21 @@ class CashuGateway extends \WC_Payment_Gateway {
 		wp_enqueue_script( 'cashu-checkout' );
 		wp_enqueue_style( 'cashu-public' );
 
+		$paths_option = CashuPaths::sanitize(
+			get_option( 'cashu_paths', CashuPaths::DEFAULT_PATHS )
+		);
+		$enabled_keys = CashuPaths::enabled_keys( $paths_option );
+		$default_tab  = CashuPaths::default_path(
+			$paths_option,
+			(string) get_option( 'cashu_default_path', CashuPaths::DEFAULT_PATH )
+		);
+
+		$tab_labels = array(
+			'unified'   => __( 'Auto', 'cashu-for-woocommerce' ),
+			'cashu'     => __( 'Cashu', 'cashu-for-woocommerce' ),
+			'lightning' => __( 'Lightning', 'cashu-for-woocommerce' ),
+		);
+
 		echo '<div id="cashu-pay-root"
 			data-order-id="' . esc_attr( (string) $order_id ) . '"
 			data-order-key="' . esc_attr( $order_key ) . '"
@@ -1044,6 +1060,7 @@ class CashuGateway extends \WC_Payment_Gateway {
 			data-pay-callback="' . esc_url( $pay_url ) . '"
 			data-payment-id="' . esc_attr( $payment_id ) . '"
 			data-description="' . esc_attr( $description ) . '"
+			data-default-tab="' . esc_attr( $default_tab ) . '"
 		></div>';
 
 		?>
@@ -1061,29 +1078,26 @@ class CashuGateway extends \WC_Payment_Gateway {
 					?>
 				</div>
 
-				<div class="cashu-tabs" role="tablist" aria-label="<?php echo esc_attr__( 'Payment options', 'cashu-for-woocommerce' ); ?>">
-					<button
-						type="button"
-						class="cashu-tab is-active"
-						role="tab"
-						aria-selected="true"
-						data-cashu-tab="unified"
-					><?php esc_html_e( 'Auto', 'cashu-for-woocommerce' ); ?></button>
-					<button
-						type="button"
-						class="cashu-tab"
-						role="tab"
-						aria-selected="false"
-						data-cashu-tab="cashu"
-					><?php esc_html_e( 'Cashu', 'cashu-for-woocommerce' ); ?></button>
-					<button
-						type="button"
-						class="cashu-tab"
-						role="tab"
-						aria-selected="false"
-						data-cashu-tab="lightning"
-					><?php esc_html_e( 'Lightning', 'cashu-for-woocommerce' ); ?></button>
-				</div>
+				<?php
+				if ( count( $enabled_keys ) > 1 ) :
+					?>
+					<div class="cashu-tabs" role="tablist" aria-label="<?php echo esc_attr__( 'Payment options', 'cashu-for-woocommerce' ); ?>">
+						<?php
+						foreach ( $enabled_keys as $key ) :
+							$is_active = ( $key === $default_tab );
+							?>
+							<button
+								type="button"
+								class="cashu-tab<?php echo $is_active ? ' is-active' : ''; ?>"
+								role="tab"
+								aria-selected="<?php echo $is_active ? 'true' : 'false'; ?>"
+								data-cashu-tab="<?php echo esc_attr( $key ); ?>"
+							><?php echo esc_html( $tab_labels[ $key ] ); ?></button>
+						<?php endforeach; ?>
+					</div>
+					<?php
+				endif;
+				?>
 
 				<div class="cashu-qr-wrap">
 					<div class="cashu-qr" data-cashu-qr>
@@ -1144,12 +1158,6 @@ class CashuGateway extends \WC_Payment_Gateway {
 	}
 
 	public function is_available(): bool {
-		// Cashu payment provider enabled
-		$enabled = get_option( 'cashu_enabled', 'no' );
-		if ( 'yes' !== $enabled ) {
-			return false;
-		}
-
 		// Global LN address set
 		$lightning_address = trim( (string) get_option( 'cashu_lightning_address', '' ) );
 		if ( '' === $lightning_address ) {
@@ -1162,7 +1170,15 @@ class CashuGateway extends \WC_Payment_Gateway {
 			return false;
 		}
 
-		// This Gateway enabled
+		// At least one payment path enabled. Belt-and-braces — the validator
+		// already prevents saving zero paths, but a corrupted option or third-
+		// party filter shouldn't 500 the checkout.
+		$paths = CashuPaths::sanitize( get_option( 'cashu_paths', CashuPaths::DEFAULT_PATHS ) );
+		if ( ! CashuPaths::any_enabled( $paths ) ) {
+			return false;
+		}
+
+		// This Gateway enabled (Settings > Payments)
 		return 'yes' === $this->enabled;
 	}
 }

@@ -195,7 +195,6 @@ class CashuHelper {
 	}
 
 	public static function getConfig(): array {
-		$enabled      = get_option( 'cashu_enabled' );
 		$ln_address   = get_option( 'cashu_lightning_address' );
 		$trusted_mint = get_option( 'cashu_trusted_mint' );
 		$debug        = get_option( 'cashu_debug' );
@@ -205,7 +204,6 @@ class CashuHelper {
 		}
 
 		return array(
-			'enabled'      => $enabled,
 			'ln_address'   => $ln_address,
 			'trusted_mint' => $trusted_mint,
 			'debug'        => $debug,
