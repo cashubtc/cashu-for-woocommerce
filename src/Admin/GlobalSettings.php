@@ -63,9 +63,11 @@ class GlobalSettings extends \WC_Settings_Page {
 			),
 			// WC has no built-in multi-checkbox field. Render three standalone
 			// checkboxes whose IDs share the `cashu_paths[<key>]` shape so PHP
-			// POSTs them as an array; the sanitizer in Task 5 normalises the
-			// array back into the bitmap. `checkboxgroup` start/end visually
-			// groups them under one "Show payment paths" label.
+			// POSTs them as an array; WC's save_fields() fires the sanitize filter
+			// per sub-key, then assembles them into one `cashu_paths` option write.
+			// Cross-key validation (Task 5) hooks `pre_update_option_cashu_paths`,
+			// which fires once with the assembled array. `checkboxgroup` start/end
+			// visually groups them under one "Show payment paths" label.
 			'path_unified'      => array(
 				'id'            => 'cashu_paths[unified]',
 				'title'         => __( 'Unified (Auto)', 'cashu-for-woocommerce' ),
