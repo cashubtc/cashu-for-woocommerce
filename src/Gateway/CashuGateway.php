@@ -7,6 +7,7 @@ namespace Cashu\WC\Gateway;
 use Automattic\WooCommerce\Enums\OrderStatus;
 use Cashu\WC\Helpers\Bolt11;
 use Cashu\WC\Helpers\CashuHelper;
+use Cashu\WC\Helpers\CashuPaths;
 use Cashu\WC\Helpers\Logger;
 use Cashu\WC\Helpers\LightningAddress;
 use Cashu\WC\Helpers\OrderLock;
@@ -1144,12 +1145,6 @@ class CashuGateway extends \WC_Payment_Gateway {
 	}
 
 	public function is_available(): bool {
-		// Cashu payment provider enabled
-		$enabled = get_option( 'cashu_enabled', 'no' );
-		if ( 'yes' !== $enabled ) {
-			return false;
-		}
-
 		// Global LN address set
 		$lightning_address = trim( (string) get_option( 'cashu_lightning_address', '' ) );
 		if ( '' === $lightning_address ) {
@@ -1162,7 +1157,15 @@ class CashuGateway extends \WC_Payment_Gateway {
 			return false;
 		}
 
-		// This Gateway enabled
+		// At least one payment path enabled. Belt-and-braces — the validator
+		// already prevents saving zero paths, but a corrupted option or third-
+		// party filter shouldn't 500 the checkout.
+		$paths = CashuPaths::sanitize( get_option( 'cashu_paths', CashuPaths::DEFAULT_PATHS ) );
+		if ( ! CashuPaths::any_enabled( $paths ) ) {
+			return false;
+		}
+
+		// This Gateway enabled (Settings > Payments)
 		return 'yes' === $this->enabled;
 	}
 }
