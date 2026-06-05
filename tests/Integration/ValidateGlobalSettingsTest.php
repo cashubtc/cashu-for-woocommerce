@@ -21,6 +21,7 @@ final class ValidateGlobalSettingsTest extends IntegrationTestCase {
 
 		Functions\when( '__' )->returnArg( 1 );
 		Functions\when( 'esc_html__' )->returnArg( 1 );
+		Functions\when( 'wp_unslash' )->returnArg( 1 );
 
 		Functions\when( 'get_option' )->alias(
 			function ( string $key, $default = false ) {
@@ -91,8 +92,13 @@ final class ValidateGlobalSettingsTest extends IntegrationTestCase {
 		$this->assertCount( 1, WC_Admin_Settings::$messages );
 	}
 
+	protected function tearDown(): void {
+		unset( $_POST['cashu_paths'] );
+		parent::tearDown();
+	}
+
 	public function test_sanitize_default_path_passes_through_valid_enabled_choice(): void {
-		$this->optionStore['cashu_paths'] = array( 'unified' => false, 'cashu' => true, 'lightning' => false );
+		$_POST['cashu_paths'] = array( 'unified' => 'no', 'cashu' => 'yes', 'lightning' => 'no' );
 
 		$result = ValidateGlobalSettings::sanitize_default_path( 'cashu', array( 'id' => 'cashu_default_path' ), 'cashu' );
 
@@ -102,7 +108,7 @@ final class ValidateGlobalSettingsTest extends IntegrationTestCase {
 	}
 
 	public function test_sanitize_default_path_coerces_to_first_enabled_when_choice_disabled(): void {
-		$this->optionStore['cashu_paths'] = array( 'unified' => false, 'cashu' => true, 'lightning' => true );
+		$_POST['cashu_paths'] = array( 'unified' => 'no', 'cashu' => 'yes', 'lightning' => 'yes' );
 
 		$result = ValidateGlobalSettings::sanitize_default_path( 'unified', array( 'id' => 'cashu_default_path' ), 'unified' );
 
@@ -112,11 +118,25 @@ final class ValidateGlobalSettingsTest extends IntegrationTestCase {
 	}
 
 	public function test_sanitize_default_path_rejects_unknown_string(): void {
-		$this->optionStore['cashu_paths'] = CashuPaths::DEFAULT_PATHS;
+		$_POST['cashu_paths'] = array( 'unified' => 'yes', 'cashu' => 'yes', 'lightning' => 'yes' );
 
 		$result = ValidateGlobalSettings::sanitize_default_path( 'gibberish', array( 'id' => 'cashu_default_path' ), 'gibberish' );
 
 		$this->assertSame( 'unified', $result );
 		$this->assertCount( 1, WC_Admin_Settings::$messages );
+	}
+
+	public function test_default_path_coerces_to_first_enabled_after_unified_legs_coercion(): void {
+		// Submission: user keeps Unified ticked, unticks Cashu, leaves
+		// default_path='unified'. pre_update_paths will coerce Unified off;
+		// sanitize_default_path must see that future state and snap the
+		// default to the first remaining enabled path (lightning).
+		$_POST['cashu_paths'] = array( 'unified' => 'yes', 'cashu' => 'no', 'lightning' => 'yes' );
+
+		$result = ValidateGlobalSettings::sanitize_default_path( 'unified', array( 'id' => 'cashu_default_path' ), 'unified' );
+
+		$this->assertSame( 'lightning', $result );
+		$this->assertCount( 1, WC_Admin_Settings::$messages );
+		$this->assertStringContainsString( 'Default tab', WC_Admin_Settings::$messages[0] );
 	}
 }

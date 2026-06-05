@@ -99,7 +99,7 @@ final class ValidateGlobalSettings {
 	 * - Unified enabled without both legs → silently coerce Unified off and
 	 *   queue an info notice. Derived constraint, not a user mistake.
 	 */
-	public static function pre_update_paths( $value, $old_value, $option = '' ) {
+	public static function pre_update_paths( $value, $old_value, $option = '' ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter
 		$paths = CashuPaths::sanitize( $value );
 
 		if ( ! CashuPaths::any_enabled( $paths ) ) {
@@ -121,15 +121,39 @@ final class ValidateGlobalSettings {
 
 	/**
 	 * Sanitise cashu_default_path. Runs as a per-field WC sanitize filter
-	 * (single string value, no brackets, no per-sub-key issue). Must run
-	 * after cashu_paths is written so get_option('cashu_paths') here returns
-	 * the just-saved bitmap — WC saves fields in declared order, and the
-	 * GlobalSettings field list places cashu_default_path after the path
-	 * checkboxes.
+	 * (single string value, no brackets, no per-sub-key issue).
+	 *
+	 * Cannot rely on get_option('cashu_paths') here: WC's save_fields()
+	 * accumulates all update_option() calls and batches them AFTER the
+	 * sanitize loop, so during this filter the option still holds the OLD
+	 * bitmap. Read the about-to-be-saved bitmap from $_POST instead, and
+	 * apply the same Unified-needs-both-legs coercion pre_update_paths()
+	 * will apply, so the two filters land on a consistent view of what's
+	 * being saved.
+	 *
+	 * Nonce verification is handled by WC's settings handler before this
+	 * filter fires, so accessing $_POST here is safe.
 	 */
-	public static function sanitize_default_path( $value, $option = array(), $raw_value = null ) {
+	public static function sanitize_default_path( $value, $option = array(), $raw_value = null ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter
 		$stored = is_string( $value ) ? $value : '';
-		$paths  = CashuPaths::sanitize( get_option( 'cashu_paths', CashuPaths::DEFAULT_PATHS ) );
+
+		// phpcs:disable WordPress.Security.NonceVerification.Missing
+		$raw_paths = isset( $_POST['cashu_paths'] )
+			? wp_unslash( $_POST['cashu_paths'] )
+			: CashuPaths::DEFAULT_PATHS;
+		// phpcs:enable WordPress.Security.NonceVerification.Missing
+
+		$paths = CashuPaths::sanitize( $raw_paths );
+
+		// Mirror the Unified-without-legs coercion that pre_update_paths()
+		// will apply during the batch write phase. Without this, a user who
+		// disables Cashu/Lightning AND leaves default=Unified would land on
+		// an inconsistent DB state (Unified disabled in cashu_paths, but
+		// cashu_default_path still 'unified').
+		if ( $paths['unified'] && ( ! $paths['cashu'] || ! $paths['lightning'] ) ) {
+			$paths['unified'] = false;
+		}
+
 		$picked = CashuPaths::default_path( $paths, $stored );
 
 		if ( $picked !== $stored ) {
