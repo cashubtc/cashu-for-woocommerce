@@ -4,8 +4,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Cashu For WooCommerce 0.1.1\n"
 "Report-Msgid-Bugs-To: "
-"https://wordpress.org/support/plugin/settings-consolidation\n"
-"POT-Creation-Date: 2026-06-05 14:57:50+00:00\n"
+"https://wordpress.org/support/plugin/cashu-for-woocommerce\n"
+"POT-Creation-Date: 2026-06-05 16:51:45+00:00\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=utf-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -29,90 +29,100 @@ msgstr ""
 msgid "Cashu Settings"
 msgstr ""
 
-#: src/Admin/GlobalSettings.php:41
-msgid "Cashu payments"
-msgstr ""
-
-#: src/Admin/GlobalSettings.php:43
-msgid "Accept ecash payments directly to your lightning address via any Cashu mint."
-msgstr ""
-
-#: src/Admin/GlobalSettings.php:50
-msgid "Lightning address"
-msgstr ""
-
-#: src/Admin/GlobalSettings.php:53
-msgid "Where melted payments are sent, either a lightning address or LNURL."
-msgstr ""
-
-#: src/Admin/GlobalSettings.php:61
-msgid "Trusted Mint URL"
-msgstr ""
-
-#: src/Admin/GlobalSettings.php:64
-msgid "A mint you trust to act as your intermediary."
-msgstr ""
-
-#: src/Admin/GlobalSettings.php:77
-msgid "Payment paths"
-msgstr ""
-
-#: src/Admin/GlobalSettings.php:79
-msgid ""
-"Choose which payment options are offered at checkout and which one opens "
-"first. Unified (Auto) is a single BIP-321 QR that works with both Cashu and "
-"Lightning wallets, and needs both legs enabled."
-msgstr ""
-
-#: src/Admin/GlobalSettings.php:93 src/Admin/GlobalSettings.php:120
+#: src/Admin/GlobalSettings.php:40 src/Admin/GlobalSettings.php:132
 msgid "Unified (Auto)"
 msgstr ""
 
-#: src/Admin/GlobalSettings.php:95
-msgid "Show the Unified (BIP-321) tab — requires both Cashu and Lightning enabled."
-msgstr ""
-
-#: src/Admin/GlobalSettings.php:103
-msgid "Show the Cashu (NUT-18) tab."
-msgstr ""
-
-#: src/Admin/GlobalSettings.php:111
-msgid "Show the Lightning (BOLT11) tab."
-msgstr ""
-
-#: src/Admin/GlobalSettings.php:117
-msgid "Default tab"
-msgstr ""
-
-#: src/Admin/GlobalSettings.php:121 src/Gateway/CashuGateway.php:172
-#: src/Gateway/CashuGateway.php:1044
+#: src/Admin/GlobalSettings.php:41 src/Admin/GlobalSettings.php:133
+#: src/Gateway/CashuGateway.php:172 src/Gateway/CashuGateway.php:1044
 msgid "Cashu"
 msgstr ""
 
-#: src/Admin/GlobalSettings.php:122 src/Gateway/CashuGateway.php:173
-#: src/Gateway/CashuGateway.php:1045
+#: src/Admin/GlobalSettings.php:42 src/Admin/GlobalSettings.php:134
+#: src/Gateway/CashuGateway.php:173 src/Gateway/CashuGateway.php:1045
 msgid "Lightning"
 msgstr ""
 
-#: src/Admin/GlobalSettings.php:125
+#: src/Admin/GlobalSettings.php:44
+msgid "Requires Cashu + Lightning"
+msgstr ""
+
+#: src/Admin/GlobalSettings.php:53
+msgid "Cashu payments"
+msgstr ""
+
+#: src/Admin/GlobalSettings.php:55
+msgid "Accept ecash payments directly to your lightning address via any Cashu mint."
+msgstr ""
+
+#: src/Admin/GlobalSettings.php:62
+msgid "Lightning address"
+msgstr ""
+
+#: src/Admin/GlobalSettings.php:65
+msgid "Where melted payments are sent, either a lightning address or LNURL."
+msgstr ""
+
+#: src/Admin/GlobalSettings.php:73
+msgid "Trusted Mint URL"
+msgstr ""
+
+#: src/Admin/GlobalSettings.php:76
+msgid "A mint you trust to act as your intermediary."
+msgstr ""
+
+#: src/Admin/GlobalSettings.php:89
+msgid "Payment paths"
+msgstr ""
+
+#: src/Admin/GlobalSettings.php:91
+msgid ""
+"Choose which payment options are offered at checkout and which one opens "
+"first. Unified (Auto) is a single BIP-321 QR that works with both Cashu and "
+"Lightning wallets, and needs both options enabled."
+msgstr ""
+
+#: src/Admin/GlobalSettings.php:105
+msgid "Show payment options"
+msgstr ""
+
+#: src/Admin/GlobalSettings.php:107
+msgid ""
+"Unified (Auto) — single BIP-321 QR. Requires both Cashu and Lightning "
+"enabled."
+msgstr ""
+
+#: src/Admin/GlobalSettings.php:115
+msgid "Cashu (NUT-18 payment request)."
+msgstr ""
+
+#: src/Admin/GlobalSettings.php:123
+msgid "Lightning (BOLT11 invoice)."
+msgstr ""
+
+#: src/Admin/GlobalSettings.php:129
+msgid "Default tab"
+msgstr ""
+
+#: src/Admin/GlobalSettings.php:137
 msgid ""
 "Which tab opens first at checkout. Snaps to the first enabled tab if the "
 "chosen one is disabled."
 msgstr ""
 
-#: src/Admin/GlobalSettings.php:137
+#: src/Admin/GlobalSettings.php:149
 msgid "Advanced"
 msgstr ""
 
-#: src/Admin/GlobalSettings.php:142 src/CashuWCPlugin.php:375
+#: src/Admin/GlobalSettings.php:154 src/CashuWCPlugin.php:375
 msgid "Debug log"
 msgstr ""
 
-#: src/Admin/GlobalSettings.php:144
+#: src/Admin/GlobalSettings.php:156
 msgid "Enable logging"
 msgstr ""
 
-#: src/Admin/GlobalSettings.php:148
+#: src/Admin/GlobalSettings.php:160
 #. translators: %s is a link to WooCommerce logs page
 msgid "Log events to the WooCommerce logs, <a href=\"%s\">view logs</a>."
 msgstr ""
@@ -192,17 +202,17 @@ msgstr ""
 msgid "Lightning address must be a valid lightning address (name@domain)."
 msgstr ""
 
-#: src/Admin/ValidateGlobalSettings.php:107
+#: src/Admin/ValidateGlobalSettings.php:116
 msgid "Please enable at least one payment path (Unified / Cashu / Lightning)."
 msgstr ""
 
-#: src/Admin/ValidateGlobalSettings.php:115
+#: src/Admin/ValidateGlobalSettings.php:131
 msgid ""
 "Unified payments need both Cashu and Lightning enabled — Unified has been "
 "turned off."
 msgstr ""
 
-#: src/Admin/ValidateGlobalSettings.php:161
+#: src/Admin/ValidateGlobalSettings.php:181
 msgid ""
 "Default tab was set to a disabled or unknown path — snapped to the first "
 "enabled tab."
