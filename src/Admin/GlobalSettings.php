@@ -36,7 +36,7 @@ class GlobalSettings extends \WC_Settings_Page {
 			'cashu-settings-admin',
 			'cashuSettingsL10n',
 			array(
-				'labels' => array(
+				'labels'       => array(
 					'unified'   => __( 'Unified (Auto)', 'cashu-for-woocommerce' ),
 					'cashu'     => __( 'Cashu', 'cashu-for-woocommerce' ),
 					'lightning' => __( 'Lightning', 'cashu-for-woocommerce' ),
