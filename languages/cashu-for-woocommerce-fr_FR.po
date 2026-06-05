@@ -5,7 +5,7 @@ msgstr ""
 "Project-Id-Version: Cashu For WooCommerce 0.1.1\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/cashu-for-"
 "woocommerce\n"
-"POT-Creation-Date: 2026-06-05 16:51:45+00:00\n"
+"POT-Creation-Date: 2026-06-05 18:04:49+00:00\n"
 "PO-Revision-Date: 2026-06-05 00:00:00+00:00\n"
 "Last-Translator: \n"
 "Language-Team: French (France)\n"
@@ -211,18 +211,65 @@ msgstr "L’URL du mint de confiance doit être une URL valide."
 msgid "Trusted Mint URL must use https."
 msgstr "L’URL du mint de confiance doit utiliser HTTPS."
 
-#: src/Admin/ValidateGlobalSettings.php:86
+#. translators: %s: mint URL
+#: src/Admin/ValidateGlobalSettings.php:109
+msgid "Could not reach the mint at %s. Check the URL and try again."
+msgstr ""
+"Impossible de joindre le mint à l’adresse %s. Vérifiez l’URL et réessayez."
+
+#. translators: 1: mint URL, 2: HTTP status code
+#: src/Admin/ValidateGlobalSettings.php:118
+msgid "Mint at %1$s returned HTTP %2$d for /v1/info — is this a Cashu mint?"
+msgstr ""
+"Le mint à l’adresse %1$s a renvoyé HTTP %2$d pour /v1/info — s’agit-il bien "
+"d’un mint Cashu ?"
+
+#: src/Admin/ValidateGlobalSettings.php:126
+msgid ""
+"Mint info response did not include the NUT capability list — is this a Cashu "
+"mint?"
+msgstr ""
+"La réponse d’information du mint ne contient pas la liste des NUT pris en "
+"charge — s’agit-il bien d’un mint Cashu ?"
+
+#: src/Admin/ValidateGlobalSettings.php:133
+msgid "customer Lightning → Cashu"
+msgstr "paiement client Lightning → Cashu"
+
+#: src/Admin/ValidateGlobalSettings.php:138
+msgid "vendor Cashu → Lightning"
+msgstr "paiement marchand Cashu → Lightning"
+
+#. translators: 1: NUT identifier (e.g. NUT-04), 2: role description (e.g.
+#. customer Lightning → Cashu)
+#: src/Admin/ValidateGlobalSettings.php:148
+msgid "Mint does not advertise %1$s (%2$s) — required for Lightning payments."
+msgstr ""
+"Le mint ne prend pas en charge %1$s (%2$s) — requis pour les paiements "
+"Lightning."
+
+#. translators: 1: NUT identifier (e.g. NUT-04), 2: role description (e.g.
+#. customer Lightning → Cashu)
+#: src/Admin/ValidateGlobalSettings.php:158
+msgid ""
+"Mint does not support BOLT11/sat under %1$s (%2$s) — required for Lightning "
+"payments."
+msgstr ""
+"Le mint ne prend pas en charge BOLT11/sat pour %1$s (%2$s) — requis pour les "
+"paiements Lightning."
+
+#: src/Admin/ValidateGlobalSettings.php:195
 msgid "Lightning address must be a valid lightning address (name@domain)."
 msgstr ""
 "L’adresse Lightning doit être une adresse Lightning valide (nom@domaine)."
 
-#: src/Admin/ValidateGlobalSettings.php:116
+#: src/Admin/ValidateGlobalSettings.php:225
 msgid "Please enable at least one payment path (Unified / Cashu / Lightning)."
 msgstr ""
 "Veuillez activer au moins une option de paiement (Unifié / Cashu / "
 "Lightning)."
 
-#: src/Admin/ValidateGlobalSettings.php:131
+#: src/Admin/ValidateGlobalSettings.php:240
 msgid ""
 "Unified payments need both Cashu and Lightning enabled — Unified has been "
 "turned off."
@@ -230,7 +277,7 @@ msgstr ""
 "Les paiements unifiés nécessitent l’activation de Cashu et de Lightning — "
 "Unifié a été désactivé."
 
-#: src/Admin/ValidateGlobalSettings.php:181
+#: src/Admin/ValidateGlobalSettings.php:290
 msgid ""
 "Default tab was set to a disabled or unknown path — snapped to the first "
 "enabled tab."
