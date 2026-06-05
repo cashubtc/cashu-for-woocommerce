@@ -126,8 +126,7 @@ class CashuHelper {
 		}
 
 		$data = json_decode( (string) wp_remote_retrieve_body( $response ), true );
-		// phpcs:disable WordPress.PHP.DevelopmentFunctions.error_log_print_r
-		Logger::debug( 'Coinbase spot response: ' . print_r( $data, true ) );
+		Logger::debug( 'Coinbase spot response: ' . wp_json_encode( $data ) );
 
 		if ( ! isset( $data['data']['amount'], $data['data']['currency'] ) ) {
 			throw new \RuntimeException( 'Invalid Coinbase spot response.' );
