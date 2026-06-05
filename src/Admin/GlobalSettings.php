@@ -25,13 +25,6 @@ class GlobalSettings extends \WC_Settings_Page {
 					'cashu-for-woocommerce'
 				),
 			),
-			'enabled'           => array(
-				'id'      => 'cashu_enabled',
-				'title'   => __( 'Enable Cashu', 'cashu-for-woocommerce' ),
-				'type'    => 'checkbox',
-				'label'   => __( 'Enable Cashu payments', 'cashu-for-woocommerce' ),
-				'default' => 'no',
-			),
 			'lightning_address' => array(
 				'id'          => 'cashu_lightning_address',
 				'title'       => __( 'Lightning address', 'cashu-for-woocommerce' ),
@@ -54,6 +47,74 @@ class GlobalSettings extends \WC_Settings_Page {
 				),
 				'default'     => 'https://mint.minibits.cash/Bitcoin',
 			),
+			'section_end_basic' => array(
+				'id'   => 'cashu_settings_basic_end',
+				'type' => 'sectionend',
+			),
+
+			'paths_title'       => array(
+				'id'    => 'cashu_paths_title',
+				'title' => __( 'Payment paths', 'cashu-for-woocommerce' ),
+				'type'  => 'title',
+				'desc'  => __(
+					'Choose which payment options are offered at checkout and which one opens first. Unified (Auto) is a single BIP-321 QR that works with both Cashu and Lightning wallets, and needs both legs enabled.',
+					'cashu-for-woocommerce'
+				),
+			),
+			// WC has no built-in multi-checkbox field. Render three standalone
+			// checkboxes whose IDs share the `cashu_paths[<key>]` shape so PHP
+			// POSTs them as an array; the sanitizer in Task 5 normalises the
+			// array back into the bitmap. `checkboxgroup` start/end visually
+			// groups them under one "Show payment paths" label.
+			'path_unified'      => array(
+				'id'            => 'cashu_paths[unified]',
+				'title'         => __( 'Unified (Auto)', 'cashu-for-woocommerce' ),
+				'type'          => 'checkbox',
+				'label'         => __( 'Show the Unified (BIP-321) tab — requires both Cashu and Lightning enabled.', 'cashu-for-woocommerce' ),
+				'default'       => 'yes',
+				'checkboxgroup' => 'start',
+			),
+			'path_cashu'        => array(
+				'id'            => 'cashu_paths[cashu]',
+				'title'         => '',
+				'type'          => 'checkbox',
+				'label'         => __( 'Show the Cashu (NUT-18) tab.', 'cashu-for-woocommerce' ),
+				'default'       => 'yes',
+				'checkboxgroup' => '',
+			),
+			'path_lightning'    => array(
+				'id'            => 'cashu_paths[lightning]',
+				'title'         => '',
+				'type'          => 'checkbox',
+				'label'         => __( 'Show the Lightning (BOLT11) tab.', 'cashu-for-woocommerce' ),
+				'default'       => 'yes',
+				'checkboxgroup' => 'end',
+			),
+			'default_path'      => array(
+				'id'       => 'cashu_default_path',
+				'title'    => __( 'Default tab', 'cashu-for-woocommerce' ),
+				'type'     => 'select',
+				'options'  => array(
+					'unified'   => __( 'Unified (Auto)', 'cashu-for-woocommerce' ),
+					'cashu'     => __( 'Cashu', 'cashu-for-woocommerce' ),
+					'lightning' => __( 'Lightning', 'cashu-for-woocommerce' ),
+				),
+				'default'  => 'unified',
+				'desc_tip' => __(
+					'Which tab opens first at checkout. Snaps to the first enabled tab if the chosen one is disabled.',
+					'cashu-for-woocommerce'
+				),
+			),
+			'section_end_paths' => array(
+				'id'   => 'cashu_paths_end',
+				'type' => 'sectionend',
+			),
+
+			'advanced_title'    => array(
+				'id'    => 'cashu_advanced_title',
+				'title' => __( 'Advanced', 'cashu-for-woocommerce' ),
+				'type'  => 'title',
+			),
 			'debug'             => array(
 				'id'      => 'cashu_debug',
 				'title'   => __( 'Debug log', 'cashu-for-woocommerce' ),
@@ -61,7 +122,7 @@ class GlobalSettings extends \WC_Settings_Page {
 				'label'   => __( 'Enable logging', 'cashu-for-woocommerce' ),
 				'default' => 'no',
 				'desc'    => sprintf(
-					// translators: %s is a link to WooCommerce logs page
+					/* translators: %s is a link to WooCommerce logs page */
 					__( 'Log events to the WooCommerce logs, <a href="%s">view logs</a>.', 'cashu-for-woocommerce' ),
 					Logger::getLogFileUrl()
 				),
