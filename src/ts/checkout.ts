@@ -63,6 +63,7 @@ type RootData = {
   payCallback: string; // NUT-18 HTTP transport target
   paymentId: string; // deterministic id matching what the PR encodes
   description: string; // human-readable PR memo
+  defaultTab: QrMode; // initial active tab; server-side default-path resolution applied
 };
 
 type StoredMintQuote = {
@@ -135,6 +136,12 @@ function readRootData($root: JQuery<HTMLElement>): RootData {
   const paymentId = String($root.data('payment-id') ?? '');
   const description = String($root.data('description') ?? '');
 
+  const rawDefaultTab = String($root.data('default-tab') ?? 'unified');
+  const defaultTab: QrMode =
+    rawDefaultTab === 'cashu' || rawDefaultTab === 'lightning' || rawDefaultTab === 'unified'
+      ? rawDefaultTab
+      : 'unified';
+
   if (
     !Number.isFinite(orderId) ||
     orderId <= 0 ||
@@ -171,6 +178,7 @@ function readRootData($root: JQuery<HTMLElement>): RootData {
     payCallback,
     paymentId,
     description,
+    defaultTab,
   };
 }
 
@@ -383,7 +391,7 @@ jQuery(function ($) {
   // wallet; the clipboard gets raw `lnbc1...` so paste-into-wallet matches
   // every wallet's "paste invoice" field shape.
   let copyTexts: Record<QrMode, string> = { unified: '', cashu: '', lightning: '' };
-  let currentMode: QrMode = 'unified';
+  let currentMode: QrMode = data.defaultTab;
 
   let chain: Promise<any> = Promise.resolve();
   let mintHandleP: Promise<void> | null = null;
