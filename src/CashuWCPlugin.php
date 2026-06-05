@@ -34,6 +34,10 @@ final class CashuWCPlugin {
 	public function run(): void {
 		$this->includes();
 
+		// One-time settings migration. Cheap (one get_option) on every load
+		// after first run; runs at most once per install.
+		self::maybeMigrateSettings();
+
 		// Core boot.
 		add_action( 'init', array( $this, 'loadTextdomain' ) );
 
@@ -102,6 +106,35 @@ final class CashuWCPlugin {
 	public static function initPaymentGateways( array $gateways ): array {
 		$gateways[] = CashuGateway::class;
 		return $gateways;
+	}
+
+	/**
+	 * One-time migration that collapses the dual enable toggles.
+	 *
+	 * Pre-migration the plugin had `cashu_enabled` on the Cashu Settings tab
+	 * AND the gateway's own `enabled` option, both required for is_available().
+	 * We now read only the gateway enable. An install that had cashu_enabled=yes
+	 * but the gateway-enable=no would silently lose checkout at upgrade unless
+	 * we flip the gateway on for them.
+	 *
+	 * Public so tests can call it without booting the full plugin singleton.
+	 */
+	public static function maybeMigrateSettings(): void {
+		if ( 'yes' === get_option( 'cashu_settings_migrated', '' ) ) {
+			return;
+		}
+		if ( 'yes' === get_option( 'cashu_enabled', 'no' ) ) {
+			$gw = get_option( 'woocommerce_cashu_default_settings', array() );
+			if ( ! is_array( $gw ) ) {
+				$gw = array();
+			}
+			if ( ( $gw['enabled'] ?? 'no' ) !== 'yes' ) {
+				$gw['enabled'] = 'yes';
+				update_option( 'woocommerce_cashu_default_settings', $gw );
+			}
+		}
+		delete_option( 'cashu_enabled' );
+		update_option( 'cashu_settings_migrated', 'yes' );
 	}
 
 	public function registerSettingsPage( array $pages ): array {
