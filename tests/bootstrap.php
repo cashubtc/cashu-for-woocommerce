@@ -179,4 +179,21 @@ if (!function_exists('wc_print_r')) {
 	}
 }
 
+// 11. Skeleton WC_Admin_Settings. The plugin's ValidateGlobalSettings calls
+//     ::add_error() / ::add_message() to surface validation feedback on the
+//     settings screen. Tests capture into static arrays and reset() between
+//     cases — call WC_Admin_Settings::reset() in setUp.
+if (!class_exists('WC_Admin_Settings')) {
+	class WC_Admin_Settings {
+		public static array $errors   = array();
+		public static array $messages = array();
+		public static function add_error( $message ): void { self::$errors[] = (string) $message; }
+		public static function add_message( $message ): void { self::$messages[] = (string) $message; }
+		public static function reset(): void {
+			self::$errors   = array();
+			self::$messages = array();
+		}
+	}
+}
+
 echo "Bootstrap loaded – Cashu ready for testing!\n";
