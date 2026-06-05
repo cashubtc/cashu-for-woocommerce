@@ -454,19 +454,19 @@ jQuery(function ($) {
   function applyQrIconForMode(mode: QrMode): void {
     if (!$qrIcon.length) return;
     if (mode === 'unified') {
-      $qrIcon.attr('hidden', '');
+      $qrIcon.prop('hidden', true);
       return;
     }
     const icons = window.cashu_wc?.qr_icons ?? {};
     const src = mode === 'lightning' ? icons.lightning : icons.cashu;
     if (!src) {
-      $qrIcon.attr('hidden', '');
+      $qrIcon.prop('hidden', true);
       return;
     }
     if ($qrIconImg.attr('src') !== src) {
       $qrIconImg.attr('src', src);
     }
-    $qrIcon.removeAttr('hidden');
+    $qrIcon.prop('hidden', false);
   }
   // Apply the default mode's overlay immediately so the unified tab renders
   // without an icon from first paint.
@@ -483,7 +483,7 @@ jQuery(function ($) {
 
   function showRecovery(token: string): void {
     recoveryToken = token;
-    $recovery.removeAttr('hidden');
+    $recovery.prop('hidden', false);
   }
 
   // ------------------------------

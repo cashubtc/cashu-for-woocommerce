@@ -54,10 +54,19 @@ final class CashuGatewayBlocks extends AbstractPaymentMethodType {
 		$script_url        = CASHU_WC_URL . 'assets/js/frontend/blocks.js';
 		$script_asset_path =
 		CASHU_WC_PATH . 'assets/js/frontend/blocks.asset.php';
-		$script_asset      = file_exists( $script_asset_path )
+		// blocks.js reads wc.wcSettings, wc.wcBlocksRegistry, wp.htmlEntities
+		// and wp.element — declare them so WC Blocks doesn't warn (and so
+		// they're guaranteed loaded before our script runs).
+		$default_deps = array(
+			'wc-settings',
+			'wc-blocks-registry',
+			'wp-html-entities',
+			'wp-element',
+		);
+		$script_asset = file_exists( $script_asset_path )
 		? require $script_asset_path
 		: array(
-			'dependencies' => array(),
+			'dependencies' => $default_deps,
 			'version'      => CASHU_WC_VERSION,
 		);
 
