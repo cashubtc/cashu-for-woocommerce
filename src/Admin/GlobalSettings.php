@@ -89,7 +89,7 @@ class GlobalSettings extends \WC_Settings_Page {
 				'title' => __( 'Payment paths', 'cashu-for-woocommerce' ),
 				'type'  => 'title',
 				'desc'  => __(
-					'Choose which payment options are offered at checkout and which one opens first. Unified (Auto) is a single BIP-321 QR that works with both Cashu and Lightning wallets, and needs both legs enabled.',
+					'Choose which payment options are offered at checkout and which one opens first. Unified (Auto) is a single BIP-321 QR that works with both Cashu and Lightning wallets, and needs both options enabled.',
 					'cashu-for-woocommerce'
 				),
 			),
@@ -102,9 +102,9 @@ class GlobalSettings extends \WC_Settings_Page {
 			// visually groups them under one "Show payment paths" label.
 			'path_unified'      => array(
 				'id'            => 'cashu_paths[unified]',
-				'title'         => __( 'Unified (Auto)', 'cashu-for-woocommerce' ),
+				'title'         => __( 'Show payment paths', 'cashu-for-woocommerce' ),
 				'type'          => 'checkbox',
-				'label'         => __( 'Show the Unified (BIP-321) tab — requires both Cashu and Lightning enabled.', 'cashu-for-woocommerce' ),
+				'desc'          => __( 'Unified (Auto) — single BIP-321 QR. Requires both Cashu and Lightning enabled.', 'cashu-for-woocommerce' ),
 				'default'       => 'yes',
 				'checkboxgroup' => 'start',
 			),
@@ -112,7 +112,7 @@ class GlobalSettings extends \WC_Settings_Page {
 				'id'            => 'cashu_paths[cashu]',
 				'title'         => '',
 				'type'          => 'checkbox',
-				'label'         => __( 'Show the Cashu (NUT-18) tab.', 'cashu-for-woocommerce' ),
+				'desc'          => __( 'Cashu (NUT-18 payment request).', 'cashu-for-woocommerce' ),
 				'default'       => 'yes',
 				'checkboxgroup' => '',
 			),
@@ -120,7 +120,7 @@ class GlobalSettings extends \WC_Settings_Page {
 				'id'            => 'cashu_paths[lightning]',
 				'title'         => '',
 				'type'          => 'checkbox',
-				'label'         => __( 'Show the Lightning (BOLT11) tab.', 'cashu-for-woocommerce' ),
+				'desc'          => __( 'Lightning (BOLT11 invoice).', 'cashu-for-woocommerce' ),
 				'default'       => 'yes',
 				'checkboxgroup' => 'end',
 			),
