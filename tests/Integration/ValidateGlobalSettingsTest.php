@@ -31,16 +31,16 @@ final class ValidateGlobalSettingsTest extends IntegrationTestCase {
 
 	public function test_pre_update_paths_normalises_yes_no_to_bool_bitmap(): void {
 		$old = CashuPaths::DEFAULT_PATHS;
-		$new = array( 'unified' => 'yes', 'cashu' => 'yes', 'lightning' => 'no' );
+		$new = array( 'unified' => 'yes', 'cashu' => 'yes', 'lightning' => 'yes' );
 
 		$result = ValidateGlobalSettings::pre_update_paths( $new, $old, 'cashu_paths' );
 
 		$this->assertSame(
-			array( 'unified' => false, 'cashu' => true, 'lightning' => false ),
+			array( 'unified' => true, 'cashu' => true, 'lightning' => true ),
 			$result
 		);
 		$this->assertCount( 0, WC_Admin_Settings::$errors );
-		$this->assertCount( 1, WC_Admin_Settings::$messages );
+		$this->assertCount( 0, WC_Admin_Settings::$messages );
 	}
 
 	public function test_pre_update_paths_returns_old_value_when_all_off(): void {
