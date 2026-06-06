@@ -21,28 +21,38 @@ jobs:
       TAG_NAME: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.tag_name }}
 
     steps:
+      # All actions pinned to commit SHAs (not moving tags) to guard
+      # against an upstream tag being repointed at a malicious commit.
+      # Trailing comment is the human-readable version that SHA
+      # corresponded to at pin time. .github/dependabot.yml opens grouped
+      # weekly PRs to bump them.
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           ref: ${{ env.TAG_NAME }}
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@8358ee0e2e8afe63c2fb8253d1d52085811ab1e5  # v2
         with:
           php-version: '8.2'
           tools: composer:v2
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
         with:
           node-version: '22.x'
           cache: npm
 
       - name: Validate tag format (vX.X.X) and versions match
+        # TAG comes via env: (not ${{ }} interpolation inside run:) so
+        # the shell treats it as a plain variable and a hostile tag
+        # value cannot break out into the script. See
+        # https://github.blog/security/vulnerability-research/how-to-catch-github-actions-workflow-injections-before-attackers-do/
+        env:
+          TAG: ${{ env.TAG_NAME }}
         run: |
           set -euo pipefail
 
-          TAG="${{ env.TAG_NAME }}"
           echo "Release tag: ${TAG}"
 
           if ! [[ "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -86,7 +96,7 @@ jobs:
           fi
 
       - name: Upload zip to GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65  # v2.6.2
         with:
           tag_name: ${{ env.TAG_NAME }}
           overwrite: true
