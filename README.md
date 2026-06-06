@@ -51,6 +51,10 @@ No, the plugin requires only your public lightning address.
 
 Payments in Cashu ecash are melted to bitcoin and send via lightning in real time, so no sensitive keys are required on the server.
 
+## Source ##
+
+Development happens on [GitHub](https://github.com/robwoodgate/cashu-for-woocommerce). Issues and pull requests are welcome.
+
 ## Changelog ##
 
 ### 0.2.0 ###
