@@ -23,7 +23,7 @@ npm install
 composer install
 ```
 
-This installs all the development dependencies, including Grunt, Prettier, Vite and PHPUnit.
+This installs all the development dependencies, including Prettier, Vite and PHPUnit.
 
 The rest of this file gives details on all the developer tools, but here's a TL;DR:
 
@@ -252,7 +252,7 @@ Then refresh the page in the browser. There is no need to restart the wp-env con
 
 ## Useful commands
 
-We use a Gruntfile to perform various tasks, which you can run via npm scripts
+Two small PHP scripts under `scripts/` regenerate the build outputs, wired up as npm scripts
 
 ```bash
 npm run start
@@ -260,9 +260,8 @@ npm run start
 
 That will
 
-* Scan PHP files and ensure all translation functions use the cashu-for-woocommerce text domain
-* Regenerate the languages/cashu-for-woocommerce.pot file
-* Convert readme.txt into README.md
+* Regenerate the `languages/cashu-for-woocommerce.pot` file (via `scripts/build-pot.php`)
+* Convert `readme.txt` into `README.md` (via `scripts/build-readme.php`)
 
 You can run these individually if you prefer.
 
@@ -273,8 +272,6 @@ npm run i18n
 # readme conversion
 npm run readme
 ```
-
-If you have `grunt-cli` installed globally you can also run `grunt`, `grunt i18n` or `grunt readme` directly, but this is optional because the npm scripts always use the local Grunt binary in node_modules.
 
 ## Code style and formatting
 
@@ -349,7 +346,7 @@ A typical workflow for a small change might look like this
 3. Run the tools
 
 	```bash
-	# Runs build, format, lint, grunt etc
+	# Runs build, format, lint, i18n, readme etc
 	# Ensure it completes with "Done"
 	npm run build
 	```
