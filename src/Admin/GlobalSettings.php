@@ -22,7 +22,8 @@ class GlobalSettings extends \WC_Settings_Page {
 		}
 		// Only on our tab — check the `tab` query arg.
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		if ( ( $_GET['tab'] ?? '' ) !== 'cashu_settings' ) {
+		$tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : '';
+		if ( 'cashu_settings' !== $tab ) {
 			return;
 		}
 		wp_enqueue_script(

@@ -266,11 +266,15 @@ final class ValidateGlobalSettings {
 	public static function sanitize_default_path( $value, $option = array(), $raw_value = null ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter
 		$stored = is_string( $value ) ? $value : '';
 
-		// phpcs:disable WordPress.Security.NonceVerification.Missing
+		// CashuPaths::sanitize() is the sanitizer (it normalises the array
+		// shape, casts each entry to bool, and rejects unknown keys), so
+		// the raw $_POST value is correctly handled even though the sniff
+		// can't see that through the call.
+		// phpcs:disable WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 		$raw_paths = isset( $_POST['cashu_paths'] )
 			? wp_unslash( $_POST['cashu_paths'] )
 			: CashuPaths::DEFAULT_PATHS;
-		// phpcs:enable WordPress.Security.NonceVerification.Missing
+		// phpcs:enable WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 
 		$paths = CashuPaths::sanitize( $raw_paths );
 
