@@ -863,6 +863,12 @@ jQuery(function ($) {
     void claimMeltPaid(typeof preimage === 'string' ? preimage : '');
   }
 
+  // Single-flight gate over the success branch shared by claimMeltPaid()
+  // and checkOrderStatus(). Both endpoints are server-idempotent and either
+  // can win the race on a Lightning settlement, but only one needs to fire
+  // confetti + redirect.
+  let finalised = false;
+
   async function claimMeltPaid(preimage: string): Promise<void> {
     const restRoot = String(window.cashu_wc?.rest_root ?? '');
     const route = String(window.cashu_wc?.claim_route ?? '');
@@ -884,6 +890,8 @@ jQuery(function ($) {
       });
       const json = (await res.json()) as ConfirmPaidResponse;
       if (json?.state === 'PAID') {
+        if (finalised) return;
+        finalised = true;
         setStatus(t('payment_confirmed'));
         doConfettiBomb();
         await delay(2000);
@@ -937,6 +945,8 @@ jQuery(function ($) {
         // snapshot so a future reload of this order doesn't try to
         // re-melt already-spent proofs.
         clearStrandedProofs(data.mintQuote.id);
+        if (finalised) return json;
+        finalised = true;
         setStatus(t('payment_confirmed'));
         doConfettiBomb();
         await delay(2000);
