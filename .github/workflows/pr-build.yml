@@ -1,0 +1,62 @@
+name: PR build check
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # Actions pinned to commit SHAs (not moving tags) to guard against
+      # an upstream tag being repointed at a malicious commit. Trailing
+      # comments are the human-readable version that SHA corresponded to
+      # at pin time. .github/dependabot.yml opens grouped weekly PRs to
+      # bump them.
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@8358ee0e2e8afe63c2fb8253d1d52085811ab1e5  # v2
+        with:
+          php-version: '8.3'
+          tools: composer:v2
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
+        with:
+          node-version: '22.x'
+          cache: npm
+
+      - name: Install zip + gettext
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zip gettext
+
+      - name: Build via build.sh
+        run: bash ./build.sh
+
+      - name: Verify zip was produced
+        run: test -f cashu-for-woocommerce.zip
+
+      - name: Verify .mo generated when .po exists
+        run: |
+          set -euo pipefail
+          if ls languages/*.po >/dev/null 2>&1; then
+            for po in languages/*.po; do
+              mo="${po%.po}.mo"
+              test -f "$mo" || { echo "Missing $mo"; exit 1; }
+            done
+          fi
+
+      - name: Run PHPUnit
+        run: composer test
