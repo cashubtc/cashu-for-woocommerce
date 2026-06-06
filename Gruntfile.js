@@ -39,7 +39,12 @@ module.exports = function( grunt ) {
 						'x-poedit-keywordslist': true
 					},
 					type: 'wp-plugin',
-					updateTimestamp: true
+					// Don't bump POT-Creation-Date on every build — that
+					// dirties the working tree even when no strings have
+					// changed. The header is metadata for human translators,
+					// not load-bearing for runtime; git log on the .pot is
+					// the authoritative "last updated" anyway.
+					updateTimestamp: false
 				}
 			}
 		},
