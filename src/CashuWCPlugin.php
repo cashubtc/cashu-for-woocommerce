@@ -96,6 +96,7 @@ final class CashuWCPlugin {
 	}
 
 	public function loadTextdomain(): void {
+		// phpcs:ignore PluginCheck.CodeAnalysis.DiscouragedFunctions.load_plugin_textdomainFound -- self-hosted installs (GitHub, ZIP) need this to pick up the shipped /languages/*.mo; wp.org auto-load only covers wp.org-hosted installs.
 		load_plugin_textdomain(
 			'cashu-for-woocommerce',
 			false,
@@ -197,8 +198,9 @@ final class CashuWCPlugin {
 			wp_send_json_error( array( 'message' => __( 'Unauthorized', 'cashu-for-woocommerce' ) ), 401 );
 		}
 
+		// Nonce already verified above via check_ajax_referer().
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing
-		$dismiss_forever_raw = isset( $_POST['dismiss_forever'] ) ? wp_unslash( $_POST['dismiss_forever'] ) : '0';
+		$dismiss_forever_raw = isset( $_POST['dismiss_forever'] ) ? sanitize_text_field( wp_unslash( $_POST['dismiss_forever'] ) ) : '0';
 		$dismissForever      = \filter_var( $dismiss_forever_raw, \FILTER_VALIDATE_BOOL );
 
 		if ( $dismissForever ) {
@@ -262,7 +264,6 @@ final class CashuWCPlugin {
 			return;
 		}
 
-		// Review message for standalone
 		$reviewMessage = sprintf(
 			/* translators: 1: opening <a> tag to the donation page, 2: closing </a> tag, 3: opening <button> tag for "remind me later", 4: closing </button> tag, 5: opening <button> tag for "stop reminding forever", 6: closing </button> tag. Do not translate the HTML tags, keep the placeholder numbers. */
 			__( 'Thank you for using Cashu for WooCommerce! If you like the plugin, %1$splease buy the developer a coffee%2$s. %3$sRemind me later%4$s %5$sStop reminding me forever%6$s', 'cashu-for-woocommerce' ),
@@ -273,18 +274,6 @@ final class CashuWCPlugin {
 			'<button class="cashu-review-dismiss-forever" type="button">',
 			'</button>'
 		);
-
-		// Review message for Wordpress.com
-		// $reviewMessage = sprintf(
-		//  /* translators: 1: opening <a> tag to the WordPress.org review page, 2: closing </a> tag, 3: opening <button> tag for "remind me later", 4: closing </button> tag, 5: opening <button> tag for "stop reminding forever", 6: closing </button> tag. Do not translate the HTML tags, keep the placeholder numbers. */
-		//  __( 'Thank you for using Cashu for WooCommerce! If you like the plugin, we would love if you %1$sleave us a review%2$s. %3$sRemind me later%4$s %5$sStop reminding me forever%6$s', 'cashu-for-woocommerce' ),
-		//  '<a href="https://wordpress.org/support/plugin/cashu-for-woocommerce/reviews/?filter=5#new-post" target="_blank" rel="noopener noreferrer">',
-		//  '</a>',
-		//  '<button class="cashu-review-dismiss" type="button">',
-		//  '</button>',
-		//  '<button class="cashu-review-dismiss-forever" type="button">',
-		//  '</button>'
-		// );
 
 		Notice::addNotice( 'info', $reviewMessage, false, 'cashu-review-notice' );
 	}

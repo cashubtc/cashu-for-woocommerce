@@ -342,13 +342,11 @@ class CashuGateway extends \WC_Payment_Gateway {
 			/**
 			 * Filter the order status for cashu payment (Default: 'pending').
 			 *
-			 * @since 3.6.0
-			 *
 			 * @param string $status The default status.
 			 * @param object $order  The order object.
 			 */
 			$process_payment_status = apply_filters(
-				'woocommerce_cashu_process_payment_order_status',
+				'cashu_wc_process_payment_order_status',
 				OrderStatus::PENDING,
 				$fresh
 			);

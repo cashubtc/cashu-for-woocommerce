@@ -32,6 +32,12 @@ final class OrderLock {
 		$key        = self::key( $order_id, $scope );
 		$expires_at = time() + max( 1, $ttl_seconds );
 
+		// Direct $wpdb is required: we need INSERT IGNORE's atomic
+		// "succeed only if the row does not exist" semantic for the lock.
+		// add_option() is INSERT ... ON DUPLICATE KEY UPDATE — not a CAS
+		// primitive — and an object cache would mask the conflict we are
+		// relying on to fail loudly.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$inserted = $wpdb->query(
 			$wpdb->prepare(
 				"INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, %s)",
@@ -44,6 +50,9 @@ final class OrderLock {
 			return true;
 		}
 
+		// Read the live row, not a cache — a stale object-cache value
+		// would let us delete a lock another process already refreshed.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$existing = $wpdb->get_var(
 			$wpdb->prepare(
 				"SELECT option_value FROM {$wpdb->options} WHERE option_name = %s",
@@ -61,6 +70,7 @@ final class OrderLock {
 		// Stale lock — only clear the row we read; if another process
 		// raced us to refresh it, the conditional DELETE leaves theirs
 		// intact and we bail out.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$deleted = $wpdb->query(
 			$wpdb->prepare(
 				"DELETE FROM {$wpdb->options} WHERE option_name = %s AND option_value = %s",
@@ -80,6 +90,9 @@ final class OrderLock {
 	 */
 	public static function release( int $order_id, string $scope ): void {
 		global $wpdb;
+		// Direct delete: the lock row must not survive in any object cache
+		// after release, or the next acquire() would falsely see it held.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$wpdb->query(
 			$wpdb->prepare(
 				"DELETE FROM {$wpdb->options} WHERE option_name = %s",
@@ -108,6 +121,8 @@ final class OrderLock {
 
 	private static function insert_lock( string $key, int $expires_at ): bool {
 		global $wpdb;
+		// Same INSERT IGNORE atomicity requirement as acquire().
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$inserted = $wpdb->query(
 			$wpdb->prepare(
 				"INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, %s)",
@@ -121,6 +136,9 @@ final class OrderLock {
 
 	private static function is_held( int $order_id, string $scope ): bool {
 		global $wpdb;
+		// Spin-wait poll: must see the live row, not a cached value, or
+		// the wait would never observe another process releasing.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
 		$value = $wpdb->get_var(
 			$wpdb->prepare(
 				"SELECT option_value FROM {$wpdb->options} WHERE option_name = %s",
