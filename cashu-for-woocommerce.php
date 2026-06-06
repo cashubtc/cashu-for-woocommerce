@@ -26,6 +26,22 @@ define( 'CASHU_WC_URL', plugin_dir_url( __FILE__ ) );
 define( 'CASHU_WC_BASE', plugin_basename( __FILE__ ) ); // plugin_folder/plugin_name.php
 define( 'CASHU_WC_BIP177_SYMBOL', '₿' );
 
+// PSR-4 autoload for the plugin's own namespace. The plugin has no
+// production Composer dependencies, so we don't ship vendor/ — a hand-
+// rolled loader for Cashu\WC\* → src/ is enough and avoids the
+// composer.json/vendor coupling that triggers the wp.org Plugin Check
+// "missing_composer_json_file" warning.
+spl_autoload_register(
+	static function ( $class_name ) {
+		if ( 0 !== strncmp( 'Cashu\\WC\\', $class_name, 9 ) ) {
+			return;
+		}
+		$file = __DIR__ . '/src/' . str_replace( '\\', '/', substr( $class_name, 9 ) ) . '.php';
+		if ( is_file( $file ) ) {
+			require $file;
+		}
+	}
+);
+
 // * Instantiate main plugin
-require_once CASHU_WC_PATH . 'src/CashuWCPlugin.php';
 \Cashu\WC\CashuWCPlugin::instance()->run();

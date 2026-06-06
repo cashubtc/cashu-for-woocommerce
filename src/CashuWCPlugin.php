@@ -84,11 +84,6 @@ final class CashuWCPlugin {
 	}
 
 	private function includes(): void {
-		$autoloader = CASHU_WC_PATH . 'vendor/autoload.php';
-		if ( file_exists( $autoloader ) ) {
-			require_once $autoloader;
-		}
-
 		// Make sure WP internal functions are available.
 		if ( ! function_exists( 'is_plugin_active' ) ) {
 			include_once ABSPATH . 'wp-admin/includes/plugin.php';

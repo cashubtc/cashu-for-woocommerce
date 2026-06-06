@@ -20,18 +20,15 @@ if compgen -G "languages/*.po" > /dev/null; then
   fi
 fi
 
-# Regenerate autoload without dev deps before zipping. The zip only bundles
-# vendor/autoload.php + vendor/composer/, NOT the actual dev packages. Without
-# this step Composer's autoload_files.php still references dev-only packages
-# (mockery, phpunit) as files-to-load on bootstrap, and production sites fatal
-# with "Failed opening required '.../mockery/.../helpers.php'". Restore the
-# dev autoload on exit so the local working tree stays usable for tests.
-restore_dev_autoload() { composer dump-autoload --no-scripts >/dev/null 2>&1 || true; }
-trap restore_dev_autoload EXIT
-composer dump-autoload --no-dev --classmap-authoritative --no-scripts
+# Scrub macOS .DS_Store files from the source tree before zipping. The plugin
+# has no production composer deps so vendor/ is intentionally NOT bundled —
+# bootstrap PSR-4 autoload in cashu-for-woocommerce.php covers Cashu\WC\* →
+# src/. Skipping vendor/ also avoids wp.org's "missing_composer_json_file"
+# warning that fires when vendor/ ships without composer.json beside it.
+find assets languages src -name '.DS_Store' -delete 2>/dev/null || true
 
 # Create plugin
 rm -f "${pkg}"
 echo "Creating zip file..."
-zip -rq "${pkg}" assets languages src vendor/autoload.php vendor/composer cashu-for-woocommerce.php license.txt readme.txt -x="src/ts/*"
+zip -rq "${pkg}" assets languages src cashu-for-woocommerce.php license.txt readme.txt -x="src/ts/*"
 echo "Done"
