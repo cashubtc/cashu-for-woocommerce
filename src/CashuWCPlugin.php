@@ -264,6 +264,18 @@ final class CashuWCPlugin {
 			return;
 		}
 
+		// First-run delay: on the first admin pageload after install/upgrade,
+		// record the earliest time we're allowed to nag. Reuses the same
+		// 30-day window as "Remind me later" so users only model one concept.
+		$earliest_show = (int) get_option( 'cashu_review_earliest_show', 0 );
+		if ( 0 === $earliest_show ) {
+			update_option( 'cashu_review_earliest_show', time() + ( DAY_IN_SECONDS * 30 ) );
+			return;
+		}
+		if ( time() < $earliest_show ) {
+			return;
+		}
+
 		$reviewMessage = sprintf(
 			/* translators: 1: opening <a> tag to the donation page, 2: closing </a> tag, 3: opening <button> tag for "remind me later", 4: closing </button> tag, 5: opening <button> tag for "stop reminding forever", 6: closing </button> tag. Do not translate the HTML tags, keep the placeholder numbers. */
 			__( 'Thank you for using Cashu for WooCommerce! If you like the plugin, %1$splease buy the developer a coffee%2$s. %3$sRemind me later%4$s %5$sStop reminding me forever%6$s', 'cashu-for-woocommerce' ),
