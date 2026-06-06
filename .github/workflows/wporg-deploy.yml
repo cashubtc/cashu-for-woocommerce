@@ -1,0 +1,153 @@
+name: Deploy to WordPress.org plugin directory
+
+permissions:
+  contents: read
+
+# Mirrors release-zip.yml's trigger shape: auto on a non-prerelease GitHub
+# release publish, plus a manual workflow_dispatch (with optional dry_run)
+# for first-time setup or re-publishing an existing tag without cutting a
+# fresh GitHub release.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag to deploy (vX.Y.Z, must already exist)'
+        required: true
+        type: string
+      dry_run:
+        description: 'Dry run — build + validate only, skip the SVN push'
+        type: boolean
+        default: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Never auto-deploy a prerelease. Manual dispatch always runs.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.release.prerelease == false }}
+    env:
+      TAG_NAME: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.tag_name }}
+
+    steps:
+      # All third-party (and first-party) actions are pinned to commit
+      # SHAs rather than moving tags, to guard against an upstream tag
+      # being repointed at a malicious commit. Trailing comment is the
+      # human-readable version that SHA corresponded to at pin time —
+      # bump SHA + comment together (Dependabot can do this for you).
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          ref: ${{ env.TAG_NAME }}
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@8358ee0e2e8afe63c2fb8253d1d52085811ab1e5  # v2
+        with:
+          php-version: '8.2'
+          tools: composer:v2
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
+        with:
+          node-version: '22.x'
+          cache: npm
+
+      # Same shape as release-zip.yml's validation, plus a check that
+      # readme.txt's `Stable tag:` agrees too. wp.org's install page reads
+      # `Stable tag` from /trunk/readme.txt — if it doesn't match the tag
+      # we're pushing, users would still see the old version on the plugin
+      # page even though /trunk/ is updated. Catch it here, not after a
+      # bad SVN push.
+      - name: Validate tag format and that all four version markers agree
+        # TAG comes via env: (not ${{ }} interpolation inside run:) so the
+        # shell treats it as a plain variable and a malicious tag value
+        # cannot break out into the script. See
+        # https://github.blog/security/vulnerability-research/how-to-catch-github-actions-workflow-injections-before-attackers-do/
+        env:
+          TAG: ${{ env.TAG_NAME }}
+        run: |
+          set -euo pipefail
+
+          if ! [[ "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Tag must look like vX.Y.Z, got '${TAG}'"
+            exit 1
+          fi
+
+          TAG_VER="${TAG#v}"
+          PKG_VER="$(node -p "require('./package.json').version" | tr -d '\r')"
+          PLUGIN_VER="$(
+            grep -m1 -E '^[[:space:]]*\*?[[:space:]]*Version:[[:space:]]*' cashu-for-woocommerce.php \
+              | sed -E 's/^[[:space:]]*\*?[[:space:]]*Version:[[:space:]]*//' \
+              | tr -d '\r'
+          )"
+          README_STABLE="$(
+            grep -m1 -E '^Stable tag:[[:space:]]*' readme.txt \
+              | sed -E 's/^Stable tag:[[:space:]]*//' \
+              | tr -d '\r'
+          )"
+
+          echo "Tag version:          ${TAG_VER}"
+          echo "package.json version: ${PKG_VER}"
+          echo "Plugin header:        ${PLUGIN_VER}"
+          echo "readme.txt Stable:    ${README_STABLE}"
+
+          [ "${TAG_VER}" = "${PKG_VER}" ]      || { echo "::error::Mismatch: tag vs package.json";    exit 1; }
+          [ "${TAG_VER}" = "${PLUGIN_VER}" ]   || { echo "::error::Mismatch: tag vs plugin header";   exit 1; }
+          [ "${TAG_VER}" = "${README_STABLE}" ] || { echo "::error::Mismatch: tag vs readme.txt Stable tag — wp.org install page would still show the old version"; exit 1; }
+
+      - name: Install build prereqs (gettext, zip)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gettext zip
+
+      - name: Build via build.sh
+        # Single source of truth for what's in the package — exactly what
+        # the GitHub release zip contains.
+        run: bash ./build.sh
+
+      - name: Stage build directory for wp.org deploy
+        # 10up's deploy action wants a directory of plugin files, not a
+        # zip. Unpack the zip build.sh just produced so we deploy the
+        # bit-for-bit same contents that ship as the GitHub release
+        # artifact — no risk of the two paths drifting.
+        run: |
+          set -euo pipefail
+          STAGE="$RUNNER_TEMP/wp-stage"
+          rm -rf "$STAGE"
+          mkdir -p "$STAGE"
+          unzip -q cashu-for-woocommerce.zip -d "$STAGE"
+
+          # Defensive sanity check before pushing to anyone's SVN
+          test -f "$STAGE/cashu-for-woocommerce.php" || {
+            echo "::error::Staged build missing main plugin file at root"
+            exit 1
+          }
+          test -f "$STAGE/readme.txt" || {
+            echo "::error::Staged build missing readme.txt at root"
+            exit 1
+          }
+
+          echo "Staged top-level entries:"
+          (cd "$STAGE" && ls -la)
+          echo "STAGE_DIR=${STAGE}" >> "$GITHUB_ENV"
+
+      - name: Deploy to WordPress.org
+        if: ${{ github.event_name == 'release' || inputs.dry_run != true }}
+        uses: 10up/action-wordpress-plugin-deploy@54bd289b8525fd23a5c365ec369185f2966529c2  # v2.3.0
+        env:
+          SVN_USERNAME: ${{ secrets.WPORG_SVN_USERNAME }}
+          SVN_PASSWORD: ${{ secrets.WPORG_SVN_PASSWORD }}
+          SLUG: cashu-for-woocommerce
+          VERSION: ${{ env.TAG_NAME }}
+          BUILD_DIR: ${{ env.STAGE_DIR }}
+          # ASSETS_DIR defaults to .wordpress-org/ — when that dir does
+          # not exist (as today), the action skips the asset push without
+          # failing. Add banner/icon/screenshots there later to populate
+          # the wp.org plugin page graphics.
+
+      - name: Dry-run summary
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run == true }}
+        run: |
+          echo "Dry run complete. The build was staged and validated;"
+          echo "no SVN push was attempted. Re-run with dry_run=false"
+          echo "(or just publish the GitHub release) to actually deploy."

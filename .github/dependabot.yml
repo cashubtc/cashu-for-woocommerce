@@ -1,0 +1,46 @@
+version: 2
+
+updates:
+  # GitHub Actions — the pinned SHAs in our workflows would otherwise
+  # rot. Single grouped PR per week, easier to review than one per action.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      github-actions:
+        patterns: ['*']
+    commit-message:
+      prefix: ci
+      include: scope
+    # Cooldown applies to version updates only — security updates always
+    # go through immediately regardless. 7 days is enough for the
+    # community to notice a tag repointed at malicious code or a botched
+    # release, without holding back legitimate fixes longer than needed.
+    cooldown:
+      default-days: 7
+
+  # npm — primary watch is @cashu/cashu-ts (mint-spec churn carries
+  # protocol meaning we want to read, not auto-merge). Everything else
+  # is grouped into one weekly PR for easy review.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      npm:
+        patterns: ['*']
+        # Keep cashu-ts as its own PR — each release tends to carry
+        # protocol-relevant changes worth reading on their own.
+        exclude-patterns: ['@cashu/cashu-ts']
+    commit-message:
+      prefix: chore
+      include: scope
+    # Match the cashu-ts repo's stability policy: hold bumps for 7
+    # days so a bad release / hijacked tag / supply-chain incident has
+    # time to surface in the wider community before we adopt it.
+    # Security updates bypass cooldown automatically.
+    cooldown:
+      default-days: 7
