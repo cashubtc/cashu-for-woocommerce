@@ -5,7 +5,7 @@
 **Requires at least:** 6.5  
 **Tested up to:** 6.8.3  
 **Requires PHP:** 8.3  
-**Stable tag:** 0.1.1  
+**Stable tag:** 0.2.0  
 **License:** MIT  
 **License URI:** https://github.com/robwoodgate/cashu-for-woocommerce/blob/main/license.txt  
 
@@ -50,6 +50,14 @@ No, the plugin requires only your public lightning address.
 Payments in Cashu ecash are melted to bitcoin and send via lightning in real time, so no sensitive keys are required on the server.
 
 ## Changelog ##
+
+### 0.2.0 ###
+New: choose which payment tabs (Unified / Cashu / Lightning) appear at checkout, and which is the default.
+New: settings probe the configured mint on save to verify it supports BOLT11 sat for mint and melt.
+Improved: per-tab QR centre icons; uppercase LIGHTNING QR for broader wallet compatibility.
+Improved: stranded ecash proofs can self-recover from local storage on page refresh.
+Fixed: already-paid quotes no longer trigger the recovery UI when refreshing the checkout.
+Fixed: payment success is shown visually before redirect to the thank-you page.
 
 ### 0.1.1 ###
 Adds comment to LN invoice (if supported)
