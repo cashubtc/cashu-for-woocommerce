@@ -20,7 +20,7 @@ export default defineConfig({
     },
     outDir: 'assets/js/cashu',
     target: 'es2020',
-    minify: 'esbuild',
+    minify: 'oxc',
     sourcemap: true,
 
     // Resolve mixed ESM/CJS in deps
