@@ -392,8 +392,8 @@ msgid "Checkout instructions"
 msgstr "Instructions de paiement"
 
 #: src/Gateway/CashuGateway.php:84
-msgid "You will be able to complete your purchase using Cashu ecash."
-msgstr "Vous pourrez finaliser votre achat en utilisant l’ecash Cashu."
+msgid "Make a private Bitcoin payment using Cashu ecash or Lightning."
+msgstr "Effectuez un paiement privé en Bitcoin via l’ecash Cashu ou Lightning."
 
 #: src/Gateway/CashuGateway.php:90
 msgid "Enable/Disable"

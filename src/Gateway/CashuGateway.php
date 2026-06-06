@@ -32,7 +32,7 @@ class CashuGateway extends \WC_Payment_Gateway {
 	public function __construct() {
 		// Init gateway
 		$this->id                 = 'cashu_default';
-		$this->icon               = CASHU_WC_URL . 'assets/images/cashu-logo.png';
+		$this->icon               = CASHU_WC_URL . 'assets/images/cashu-logo-chip.png';
 		$this->method_title       = __( 'Cashu ecash', 'cashu-for-woocommerce' );
 		$this->method_description = __(
 			'Accept Cashu tokens and melt them straight to your Bitcoin lightning address.',
@@ -82,7 +82,7 @@ class CashuGateway extends \WC_Payment_Gateway {
 				'title'   => __( 'Checkout instructions', 'cashu-for-woocommerce' ),
 				'type'    => 'textarea',
 				'default' => __(
-					'You will be able to complete your purchase using Cashu ecash.',
+					'Make a private Bitcoin payment using Cashu ecash or Lightning.',
 					'cashu-for-woocommerce'
 				),
 			),
