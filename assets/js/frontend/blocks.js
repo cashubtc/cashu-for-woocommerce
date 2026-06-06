@@ -31,7 +31,7 @@ const Label = (props) => {
       src: settings.icon,
       alt: label,
       style: { height: '24px', width: 'auto' },
-    })
+    }),
   );
 };
 
