@@ -29,7 +29,7 @@ Checkout presents a single QR code that any of the following can scan and pay:
 - Privacy, just like cash: All payments are routed through your trusted Cashu mint. Your lightning address stays private, so do your customer's payments.
 - Flexibility: switch trusted mints at any time to find the best fees and service.
 - Pay via Lightning: Customers can pay from a regular bitcoin lightning wallet.
-- Pay via Cashu (NUT-18): Customer wallets handle their own input fees, so the headline price is exactly what the merchant receives.
+- Pay via Cashu: Customers can send Cashu ecash direct from any Cashu wallet.
 - Wallet-agnostic QR: Unified BIP-321 QR by default, with Cashu-only and Lightning-only fallback tabs for older wallets.
 - Safety: You only have to trust one Cashu mint (your trusted mint).
 - Accurate prices: Spot rates are taken from coinbase / coingecko.
@@ -49,7 +49,7 @@ Checkout presents a single QR code that any of the following can scan and pay:
 
 No, the plugin requires only your public lightning address.
 
-Payments in Cashu ecash are melted to bitcoin and send via lightning in real time, so no sensitive keys are required on the server.
+Payments in Cashu ecash are melted to bitcoin and sent to you via lightning in real time, so no sensitive keys are required on the server.
 
 == Source ==
 
@@ -59,8 +59,8 @@ Development happens on [GitHub](https://github.com/robwoodgate/cashu-for-woocomm
 
 = 0.2.0 =
 New: choose which payment tabs (Unified / Cashu / Lightning) appear at checkout, and which is the default.
-New: settings probe the configured mint on save to verify it supports BOLT11 sat for mint and melt.
-Improved: per-tab QR centre icons; uppercase LIGHTNING QR for broader wallet compatibility.
+New: settings probe the configured mint on save to verify it supports lightning (BOLT11) sat for mint and melt.
+Improved: per-tab QR centre icons.
 Improved: stranded ecash proofs can self-recover from local storage on page refresh.
 Fixed: already-paid quotes no longer trigger the recovery UI when refreshing the checkout.
 Fixed: payment success is shown visually before redirect to the thank-you page.
