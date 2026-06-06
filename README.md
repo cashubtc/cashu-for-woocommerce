@@ -3,11 +3,13 @@
 **Donate link:** https://donate.cogmentis.com/  
 **Tags:** payments, bitcoin, lightning, checkout, cashu  
 **Requires at least:** 6.5  
-**Tested up to:** 6.8.3  
+**Tested up to:** 7.0  
 **Requires PHP:** 8.3  
 **Stable tag:** 0.2.0  
 **License:** MIT  
 **License URI:** https://github.com/robwoodgate/cashu-for-woocommerce/blob/main/license.txt  
+
+Accept Cashu ecash and Lightning payments in WooCommerce, automatically melted to your Bitcoin lightning address.
 
 ## Description ##
 
