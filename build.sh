@@ -30,5 +30,5 @@ find assets languages src -name '.DS_Store' -delete 2>/dev/null || true
 # Create plugin
 rm -f "${pkg}"
 echo "Creating zip file..."
-zip -rq "${pkg}" assets languages src cashu-for-woocommerce.php license.txt readme.txt -x="src/ts/*"
+zip -rq "${pkg}" assets languages src cashu-for-woocommerce.php uninstall.php license.txt readme.txt -x="src/ts/*"
 echo "Done"
