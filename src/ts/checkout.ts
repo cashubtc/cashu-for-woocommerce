@@ -573,8 +573,6 @@ jQuery(function ($) {
   }
 
   async function renderQr(): Promise<void> {
-    const mq = mintQuote;
-
     // Uppercase the BOLT11 (and scheme) so the QR encoder picks alphanumeric
     // mode (5.5 bits/char) instead of byte mode (8 bits/char) — same payload,
     // denser QR, easier scan. bech32 forbids mixed case so the whole token
