@@ -984,14 +984,14 @@ jQuery(function ($) {
         return;
       }
       // Unknown / pending: cannot safely tell the customer whether their
-      // inputs are spent. Surface a "reconciling" status; the in-page
-      // pollOrderStatus background loop will catch the server-confirmed
-      // PAID transition. Any orphaned change-proofs will be recovered on
-      // the next reload via the PAID-state branch above. (The
-      // _cashu_melt_pending_quote_id cron sweep does NOT cover the LN leg
-      // today — it's set only by PayController::pay() for the PR leg.
-      // Extending it is a future change, out of scope here.)
+      // inputs are spent. Surface a "reconciling" status and notify the
+      // server — claim_melt_quote will probe the mint itself, and when
+      // the mint reports PENDING it writes _cashu_melt_pending_quote_id
+      // server-side so the MeltReconciler cron picks the order up if
+      // the customer closes their tab. This closes the LN-leg gap that
+      // previously left the order unreconcilable.
       setStatus(t('reconciling_with_mint'), true);
+      void claimMeltPaid('');
       return;
     }
 

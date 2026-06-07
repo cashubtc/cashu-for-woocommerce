@@ -455,6 +455,32 @@ final class ConfirmMeltQuoteController {
 		$reported_amount = isset( $data['amount'] ) ? (string) $data['amount'] : '';
 
 		if ( 'PAID' !== $state ) {
+			if ( 'PENDING' === $state ) {
+				// The LN leg's wallet.meltProofsBolt11 either returned
+				// state=PENDING (mint received proofs, still routing LN) or
+				// threw with a follow-up probe finding PENDING. Either way
+				// the proofs are committed at the mint but the LN payment
+				// hasn't settled yet. Write the pending-melt marker so the
+				// existing MeltReconciler cron sweep (which only covers the
+				// PR leg by virtue of PayController setting the marker)
+				// also catches this LN-leg case if the customer closes the
+				// tab before the mint finishes. Idempotent — overwrites any
+				// existing marker for the same quote with a fresh timestamp.
+				$order->update_meta_data( '_cashu_melt_pending_quote_id', $quote_id );
+				$order->update_meta_data( '_cashu_melt_pending_at', time() );
+				$order->save();
+			} elseif ( 'UNPAID' === $state ) {
+				// Mint says the merchant melt quote was never paid. For the
+				// LN leg, that means the customer's mint-quote proofs were
+				// never melted to the vendor — recovery is via NUT-09
+				// restore on the next reload (which the browser's
+				// startMintQuoteWatcher already handles when state is
+				// ISSUED). Stamp the failed-attempt timestamp so the
+				// receipt page still shows a "previous attempt didn't
+				// reach the mint" banner instead of silently reverting.
+				$order->update_meta_data( '_cashu_last_payment_attempt_at', time() );
+				$order->save();
+			}
 			return rest_ensure_response(
 				array(
 					'ok'    => true,
