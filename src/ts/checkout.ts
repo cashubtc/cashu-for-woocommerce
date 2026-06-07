@@ -1129,6 +1129,12 @@ jQuery(function ($) {
   }
 
   let pollOrderStatusRunning = false;
+  // Poll cadence: tight on fresh quotes (5s — catches quick LN settles fast),
+  // backs off as the server keeps returning PENDING. Each PENDING response
+  // shifts the next delay one step along POLL_INTERVALS_MS, capped. Drops
+  // mint-side amplification by ~3-6x on a long-routing LN payment without
+  // changing the no-PENDING UX. Resets on any non-PENDING response.
+  const POLL_INTERVALS_MS = [5_000, 15_000, 30_000];
   async function pollOrderStatus(): Promise<void> {
     if (pollOrderStatusRunning) return;
     pollOrderStatusRunning = true;
@@ -1137,10 +1143,13 @@ jQuery(function ($) {
         window.location.assign(String(data.returnUrl));
         return;
       }
+      let pendingStreak = 0;
       while (!ac.signal.aborted && Date.now() <= data.quoteExpiryMs) {
-        await delay(5000);
+        const step = Math.min(pendingStreak, POLL_INTERVALS_MS.length - 1);
+        await delay(POLL_INTERVALS_MS[step]);
         const r = await run(() => checkOrderStatus());
         if (r?.state === 'PAID' || r?.state === 'EXPIRED') return;
+        pendingStreak = r?.state === 'PENDING' ? pendingStreak + 1 : 0;
       }
       await delay(500);
       await run(() => checkOrderStatus());
