@@ -84,11 +84,11 @@ msgstr ""
 msgid "Unified (Auto)"
 msgstr ""
 
-#: src/Admin/GlobalSettings.php:42 src/Admin/GlobalSettings.php:134 src/Gateway/CashuGateway.php:169 src/Gateway/CashuGateway.php:1056
+#: src/Admin/GlobalSettings.php:42 src/Admin/GlobalSettings.php:134 src/Gateway/CashuGateway.php:169 src/Gateway/CashuGateway.php:1055
 msgid "Cashu"
 msgstr ""
 
-#: src/Admin/GlobalSettings.php:43 src/Admin/GlobalSettings.php:135 src/Gateway/CashuGateway.php:170 src/Gateway/CashuGateway.php:1057
+#: src/Admin/GlobalSettings.php:43 src/Admin/GlobalSettings.php:135 src/Gateway/CashuGateway.php:170 src/Gateway/CashuGateway.php:1056
 msgid "Lightning"
 msgstr ""
 
@@ -325,46 +325,46 @@ msgstr ""
 msgid "Docs"
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:1023
+#: src/Gateway/CashuGateway.php:1022
 msgid ""
 "Cashu payment data is missing for this order. Please reload the page to retry, or contact the store if the problem persists."
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:1026
+#: src/Gateway/CashuGateway.php:1025
 msgid "Retry payment"
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:1037
+#: src/Gateway/CashuGateway.php:1036
 #. translators: %1$d: order number, %2$s: site name
 msgid "Order #%1$d at %2$s"
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:1079
+#: src/Gateway/CashuGateway.php:1078
 msgid "Cashu payment"
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:1081
+#: src/Gateway/CashuGateway.php:1080
 msgid "Amount Due"
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:1089
+#: src/Gateway/CashuGateway.php:1088
 msgid "Status: Waiting for payment..."
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:1096
+#: src/Gateway/CashuGateway.php:1095
 msgid "Payment options"
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:1126
+#: src/Gateway/CashuGateway.php:1125
 msgid ""
 "Copy the token below and paste it into a Cashu wallet to reclaim your sats."
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:1129
+#: src/Gateway/CashuGateway.php:1128
 msgid "Copy recovery token"
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:1137
+#: src/Gateway/CashuGateway.php:1136
 #. translators: %1$s: Mint hostname
 msgid "Payments are settled at our mint: %1$s"
 msgstr ""
@@ -389,7 +389,7 @@ msgstr ""
 msgid "Connecting to mint..."
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:168 src/Gateway/CashuGateway.php:1055
+#: src/Gateway/CashuGateway.php:168 src/Gateway/CashuGateway.php:1054
 msgid "Auto"
 msgstr ""
 
@@ -438,76 +438,72 @@ msgstr ""
 msgid "Change From Network Fee Reserve"
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:189
-msgid "Change From Your Token"
-msgstr ""
-
-#: src/Gateway/CashuGateway.php:192
+#: src/Gateway/CashuGateway.php:191
 msgid "Invoice has expired"
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:195
+#: src/Gateway/CashuGateway.php:194
 msgid "Invoice expires in: %1$s"
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:215
+#: src/Gateway/CashuGateway.php:214
 msgid "Your Cashu change"
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:216
+#: src/Gateway/CashuGateway.php:215
 msgid "Dismiss"
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:218
+#: src/Gateway/CashuGateway.php:217
 msgid ""
 "If you use a Cashu wallet, copy any change tokens below and paste them into your wallet."
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:224
+#: src/Gateway/CashuGateway.php:223
 msgid "Important:"
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:226
+#: src/Gateway/CashuGateway.php:225
 msgid "save your change now, we do not store tokens on our server."
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:231
+#: src/Gateway/CashuGateway.php:230
 msgid "Dust"
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:233
+#: src/Gateway/CashuGateway.php:232
 msgid "May be too small to spend on its own due to per proof fees."
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:238
+#: src/Gateway/CashuGateway.php:237
 msgid "Copy"
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:239
+#: src/Gateway/CashuGateway.php:238
 msgid "Copied"
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:240
+#: src/Gateway/CashuGateway.php:239
 msgid "Copy failed"
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:241
+#: src/Gateway/CashuGateway.php:240
 msgid "Show"
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:242
+#: src/Gateway/CashuGateway.php:241
 msgid "Hide"
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:244
+#: src/Gateway/CashuGateway.php:243
 msgid "Change"
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:247
+#: src/Gateway/CashuGateway.php:246
 msgid "Amount: %1$s%2$d, %3$s"
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:358
+#: src/Gateway/CashuGateway.php:357
 msgctxt "Cashu payment method"
 msgid "Awaiting Cashu payment"
 msgstr ""
@@ -521,25 +517,25 @@ msgid ""
 "Accept Cashu tokens and melt them straight to your Bitcoin lightning address."
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:424
+#: src/Gateway/CashuGateway.php:423
 msgid ""
 "We couldn't fetch a Lightning invoice for your payment. Please contact the store — the merchant's Lightning address may need attention."
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:431
+#: src/Gateway/CashuGateway.php:430
 msgid ""
 "We couldn't reach the Cashu mint right now. Please reload to try again, or contact the store if this keeps happening."
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:435
+#: src/Gateway/CashuGateway.php:434
 msgid "We couldn't fetch a current BTC price. Please reload to try again."
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:439
+#: src/Gateway/CashuGateway.php:438
 msgid "Cashu payment is temporarily unavailable. Please contact the store."
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:442
+#: src/Gateway/CashuGateway.php:441
 msgid "Cashu payment setup failed, please try again."
 msgstr ""
 
@@ -547,17 +543,17 @@ msgstr ""
 msgid "Scan the QR code with a Lightning or Cashu wallet to pay."
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:481
+#: src/Gateway/CashuGateway.php:480
 #. translators: %1$s: Bitcoin symbol, %2$s: Amount in sats, %3$s: ISO 4217 currency code (eg: USD), %4$s: BTC Spot price, %5$s: quote source
 msgid "Cashu quote: %1$s%2$s (BTC/%3$s: %4$s) from %5$s"
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:557
+#: src/Gateway/CashuGateway.php:556
 #. translators: %1$s: Order ID
 msgid "Order: #%1$s"
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:614
+#: src/Gateway/CashuGateway.php:613
 #. translators: %1$s: sats invoice amount, %2$s: lightning fee reserve sats, %3$s: mint input fee buffer sats, %4$s: total required sats, %5$s: Melt Quote ID
 msgid ""
 "Cashu melt quote created:\n"
@@ -568,7 +564,7 @@ msgid ""
 "Quote ID: %5$s"
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:710
+#: src/Gateway/CashuGateway.php:709
 #. translators: %1$s: BTC symbol, %2$d: amount in sats, %3$s: mint quote id
 msgid ""
 "Cashu mint quote created:\n"
@@ -596,15 +592,15 @@ msgstr ""
 msgid "Enable Cashu Gateway"
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:961
+#: src/Gateway/CashuGateway.php:960
 msgid "Order not found."
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:975
+#: src/Gateway/CashuGateway.php:974
 msgid "This order has already been paid."
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:977
+#: src/Gateway/CashuGateway.php:976
 msgid "View order"
 msgstr ""
 

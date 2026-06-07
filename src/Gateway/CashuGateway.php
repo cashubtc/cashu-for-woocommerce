@@ -186,7 +186,6 @@ class CashuGateway extends \WC_Payment_Gateway {
 
 					// Change
 					'change_from_network'     => __( 'Change From Network Fee Reserve', 'cashu-for-woocommerce' ),
-					'change_from_token'       => __( 'Change From Your Token', 'cashu-for-woocommerce' ),
 
 					// Order status polling
 					'invoice_expired'         => __( 'Invoice has expired', 'cashu-for-woocommerce' ),
@@ -384,12 +383,12 @@ class CashuGateway extends \WC_Payment_Gateway {
 	}
 
 	/**
-	 * Canonical form of a mint URL for equality comparisons. Matches the
-	 * JS sameMint() shape (`URL.origin + pathname`, trailing slashes
-	 * stripped): scheme + host lowercased, default ports elided, IPv6
-	 * brackets preserved, path's trailing `/` trimmed. Falls back to
-	 * case-fold + rtrim when parsing fails so a slightly-malformed URL
-	 * still produces a stable key (rather than rejecting the comparison).
+	 * Canonical form of a mint URL for equality comparisons: scheme + host
+	 * lowercased, default ports elided, IPv6 brackets preserved, path's
+	 * trailing `/` trimmed (matching the `URL.origin + pathname` shape).
+	 * Falls back to case-fold + rtrim when parsing fails so a slightly-
+	 * malformed URL still produces a stable key (rather than rejecting
+	 * the comparison).
 	 */
 	public static function normalize_mint_url( string $url ): string {
 		$url = trim( $url );

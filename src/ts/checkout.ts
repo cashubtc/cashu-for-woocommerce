@@ -268,18 +268,6 @@ function readRootData($root: JQuery<HTMLElement>): RootData {
   };
 }
 
-function sameMint(a: string, b: string): boolean {
-  try {
-    const ua = new URL(a);
-    const ub = new URL(b);
-    const normA = ua.origin + ua.pathname.replace(/\/+$/, '');
-    const normB = ub.origin + ub.pathname.replace(/\/+$/, '');
-    return normA === normB;
-  } catch {
-    return a.replace(/\/+$/, '') === b.replace(/\/+$/, '');
-  }
-}
-
 function t(key: string, ...args: any[]): string {
   const dict = window.cashu_wc?.i18n ?? {};
   const raw = dict[key] ?? key;
@@ -682,14 +670,14 @@ jQuery(function ($) {
       proofs: changeProofs,
       unit: 'sat',
     });
-    const kind = sameMint(wallet.mint.mintUrl, data.trustedMint)
-      ? t('change_from_network')
-      : t('change_from_token');
+    // saveProofs is only ever called with the trusted mint's wallet, so the
+    // "change from token" path (mint mismatch) cannot fire — that path
+    // existed when the PR-only refactor still had a token-input flow.
     rememberChangeItem({
       mint: wallet.mint.mintUrl,
       token: tokenStr,
       amount: changeAmt,
-      kind,
+      kind: t('change_from_network'),
       dust: changeAmt <= changeFees,
     });
   }
