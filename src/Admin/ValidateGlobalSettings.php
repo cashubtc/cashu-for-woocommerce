@@ -216,13 +216,9 @@ final class ValidateGlobalSettings {
 	/**
 	 * GET the LNURL-pay metadata endpoint for `{name}@{host}` and verify
 	 * the response is well-formed LUD-06 metadata advertising payRequest.
-	 * Mirrors the NUT-06 probe on trusted_mint: a typo or hostile-redirect
-	 * is caught at save time instead of stranding the first customer who
-	 * tries to check out. Without this, melt payouts could be routed to
-	 * an attacker-controlled host that returns a valid-looking BOLT11
-	 * (see the H1 finding in the CTF report — the LN provider is in the
-	 * merchant's TCB, but defense in depth bounds typo + admin-session-
-	 * compromise risk).
+	 * Mirrors the NUT-06 probe on trusted_mint: a typo or misconfigured
+	 * provider is caught at save time instead of stranding the first
+	 * customer who tries to check out.
 	 *
 	 * Returns null on success, or a translated error string for the admin.
 	 */
