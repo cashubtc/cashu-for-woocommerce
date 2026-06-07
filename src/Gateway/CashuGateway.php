@@ -17,6 +17,31 @@ use WC_Order;
 class CashuGateway extends \WC_Payment_Gateway {
 
 	public const QUOTE_EXPIRY_SECS = 900;  // 15 mins
+
+	/**
+	 * Cache TTL for a successful mint state probe. A polling browser at 5-s
+	 * cadence will short-circuit ~11 of every 12 polls; the worst-case
+	 * mint-PAID-to-browser-redirect latency is one TTL window. Tuned up
+	 * from the original 10 s after we observed mints actively returning
+	 * HTTP 429 on tight probe loops (one customer alone at 5-s + 10-s TTL
+	 * triggers a probe every 10 s, which several mints rate-limit).
+	 *
+	 * Shared with `cashu_melt_state_*` consumers in
+	 * ConfirmMeltQuoteController and ensure_mint_quote_for_order so tuning
+	 * happens in one place.
+	 */
+	public const MELT_STATE_FRESH_TTL = MINUTE_IN_SECONDS;
+
+	/**
+	 * Cache TTL for a mint probe that returned an empty / non-200 response
+	 * (HTTP 429, network blip, mint unreachable). Longer than the fresh
+	 * TTL so a clearly-rate-limited mint isn't hammered every poll cycle.
+	 * The marker is preserved either way; MeltReconciler and a later
+	 * un-rate-limited probe will still flip the order PAID. Worst-case
+	 * additional latency is one empty-TTL window past the mint recovering.
+	 */
+	public const MELT_STATE_EMPTY_TTL = 2 * MINUTE_IN_SECONDS;
+
 	/**
 	 * Trusted Mint.
 	 * @var string
@@ -529,7 +554,7 @@ class CashuGateway extends \WC_Payment_Gateway {
 					$mint_state = $cached;
 				} else {
 					$mint_state = $this->fetch_melt_quote_state_safely( $quote_id );
-					$ttl        = empty( $mint_state ) ? ( 2 * MINUTE_IN_SECONDS ) : MINUTE_IN_SECONDS;
+					$ttl        = empty( $mint_state ) ? self::MELT_STATE_EMPTY_TTL : self::MELT_STATE_FRESH_TTL;
 					set_transient( $cache_key, $mint_state, $ttl );
 				}
 				$state_string = isset( $mint_state['state'] ) ? (string) $mint_state['state'] : '';
