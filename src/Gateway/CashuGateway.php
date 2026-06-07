@@ -156,42 +156,45 @@ class CashuGateway extends \WC_Payment_Gateway {
 
 				'i18n'          => array(
 					// General / bootstrap
-					'data_incomplete'      => __( 'Payment data incomplete, please refresh and try again.', 'cashu-for-woocommerce' ),
-					'invoice_failed'       => __( 'Could not prepare the invoice, please refresh and try again', 'cashu-for-woocommerce' ),
+					'data_incomplete'         => __( 'Payment data incomplete, please refresh and try again.', 'cashu-for-woocommerce' ),
+					'invoice_failed'          => __( 'Could not prepare the invoice, please refresh and try again', 'cashu-for-woocommerce' ),
 
 					// Status
-					'payment_in_progress'  => __( 'Payment already in progress', 'cashu-for-woocommerce' ),
+					'payment_in_progress'     => __( 'Payment already in progress', 'cashu-for-woocommerce' ),
 
 					// QR interactions
-					'copied'               => __( 'Copied!', 'cashu-for-woocommerce' ),
-					'waiting_for_payment'  => __( 'Waiting for payment...', 'cashu-for-woocommerce' ),
-					'connecting_to_mint'   => __( 'Connecting to mint...', 'cashu-for-woocommerce' ),
+					'copied'                  => __( 'Copied!', 'cashu-for-woocommerce' ),
+					'waiting_for_payment'     => __( 'Waiting for payment...', 'cashu-for-woocommerce' ),
+					'connecting_to_mint'      => __( 'Connecting to mint...', 'cashu-for-woocommerce' ),
 
 					// Tabs
-					'tab_unified'          => __( 'Auto', 'cashu-for-woocommerce' ),
-					'tab_cashu'            => __( 'Cashu', 'cashu-for-woocommerce' ),
-					'tab_lightning'        => __( 'Lightning', 'cashu-for-woocommerce' ),
+					'tab_unified'             => __( 'Auto', 'cashu-for-woocommerce' ),
+					'tab_cashu'               => __( 'Cashu', 'cashu-for-woocommerce' ),
+					'tab_lightning'           => __( 'Lightning', 'cashu-for-woocommerce' ),
 
 					// Recovery flow (Lightning leg)
-					'payment_failed'       => __( 'Payment failed. Please copy the recovery token below.', 'cashu-for-woocommerce' ),
-					'waiting_confirmation' => __( 'Waiting for payment confirmation...', 'cashu-for-woocommerce' ),
+					'payment_failed'          => __( 'Payment failed. Please copy the recovery token below.', 'cashu-for-woocommerce' ),
+					'waiting_confirmation'    => __( 'Waiting for payment confirmation...', 'cashu-for-woocommerce' ),
+					'recovering_proofs'       => __( 'Recovering payment from mint...', 'cashu-for-woocommerce' ),
+					'recovery_failed_contact' => __( 'Could not recover payment. Please contact the merchant.', 'cashu-for-woocommerce' ),
+					'reconciling_with_mint'   => __( 'Reconciling with mint...', 'cashu-for-woocommerce' ),
 
 					// Lightning leg progress
-					'payment_received'     => __( 'Payment received by our mint...', 'cashu-for-woocommerce' ),
-					'paying_invoice'       => __( 'Paying invoice...', 'cashu-for-woocommerce' ),
-					'confirming_payment'   => __( 'Confirming payment...', 'cashu-for-woocommerce' ),
-					'payment_confirmed'    => __( 'Payment confirmed!', 'cashu-for-woocommerce' ),
-					'settling_at_mint'     => __( 'Mint is settling the Lightning payment...', 'cashu-for-woocommerce' ),
+					'payment_received'        => __( 'Payment received by our mint...', 'cashu-for-woocommerce' ),
+					'paying_invoice'          => __( 'Paying invoice...', 'cashu-for-woocommerce' ),
+					'confirming_payment'      => __( 'Confirming payment...', 'cashu-for-woocommerce' ),
+					'payment_confirmed'       => __( 'Payment confirmed!', 'cashu-for-woocommerce' ),
+					'settling_at_mint'        => __( 'Mint is settling the Lightning payment...', 'cashu-for-woocommerce' ),
 
 					// Change
-					'change_from_network'  => __( 'Change From Network Fee Reserve', 'cashu-for-woocommerce' ),
-					'change_from_token'    => __( 'Change From Your Token', 'cashu-for-woocommerce' ),
+					'change_from_network'     => __( 'Change From Network Fee Reserve', 'cashu-for-woocommerce' ),
+					'change_from_token'       => __( 'Change From Your Token', 'cashu-for-woocommerce' ),
 
 					// Order status polling
-					'invoice_expired'      => __( 'Invoice has expired', 'cashu-for-woocommerce' ),
+					'invoice_expired'         => __( 'Invoice has expired', 'cashu-for-woocommerce' ),
 
 					/* translators: 1: time remaining, formatted like MM:SS */
-					'invoice_expires_in'   => __( 'Invoice expires in: %1$s', 'cashu-for-woocommerce' ),
+					'invoice_expires_in'      => __( 'Invoice expires in: %1$s', 'cashu-for-woocommerce' ),
 				),
 			)
 		);
