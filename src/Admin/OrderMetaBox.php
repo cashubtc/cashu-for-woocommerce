@@ -109,14 +109,27 @@ final class OrderMetaBox {
 
 			// Manual retry button — bypasses the per-order hourly throttle
 			// so a human investigating a stuck order can force a probe now
-			// without waiting for the next cron tick.
-			$action = admin_url( 'admin-post.php' );
-			echo '<form method="post" action="' . esc_url( $action ) . '" style="margin:0 0 12px;">';
-			echo '<input type="hidden" name="action" value="cashu_wc_retry_melt" />';
-			echo '<input type="hidden" name="order_id" value="' . intval( $order->get_id() ) . '" />';
-			wp_nonce_field( 'cashu_wc_retry_melt_' . $order->get_id() );
-			echo '<button type="submit" class="button">' . esc_html__( 'Retry mint probe', 'cashu-for-woocommerce' ) . '</button>';
-			echo '</form>';
+			// without waiting for the next cron tick. Rendered as a GET
+			// link (not a POST form) because the WC order edit screen is
+			// itself a giant form, and browsers strip nested <form> tags
+			// — a nested POST form would silently leak its hidden inputs
+			// into the order-save POST and the button wouldn't fire our
+			// admin_post handler at all. wp_nonce_url + check_admin_referer
+			// in the handler give the same CSRF guarantee.
+			$retry_url = wp_nonce_url(
+				add_query_arg(
+					array(
+						'action'   => 'cashu_wc_retry_melt',
+						'order_id' => $order->get_id(),
+					),
+					admin_url( 'admin-post.php' )
+				),
+				'cashu_wc_retry_melt_' . $order->get_id()
+			);
+			echo '<p style="margin:0 0 12px;">';
+			echo '<a class="button" href="' . esc_url( $retry_url ) . '">';
+			echo esc_html__( 'Retry mint probe', 'cashu-for-woocommerce' );
+			echo '</a></p>';
 		}
 
 		echo '<p style="margin:0 0 12px;"><a class="button button-primary" target="_blank" rel="noopener" href="' . esc_url( $payment_url ) . '">';
@@ -182,7 +195,13 @@ final class OrderMetaBox {
 	 * failure, so the admin gets feedback rather than a blank page.
 	 */
 	public static function handle_retry_melt(): void {
-		$order_id = isset( $_POST['order_id'] ) ? absint( wp_unslash( $_POST['order_id'] ) ) : 0;
+		// Link uses GET so the order_id arrives via $_GET. The nonce
+		// (also in the query string via wp_nonce_url) is checked below
+		// before any state mutation. Need order_id before the nonce
+		// check to compose the per-order nonce action name; the cap
+		// check above guards against unauthorised callers regardless.
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$order_id = isset( $_GET['order_id'] ) ? absint( wp_unslash( $_GET['order_id'] ) ) : 0;
 		$referer  = wp_get_referer() ?: admin_url();
 
 		if ( ! current_user_can( 'manage_woocommerce' ) ) {
