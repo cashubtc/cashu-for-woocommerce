@@ -9,9 +9,10 @@ use WC_Order;
 /**
  * "Cashu Payment" meta-box on the WC order edit screen for orders paying
  * via the cashu_default gateway. Lets the admin open the customer's
- * receipt page in one click — the page-load watcher in checkout.ts auto-
- * recovers any paid-but-unclaimed mint quote there, so opening the link
- * IS the recovery action.
+ * receipt page in one click — the page-load recovery tool in checkout.ts
+ * (NUT-09 restore via the deterministic per-order wallet seed) finalises
+ * any stranded mint quote there, so opening the link IS the recovery
+ * action.
  *
  * Also surfaces the active mint quote id (and any archived ones) for
  * forensic / out-of-band lookup against the mint.
