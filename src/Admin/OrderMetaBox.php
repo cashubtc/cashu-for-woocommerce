@@ -69,6 +69,20 @@ final class OrderMetaBox {
 		}
 		echo '</p>';
 
+		$pending_quote = (string) $order->get_meta( '_cashu_melt_pending_quote_id', true );
+		$pending_at    = absint( $order->get_meta( '_cashu_melt_pending_at', true ) );
+		if ( '' !== $pending_quote && ! $order->is_paid() ) {
+			$elapsed_min = $pending_at > 0 ? max( 0, (int) ( ( time() - $pending_at ) / MINUTE_IN_SECONDS ) ) : 0;
+			echo '<p style="margin:0 0 10px;padding:6px 8px;background:#fff8e6;border-left:3px solid #dba617;">';
+			echo '<strong>' . esc_html__( 'Reconciling with mint…', 'cashu-for-woocommerce' ) . '</strong><br>';
+			printf(
+				/* translators: %d: minutes since marker was set */
+				esc_html__( 'Pending melt attempt %d minutes ago. Hourly cron will finalise this order automatically once the mint reports PAID, or drop it after 24h with an orphan note.', 'cashu-for-woocommerce' ),
+				intval( $elapsed_min )
+			);
+			echo '</p>';
+		}
+
 		echo '<p style="margin:0 0 12px;"><a class="button button-primary" target="_blank" rel="noopener" href="' . esc_url( $payment_url ) . '">';
 		echo esc_html__( 'Open customer payment page', 'cashu-for-woocommerce' );
 		echo '</a></p>';
