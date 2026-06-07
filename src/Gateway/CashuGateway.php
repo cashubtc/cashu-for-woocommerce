@@ -345,7 +345,8 @@ class CashuGateway extends \WC_Payment_Gateway {
 		// find meta stale and both call this method, racing on the mint
 		// POSTs and meta writes — the second wins the save() and orphans
 		// the first tab's quote at the mint.
-		if ( ! OrderLock::acquire( $order_id, 'setup', 60 ) ) {
+		$lock_token = OrderLock::acquire( $order_id, 'setup', 60 );
+		if ( null === $lock_token ) {
 			// Another request is currently doing setup. Wait for it to
 			// finish, then refresh the caller's meta from DB so they see
 			// what the holder just wrote.
@@ -420,7 +421,7 @@ class CashuGateway extends \WC_Payment_Gateway {
 			// have to re-read from DB themselves.
 			$order->read_meta_data( true );
 		} finally {
-			OrderLock::release( $order_id, 'setup' );
+			OrderLock::release( $order_id, 'setup', $lock_token );
 		}
 	}
 

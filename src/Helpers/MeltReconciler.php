@@ -69,18 +69,25 @@ final class MeltReconciler {
 	}
 
 	/**
-	 * Probe the mint for one order. Public so tests and forced-reconcile
-	 * admin actions can call it directly.
+	 * Probe the mint for one order. Public so tests and the admin
+	 * meta-box's "Retry mint probe" button can call it directly.
 	 *
 	 * Takes the `pay`-scope OrderLock at the top so concurrent PayController /
 	 * mark_paid / archive_melt_quote paths can't race our marker mutations and
 	 * leave an order in a state nothing knows to reconcile. If another path
 	 * holds the lock, skip this order — it'll be picked up on the next tick.
+	 *
+	 * `$force = true` bypasses the per-order hourly throttle so the admin
+	 * retry button can probe immediately. The throttle exists to stop the
+	 * cron from hammering a struggling mint; on a manual admin click that
+	 * concern doesn't apply (the human is explicitly asking). The pay-lock
+	 * and 24h age-out still apply either way.
 	 */
-	public static function reconcile_one( WC_Order $order ): void {
-		$order_id = $order->get_id();
+	public static function reconcile_one( WC_Order $order, bool $force = false ): void {
+		$order_id   = $order->get_id();
+		$lock_token = OrderLock::acquire( $order_id, 'pay', 30 );
 
-		if ( ! OrderLock::acquire( $order_id, 'pay', 30 ) ) {
+		if ( null === $lock_token ) {
 			Logger::debug( 'MeltReconciler skipping order ' . $order_id . ': pay lock held' );
 			return;
 		}
@@ -129,8 +136,9 @@ final class MeltReconciler {
 			}
 
 			// Per-order throttle: one mint probe per order per hour from cron.
+			// Admin "Retry mint probe" bypasses this — see $force note above.
 			$throttle_key = 'cashu_wc_recon_' . $order_id;
-			if ( false !== get_transient( $throttle_key ) ) {
+			if ( ! $force && false !== get_transient( $throttle_key ) ) {
 				return;
 			}
 			set_transient( $throttle_key, '1', self::PER_ORDER_THROTTLE_SECS );
@@ -153,7 +161,7 @@ final class MeltReconciler {
 			}
 			// PENDING or empty — leave for the next tick.
 		} finally {
-			OrderLock::release( $order_id, 'pay' );
+			OrderLock::release( $order_id, 'pay', $lock_token );
 		}
 	}
 

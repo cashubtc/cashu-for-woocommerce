@@ -564,14 +564,16 @@ final class ConfirmMeltQuoteController {
 		// well under that on a healthy mint, and on contention timeout
 		// we'd rather have the caller report pending than block the
 		// browser indefinitely. The caller is responsible for re-polling.
-		if ( ! OrderLock::acquire( $order_id, 'pay', 30 ) ) {
+		$lock_token = OrderLock::acquire( $order_id, 'pay', 30 );
+		if ( null === $lock_token ) {
 			Logger::debug( 'mark_paid waiting on pay lock for order ' . $order_id );
 			OrderLock::wait_for_release( $order_id, 'pay', 60 );
 			$fresh = wc_get_order( $order_id );
 			if ( $fresh && $fresh->is_paid() ) {
 				return true;
 			}
-			if ( ! OrderLock::acquire( $order_id, 'pay', 30 ) ) {
+			$lock_token = OrderLock::acquire( $order_id, 'pay', 30 );
+			if ( null === $lock_token ) {
 				Logger::error( 'mark_paid lock contention timeout for order ' . $order_id );
 				return false;
 			}
@@ -603,7 +605,7 @@ final class ConfirmMeltQuoteController {
 			$order->read_meta_data( true );
 			return true;
 		} finally {
-			OrderLock::release( $order_id, 'pay' );
+			OrderLock::release( $order_id, 'pay', $lock_token );
 		}
 	}
 

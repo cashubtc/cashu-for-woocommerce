@@ -48,6 +48,11 @@ abstract class IntegrationTestCase extends TestCase {
 					return $sql . '|' . implode( '|', array_map( 'strval', $args ) );
 				}
 			);
+		// OrderLock::release() with a token uses LIKE + esc_like to bound the
+		// conditional delete to its own row; mock it as identity since tests
+		// only assert that the call sequence happens, not the SQL shape.
+		$wpdb->shouldReceive( 'esc_like' )
+			->andReturnUsing( static fn ( string $s ): string => $s );
 		$wpdb->shouldReceive( 'query' )->andReturn( $insertResult );
 		$wpdb->shouldReceive( 'get_var' )->andReturn(
 			null === $existingExpiry ? null : (string) $existingExpiry

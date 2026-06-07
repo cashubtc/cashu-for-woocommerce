@@ -218,7 +218,8 @@ final class PayController {
 		// check above and both hand proof sets to the mint — the second
 		// quote-melt POST would be rejected (single-use quote) but the
 		// wallet's proofs may end up in an ambiguous state at the mint.
-		if ( ! OrderLock::acquire( $order_id, 'pay', self::PAY_LOCK_TTL ) ) {
+		$lock_token = OrderLock::acquire( $order_id, 'pay', self::PAY_LOCK_TTL );
+		if ( null === $lock_token ) {
 			Logger::debug( 'PayController::pay 409 cashu_in_flight on order ' . $order_id );
 			return new WP_Error(
 				'cashu_in_flight',
@@ -357,7 +358,7 @@ final class PayController {
 
 			return $this->finalise_paid( $order, $quote_id, $mint_response, $expected_id, $expected_amount );
 		} finally {
-			OrderLock::release( $order_id, 'pay' );
+			OrderLock::release( $order_id, 'pay', $lock_token );
 		}
 	}
 
