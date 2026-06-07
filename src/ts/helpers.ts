@@ -572,3 +572,107 @@ export function actionsForMeltOutcome(outcome: MeltOutcome): MeltAction[] {
       ];
   }
 }
+
+// ----------------------------------------------------------------------------
+// Receipt-page root data — parsed once at init from data-attrs on #cashu-pay-root
+// ----------------------------------------------------------------------------
+
+export type QrMode = 'unified' | 'cashu' | 'lightning';
+
+export type RootData = {
+  orderId: number;
+  orderKey: string;
+  returnUrl: string;
+  expectedAmount: number;
+  quoteId: string;
+  quoteExpiryMs: number;
+  trustedMint: string;
+  mintQuote: {
+    id: string;
+    request: string;
+    amount: number;
+    expiry: number | null;
+  };
+  payCallback: string;
+  paymentId: string;
+  description: string;
+  defaultTab: QrMode;
+};
+
+/**
+ * Minimal adapter shape for readRootData. Satisfied by jQuery's `$root` in
+ * production (`{ data: (k) => $root.data(k) }`); satisfied by a plain object
+ * lookup in tests so the validation rules + transforms run without
+ * jsdom + jQuery.
+ */
+export type RootDataReader = { data: (key: string) => unknown };
+
+/**
+ * Project the receipt-page data-attrs to a fully validated RootData. Throws
+ * `Bad order data` if any of the load-bearing fields is missing or
+ * malformed. The defaultTab cascade falls back to 'unified' on an unknown
+ * value so a stale render doesn't desync the QR tab.
+ */
+export function readRootData(reader: RootDataReader): RootData {
+  const orderId = Number(reader.data('order-id'));
+  const orderKey = String(reader.data('order-key') ?? '');
+  const returnUrl = String(reader.data('return-url') ?? '');
+  const expectedAmount = Number(reader.data('expected-amount') ?? 0);
+  const quoteId = String(reader.data('melt-quote-id') ?? '');
+  const quoteExpiryMs = Number(reader.data('spot-quote-expiry') ?? 0) * 1000;
+  const trustedMint = String(reader.data('trusted-mint') ?? '');
+  const mintQuoteId = String(reader.data('mint-quote-id') ?? '');
+  const mintQuoteRequest = String(reader.data('mint-quote-request') ?? '');
+  const mintQuoteAmount = Number(reader.data('mint-quote-amount') ?? 0);
+  const mintQuoteExpiryRaw = Number(reader.data('mint-quote-expiry') ?? 0);
+  const payCallback = String(reader.data('pay-callback') ?? '');
+  const paymentId = String(reader.data('payment-id') ?? '');
+  const description = String(reader.data('description') ?? '');
+
+  const rawDefaultTab = String(reader.data('default-tab') ?? 'unified');
+  const defaultTab: QrMode =
+    rawDefaultTab === 'cashu' ||
+    rawDefaultTab === 'lightning' ||
+    rawDefaultTab === 'unified'
+      ? rawDefaultTab
+      : 'unified';
+
+  if (
+    !Number.isFinite(orderId) ||
+    orderId <= 0 ||
+    !orderKey ||
+    !returnUrl ||
+    !trustedMint ||
+    !payCallback ||
+    !paymentId ||
+    !Number.isFinite(expectedAmount) ||
+    expectedAmount <= 0 ||
+    !quoteId ||
+    !mintQuoteId ||
+    !mintQuoteRequest ||
+    !Number.isFinite(mintQuoteAmount) ||
+    mintQuoteAmount <= 0
+  ) {
+    throw new Error('Bad order data');
+  }
+
+  return {
+    orderId,
+    orderKey,
+    returnUrl,
+    expectedAmount,
+    quoteId,
+    quoteExpiryMs,
+    trustedMint,
+    mintQuote: {
+      id: mintQuoteId,
+      request: mintQuoteRequest,
+      amount: mintQuoteAmount,
+      expiry: mintQuoteExpiryRaw > 0 ? mintQuoteExpiryRaw : null,
+    },
+    payCallback,
+    paymentId,
+    description,
+    defaultTab,
+  };
+}

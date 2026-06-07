@@ -23,7 +23,10 @@ import {
   loadStrandedProofs,
   type MeltAction,
   type MeltOutcome,
+  type QrMode,
+  readRootData,
   rememberChangeItem,
+  type RootData,
   saveStrandedProofs,
   seedFingerprint,
   selectPollIntervalMs,
@@ -55,31 +58,6 @@ declare const window: CashuWindow;
 
 declare const wp: { i18n: { sprintf: (format: string, ...args: any[]) => string } };
 
-type QrMode = 'unified' | 'cashu' | 'lightning';
-
-type RootData = {
-  orderId: number;
-  orderKey: string;
-  returnUrl: string;
-  expectedAmount: number; // sats the wallet must cover (invoice + mint fee_reserve + input buffer)
-  quoteId: string; // server-side melt quote id (vendor payment)
-  quoteExpiryMs: number; // spot quote expiry, milliseconds, may be 0
-  trustedMint: string;
-  // Mint quote (customer payment side), authoritative server copy — never
-  // regenerated client-side. The customer's LN payment goes against this
-  // BOLT11; the browser claims proofs against this quote_id.
-  mintQuote: {
-    id: string;
-    request: string;
-    amount: number;
-    expiry: number | null;
-  };
-  payCallback: string; // NUT-18 HTTP transport target
-  paymentId: string; // deterministic id matching what the PR encodes
-  description: string; // human-readable PR memo
-  defaultTab: QrMode; // initial active tab; server-side default-path resolution applied
-};
-
 // ------------------------------
 // Helpers
 // ------------------------------
@@ -92,70 +70,6 @@ window.addEventListener('beforeunload', () => ac.abort(), { once: true });
 // `./wallet` so they can be unit-tested with a stub cashu-ts Wallet,
 // without touching the real mint over HTTP.
 const getWalletCached = createWalletGetter();
-
-function readRootData($root: JQuery<HTMLElement>): RootData {
-  const orderId = Number($root.data('order-id'));
-  const orderKey = String($root.data('order-key') ?? '');
-  const returnUrl = String($root.data('return-url') ?? '');
-  const expectedAmount = Number($root.data('expected-amount') ?? 0);
-  const quoteId = String($root.data('melt-quote-id') ?? '');
-  const quoteExpiryMs = Number($root.data('spot-quote-expiry') ?? 0) * 1000;
-  const trustedMint = String($root.data('trusted-mint') ?? '');
-  const mintQuoteId = String($root.data('mint-quote-id') ?? '');
-  const mintQuoteRequest = String($root.data('mint-quote-request') ?? '');
-  const mintQuoteAmount = Number($root.data('mint-quote-amount') ?? 0);
-  const mintQuoteExpiryRaw = Number($root.data('mint-quote-expiry') ?? 0);
-  const payCallback = String($root.data('pay-callback') ?? '');
-  const paymentId = String($root.data('payment-id') ?? '');
-  const description = String($root.data('description') ?? '');
-
-  const rawDefaultTab = String($root.data('default-tab') ?? 'unified');
-  const defaultTab: QrMode =
-    rawDefaultTab === 'cashu' ||
-    rawDefaultTab === 'lightning' ||
-    rawDefaultTab === 'unified'
-      ? rawDefaultTab
-      : 'unified';
-
-  if (
-    !Number.isFinite(orderId) ||
-    orderId <= 0 ||
-    !orderKey ||
-    !returnUrl ||
-    !trustedMint ||
-    !payCallback ||
-    !paymentId ||
-    !Number.isFinite(expectedAmount) ||
-    expectedAmount <= 0 ||
-    !quoteId ||
-    !mintQuoteId ||
-    !mintQuoteRequest ||
-    !Number.isFinite(mintQuoteAmount) ||
-    mintQuoteAmount <= 0
-  ) {
-    throw new Error('Bad order data');
-  }
-
-  return {
-    orderId,
-    orderKey,
-    returnUrl,
-    expectedAmount,
-    quoteId,
-    quoteExpiryMs,
-    trustedMint,
-    mintQuote: {
-      id: mintQuoteId,
-      request: mintQuoteRequest,
-      amount: mintQuoteAmount,
-      expiry: mintQuoteExpiryRaw > 0 ? mintQuoteExpiryRaw : null,
-    },
-    payCallback,
-    paymentId,
-    description,
-    defaultTab,
-  };
-}
 
 function t(key: string, ...args: any[]): string {
   const dict = window.cashu_wc?.i18n ?? {};
@@ -211,7 +125,7 @@ jQuery(function ($) {
 
   let data: RootData;
   try {
-    data = readRootData($root);
+    data = readRootData({ data: (k: string) => $root.data(k) });
   } catch (_e) {
     $status.text(t('data_incomplete'));
     return;
