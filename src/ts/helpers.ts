@@ -452,3 +452,123 @@ export function deriveOrderStatusActions(ctx: OrderStatusContext): OrderStatusAc
 
   return out;
 }
+
+// ----------------------------------------------------------------------------
+// Melt-flow outcome → action list (used by meltTrustedProofsToVendor)
+// ----------------------------------------------------------------------------
+
+/**
+ * Discriminated outcome of the cashu-leg melt sequence. Each variant carries
+ * the data the dispatcher needs to execute its action list — no global state
+ * access from inside the projection function.
+ *
+ * Branches:
+ *   entry_check_threw       — initial `checkMeltQuoteBolt11` rejected; we
+ *                             don't know if the quote is still meltable, so
+ *                             surface a recovery token + failure status.
+ *   entry_paid_stale_snapshot — quote is already PAID at entry (typical
+ *                             reload after a successful melt whose stranded-
+ *                             proof snapshot wasn't cleared). NUT-09 restore
+ *                             any orphan change-proofs, claim with the
+ *                             quote's preimage.
+ *   melt_succeeded          — `meltProofsBolt11` returned; inputs are spent
+ *                             at the mint, change-proofs (if any) come from
+ *                             the response. Save them, claim with the
+ *                             response's preimage.
+ *   melt_threw_inputs_spent — `meltProofsBolt11` threw but the post-throw
+ *                             probe came back PAID: the mint spent the
+ *                             inputs and dropped the response. Snapshot is
+ *                             stale; NUT-09 restore change-proofs that
+ *                             would've ridden the response, claim with empty
+ *                             preimage (server falls back to one mint hit).
+ *   melt_threw_inputs_safe  — post-throw probe is UNPAID: inputs were never
+ *                             spent. Original input token is a valid
+ *                             recovery; show it + failure status.
+ *   melt_threw_state_unknown — post-throw probe is anything else (PENDING /
+ *                             429 / probe also threw). Don't show recovery
+ *                             (proofs might be spent) — surface a
+ *                             "reconciling" status and notify the server, which
+ *                             will probe and write the LN-leg pending marker
+ *                             if the mint reports PENDING.
+ */
+export type MeltOutcome =
+  | { kind: 'entry_check_threw'; encodedToken: string }
+  | {
+      kind: 'entry_paid_stale_snapshot';
+      preimage: string;
+      mintQuoteId: string;
+    }
+  | {
+      kind: 'melt_succeeded';
+      preimage: string;
+      changeProofs: Proof[];
+      mintQuoteId: string;
+    }
+  | { kind: 'melt_threw_inputs_spent'; mintQuoteId: string }
+  | { kind: 'melt_threw_inputs_safe'; encodedToken: string }
+  | { kind: 'melt_threw_state_unknown' };
+
+/**
+ * Action verbs the meltTrustedProofsToVendor dispatcher knows how to execute.
+ * Designed so the projection function (actionsForMeltOutcome) is fully
+ * deterministic and the dispatcher in checkout.ts is the only side-effect
+ * surface — closure-coupled to the wallet handle, network helpers, and DOM.
+ */
+export type MeltAction =
+  | { type: 'clearStranded'; mintQuoteId: string }
+  | { type: 'restoreAndSaveChange' }
+  | { type: 'saveResponseChange'; proofs: Proof[] }
+  | { type: 'showRecovery'; token: string }
+  | { type: 'setStatus'; key: string; isError: boolean }
+  | { type: 'claim'; preimage: string };
+
+/**
+ * Project a melt outcome onto the deterministic action sequence the
+ * dispatcher will execute.
+ *
+ * Mirrors the deriveOrderStatusActions pattern: pure data in, ordered actions
+ * out. Locks each branch's behavior to a unit test so future iterations can't
+ * silently reintroduce the marker-drop / change-recovery / preimage bugs that
+ * have already been fixed once in this surface (b0d70bd, 1afcd86, 631ca70,
+ * 35fc051, 3f39289).
+ */
+export function actionsForMeltOutcome(outcome: MeltOutcome): MeltAction[] {
+  switch (outcome.kind) {
+    case 'melt_succeeded':
+      return [
+        { type: 'clearStranded', mintQuoteId: outcome.mintQuoteId },
+        { type: 'saveResponseChange', proofs: outcome.changeProofs },
+        { type: 'setStatus', key: 'confirming_payment', isError: false },
+        { type: 'claim', preimage: outcome.preimage },
+      ];
+    case 'entry_check_threw':
+      return [
+        { type: 'showRecovery', token: outcome.encodedToken },
+        { type: 'setStatus', key: 'payment_failed', isError: true },
+      ];
+    case 'entry_paid_stale_snapshot':
+      return [
+        { type: 'clearStranded', mintQuoteId: outcome.mintQuoteId },
+        { type: 'restoreAndSaveChange' },
+        { type: 'setStatus', key: 'confirming_payment', isError: false },
+        { type: 'claim', preimage: outcome.preimage },
+      ];
+    case 'melt_threw_inputs_spent':
+      return [
+        { type: 'clearStranded', mintQuoteId: outcome.mintQuoteId },
+        { type: 'restoreAndSaveChange' },
+        { type: 'setStatus', key: 'confirming_payment', isError: false },
+        { type: 'claim', preimage: '' },
+      ];
+    case 'melt_threw_inputs_safe':
+      return [
+        { type: 'showRecovery', token: outcome.encodedToken },
+        { type: 'setStatus', key: 'payment_failed', isError: true },
+      ];
+    case 'melt_threw_state_unknown':
+      return [
+        { type: 'setStatus', key: 'reconciling_with_mint', isError: true },
+        { type: 'claim', preimage: '' },
+      ];
+  }
+}

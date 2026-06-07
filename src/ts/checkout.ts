@@ -13,6 +13,7 @@ import qrcode from 'qrcode-generator';
 import { copyTextToClipboard, doConfettiBomb, delay, getErrorMessage } from './utils';
 import {
   CHANGE_PAYLOAD_KEY,
+  actionsForMeltOutcome,
   clearStrandedProofs,
   createSerialRunner,
   deleteJson,
@@ -20,6 +21,8 @@ import {
   deriveWalletSeed,
   extractPaymentPreimage,
   loadStrandedProofs,
+  type MeltAction,
+  type MeltOutcome,
   rememberChangeItem,
   saveStrandedProofs,
   seedFingerprint,
@@ -609,51 +612,50 @@ jQuery(function ($) {
     trustedWallet: Wallet,
   ): Promise<void> {
     const token = getEncodedToken({ mint: data.trustedMint, proofs, unit: 'sat' });
-    let meltRes: MeltProofsResponse<MeltQuoteBolt11Response> | undefined;
-
     setStatus(t('paying_invoice'));
+    const outcome = await classifyMeltOutcome(proofs, trustedWallet, token);
+    for (const a of actionsForMeltOutcome(outcome)) {
+      await dispatchMeltAction(a, trustedWallet);
+    }
+  }
 
-    let quote: MeltQuoteBolt11Response;
+  // Async classifier: walks the mint sequence (entry quote check → melt
+  // attempt → post-throw probe) and pins the result to one of six discrete
+  // outcomes. All the awaits live here; the projection to an action sequence
+  // (actionsForMeltOutcome) is pure logic in helpers.ts and exhaustively
+  // unit-tested in melt-actions.test.ts. This split is what keeps regressions
+  // like the marker-drop / change-recovery / preimage-fallback fixes from
+  // sneaking back in — a future iteration changing the dispatch order has to
+  // change the projection function, which has to update its tests.
+  async function classifyMeltOutcome(
+    proofs: Proof[],
+    trustedWallet: Wallet,
+    encodedToken: string,
+  ): Promise<MeltOutcome> {
+    let initialQuote: MeltQuoteBolt11Response;
     try {
-      quote = await trustedWallet.checkMeltQuoteBolt11(data.quoteId);
+      initialQuote = await trustedWallet.checkMeltQuoteBolt11(data.quoteId);
     } catch (e) {
       console.error(getErrorMessage(e));
-      showRecovery(token);
-      setStatus(t('payment_failed'), true);
-      return;
+      return { kind: 'entry_check_threw', encodedToken };
     }
 
-    // The melt may have completed in a prior session that died before
-    // clearing the stranded-proof snapshot — typical refresh loop after a
-    // successful payment. Re-attempting meltProofsBolt11 against a PAID
-    // quote returns "melt quote is not unpaid: paid" and we'd surface a
-    // recovery UI for proofs the mint has already spent. Instead, drop
-    // the stale snapshot and hand the preimage straight to claim so the
-    // customer redirects to thank-you.
-    if (quote.state === MeltQuoteState.PAID) {
-      clearStrandedProofs(data.mintQuote.id);
-      // The melt completed in a prior session; if the response carried
-      // change-proofs they would have only existed in JS heap until
-      // saveProofs ran. Death between those two points orphans the change.
-      // One NUT-09 sweep on reload recovers any orphans into the existing
-      // change-display path. No-op when there were no change-proofs.
-      const restoredChange = await tryRestore(trustedWallet);
-      void saveProofs(restoredChange, trustedWallet);
-      setStatus(t('confirming_payment'));
-      void claimMeltPaid(extractPaymentPreimage(quote));
-      return;
+    if (initialQuote.state === MeltQuoteState.PAID) {
+      return {
+        kind: 'entry_paid_stale_snapshot',
+        preimage: extractPaymentPreimage(initialQuote),
+        mintQuoteId: data.mintQuote.id,
+      };
     }
 
+    let meltRes: MeltProofsResponse<MeltQuoteBolt11Response> | undefined;
     try {
-      meltRes = await trustedWallet.meltProofsBolt11(quote, proofs);
+      meltRes = await trustedWallet.meltProofsBolt11(initialQuote, proofs);
     } catch (e) {
       console.warn(
         'meltProofsBolt11 threw, re-checking quote state:',
         getErrorMessage(e),
       );
-      // The mint may have spent the inputs and dropped the response.
-      // Probe state before showing the recovery UI — otherwise we'd offer
-      // the customer a token containing already-spent proofs.
       let postState: MeltQuoteState | null = null;
       try {
         const recheck = await trustedWallet.checkMeltQuoteBolt11(data.quoteId);
@@ -661,56 +663,55 @@ jQuery(function ($) {
       } catch {
         // treat as unknown
       }
-      // Classify the post-throw probe and dispatch. The branch enum
-      // lives in helpers.ts so the classification is unit-testable.
       switch (deriveMeltFailureBranch(postState)) {
-        case 'paid_inputs_spent': {
-          // Inputs are spent; the input token would be worthless. Recover
-          // any change-proofs via NUT-09 and let the server finalise.
-          clearStrandedProofs(data.mintQuote.id);
-          const restoredChange = await tryRestore(trustedWallet);
-          void saveProofs(restoredChange, trustedWallet);
-          setStatus(t('confirming_payment'));
-          void claimMeltPaid('');
-          return;
-        }
+        case 'paid_inputs_spent':
+          return {
+            kind: 'melt_threw_inputs_spent',
+            mintQuoteId: data.mintQuote.id,
+          };
         case 'unpaid_inputs_safe':
-          // Inputs were never spent — input token is a valid recovery.
-          showRecovery(token);
-          setStatus(t('payment_failed'), true);
-          return;
+          return { kind: 'melt_threw_inputs_safe', encodedToken };
         case 'unknown_let_server_probe':
-          // Cannot safely tell the customer whether their inputs are spent.
-          // Surface a "reconciling" status and notify the server —
-          // claim_melt_quote will probe the mint itself, and when the mint
-          // reports PENDING it writes _cashu_melt_pending_quote_id server-
-          // side so the MeltReconciler cron picks the order up if the
-          // customer closes their tab. This closes the LN-leg gap that
-          // previously left the order unreconcilable.
-          setStatus(t('reconciling_with_mint'), true);
-          void claimMeltPaid('');
-          return;
+          return { kind: 'melt_threw_state_unknown' };
       }
     }
 
-    // Proofs are spent at the mint — recovery snapshot is now stale and
-    // would only confuse a future reload of this same order. Safe to drop
-    // even if the subsequent claim POST never reaches the server; the
-    // background pollOrderStatus will catch the PAID transition.
-    clearStrandedProofs(data.mintQuote.id);
-
     const changeProofs = Array.isArray(meltRes?.change) ? meltRes.change : [];
-    void saveProofs(changeProofs, trustedWallet);
+    return {
+      kind: 'melt_succeeded',
+      preimage: extractPaymentPreimage(meltRes),
+      changeProofs,
+      mintQuoteId: data.mintQuote.id,
+    };
+  }
 
-    setStatus(t('confirming_payment'));
-
-    // Tell the server the melt succeeded so it can mark the order paid.
-    // Preimage when available lets the server verify cryptographically with
-    // zero mint round-trips; otherwise the server falls back to a single
-    // mint call. Either way the polling endpoint will see is_paid() next
-    // tick — but we also redirect immediately on a PAID response so the
-    // customer doesn't wait the next poll interval.
-    void claimMeltPaid(extractPaymentPreimage(meltRes));
+  // Action executor: closure-coupled to the wallet handle, setStatus, t, and
+  // claimMeltPaid so the action list itself stays pure data. `void`-fires the
+  // background saves (saveProofs, claimMeltPaid) to match the prior behavior
+  // — they post to localStorage / our REST without blocking the next action.
+  async function dispatchMeltAction(a: MeltAction, trustedWallet: Wallet): Promise<void> {
+    switch (a.type) {
+      case 'clearStranded':
+        clearStrandedProofs(a.mintQuoteId);
+        return;
+      case 'restoreAndSaveChange': {
+        const restored = await tryRestore(trustedWallet);
+        void saveProofs(restored, trustedWallet);
+        return;
+      }
+      case 'saveResponseChange':
+        void saveProofs(a.proofs, trustedWallet);
+        return;
+      case 'showRecovery':
+        showRecovery(a.token);
+        return;
+      case 'setStatus':
+        setStatus(t(a.key), a.isError);
+        return;
+      case 'claim':
+        void claimMeltPaid(a.preimage);
+        return;
+    }
   }
 
   // Single-flight gate over the success branch shared by claimMeltPaid()
