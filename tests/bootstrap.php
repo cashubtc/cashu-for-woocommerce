@@ -189,7 +189,12 @@ if (!function_exists('wc_print_r')) {
 	}
 }
 
-// 11. Skeleton WC_Admin_Settings. The plugin's ValidateGlobalSettings calls
+// 11a. Skeleton OrderStatus enum-like class used by CashuGateway::setup_cashu_payment.
+//      Declared in a separate file because the production class lives under a
+//      namespace and the rest of this bootstrap declares root-namespace shims.
+require_once __DIR__ . '/Stubs/order-status.php';
+
+// 12. Skeleton WC_Admin_Settings. The plugin's ValidateGlobalSettings calls
 //     ::add_error() / ::add_message() to surface validation feedback on the
 //     settings screen. Tests capture into static arrays and reset() between
 //     cases — call WC_Admin_Settings::reset() in setUp.
