@@ -12,7 +12,7 @@ import {
 import qrcode from 'qrcode-generator';
 import { copyTextToClipboard, doConfettiBomb, delay, getErrorMessage } from './utils';
 import {
-  ChangeItem,
+  CHANGE_PAYLOAD_KEY,
   clearStrandedProofs,
   createSerialRunner,
   deleteJson,
@@ -20,9 +20,8 @@ import {
   deriveOrderStatusActions,
   deriveWalletSeed,
   extractPaymentPreimage,
-  loadChangePayload,
   loadStrandedProofs,
-  saveJson,
+  rememberChangeItem,
   saveStrandedProofs,
   seedFingerprint,
   selectPollIntervalMs,
@@ -252,19 +251,17 @@ jQuery(function ($) {
     walletSeed,
     walletSeedFp,
   );
-  const ls = {
-    change: 'cashu_wc_change',
-  };
-
   // The mint quote is server-authoritative (rendered into data-attrs by
   // the receipt page). We read `data.mintQuote.*` directly throughout; no
   // local copy, no localStorage caching, no race against a page refresh.
 
   // Best-effort clean up legacy localStorage from earlier versions of the
-  // plugin; harmless if nothing is there. deleteJson already swallows.
+  // plugin (cashu_wc_mq, cashu_wc_recovery) plus the previous order's
+  // change snapshot — change is deliberately ephemeral, see project memory.
+  // deleteJson already swallows so no try wrapper.
   deleteJson('cashu_wc_mq');
   deleteJson('cashu_wc_recovery');
-  deleteJson(ls.change);
+  deleteJson(CHANGE_PAYLOAD_KEY);
 
   // Drop abandoned-order stranded-proof snapshots past TTL so localStorage
   // doesn't accumulate over the long tail. Active recovery for THIS quote
@@ -435,14 +432,6 @@ jQuery(function ($) {
       kind: t('change_from_network'),
       dust: changeAmt <= changeFees,
     });
-  }
-
-  function rememberChangeItem(item: ChangeItem): void {
-    const payload = loadChangePayload(ls.change);
-    const exists = payload.items.some((x) => x.token === item.token);
-    if (!exists) payload.items.push(item);
-    payload.items = payload.items.slice(-5);
-    saveJson(ls.change, payload);
   }
 
   // ------------------------------

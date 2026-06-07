@@ -68,7 +68,9 @@ export function deleteJson(key: string): void {
 // Change payload (thanks-page change display)
 // ------------------------------
 
+export const CHANGE_PAYLOAD_KEY = 'cashu_wc_change';
 export const CHANGE_PAYLOAD_TTL_MS = 60 * 60 * 1000;
+export const CHANGE_PAYLOAD_MAX_ITEMS = 5;
 
 export function loadChangePayload(key: string): ChangePayload {
   // loadJson already catches; nothing else here throws.
@@ -81,6 +83,22 @@ export function loadChangePayload(key: string): ChangePayload {
     return { v: 1, created: Date.now(), items: [] };
   }
   return parsed;
+}
+
+/**
+ * Append a change item to the change-payload localStorage, deduplicated by
+ * token and trimmed to the last CHANGE_PAYLOAD_MAX_ITEMS entries. Adding a
+ * token that's already present is a no-op (no resurrection). The TTL-based
+ * clear and per-order init clear (see project_change_is_ephemeral memory)
+ * are handled at the call site — this helper just maintains the list.
+ */
+export function rememberChangeItem(item: ChangeItem): void {
+  const payload = loadChangePayload(CHANGE_PAYLOAD_KEY);
+  if (!payload.items.some((x) => x.token === item.token)) {
+    payload.items.push(item);
+  }
+  payload.items = payload.items.slice(-CHANGE_PAYLOAD_MAX_ITEMS);
+  saveJson(CHANGE_PAYLOAD_KEY, payload);
 }
 
 // ------------------------------

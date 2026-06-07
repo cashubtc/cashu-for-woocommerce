@@ -1,6 +1,8 @@
 import { describe, expect, beforeEach, test } from 'vitest';
 import type { Proof } from '@cashu/cashu-ts';
 import {
+  CHANGE_PAYLOAD_KEY,
+  CHANGE_PAYLOAD_MAX_ITEMS,
   CHANGE_PAYLOAD_TTL_MS,
   STRANDED_KEY_PREFIX,
   STRANDED_TTL_MS,
@@ -11,11 +13,13 @@ import {
   loadChangePayload,
   loadJson,
   loadStrandedProofs,
+  rememberChangeItem,
   saveJson,
   saveStrandedProofs,
   seedFingerprint,
   strandedKey,
   sweepStaleStrandedProofs,
+  type ChangeItem,
   type ChangePayload,
   type PersistedMintProofs,
 } from '../../src/ts/helpers';
@@ -82,9 +86,7 @@ describe('loadChangePayload', () => {
     const stored: ChangePayload = {
       v: 1,
       created: Date.now(),
-      items: [
-        { mint: 'm', token: 't', amount: 10, kind: 'k', dust: false },
-      ],
+      items: [{ mint: 'm', token: 't', amount: 10, kind: 'k', dust: false }],
     };
     saveJson(KEY, stored);
     expect(loadChangePayload(KEY).items).toHaveLength(1);
@@ -108,6 +110,56 @@ describe('loadChangePayload', () => {
   test('returns empty payload when stored is null', () => {
     localStorage.setItem(KEY, 'null');
     expect(loadChangePayload(KEY).items).toEqual([]);
+  });
+});
+
+// ----------------------------------------------------------------------------
+// rememberChangeItem
+// ----------------------------------------------------------------------------
+
+describe('rememberChangeItem', () => {
+  const makeItem = (token: string): ChangeItem => ({
+    mint: 'https://mint',
+    token,
+    amount: 7,
+    kind: 'Change From Network Fee Reserve',
+    dust: false,
+  });
+
+  test('persists a new item under the CHANGE_PAYLOAD_KEY', () => {
+    rememberChangeItem(makeItem('t1'));
+    const stored = loadJson<ChangePayload>(CHANGE_PAYLOAD_KEY);
+    expect(stored?.items.map((i) => i.token)).toEqual(['t1']);
+  });
+
+  test('appends a new token without removing existing ones', () => {
+    rememberChangeItem(makeItem('t1'));
+    rememberChangeItem(makeItem('t2'));
+    const stored = loadJson<ChangePayload>(CHANGE_PAYLOAD_KEY);
+    expect(stored?.items.map((i) => i.token)).toEqual(['t1', 't2']);
+  });
+
+  test('does not duplicate a token already in the list', () => {
+    rememberChangeItem(makeItem('t1'));
+    rememberChangeItem(makeItem('t1'));
+    rememberChangeItem(makeItem('t1'));
+    const stored = loadJson<ChangePayload>(CHANGE_PAYLOAD_KEY);
+    expect(stored?.items.map((i) => i.token)).toEqual(['t1']);
+  });
+
+  test('trims to the last CHANGE_PAYLOAD_MAX_ITEMS when more are added', () => {
+    for (let i = 1; i <= CHANGE_PAYLOAD_MAX_ITEMS + 3; i++) {
+      rememberChangeItem(makeItem(`t${i}`));
+    }
+    const stored = loadJson<ChangePayload>(CHANGE_PAYLOAD_KEY);
+    expect(stored?.items.map((i) => i.token)).toEqual(['t4', 't5', 't6', 't7', 't8']);
+  });
+
+  test('survives a malformed prior payload by falling back to empty', () => {
+    localStorage.setItem(CHANGE_PAYLOAD_KEY, '{not valid json}');
+    rememberChangeItem(makeItem('t1'));
+    const stored = loadJson<ChangePayload>(CHANGE_PAYLOAD_KEY);
+    expect(stored?.items.map((i) => i.token)).toEqual(['t1']);
   });
 });
 
