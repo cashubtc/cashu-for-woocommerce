@@ -127,19 +127,31 @@ function seedFingerprint(seed: Uint8Array): string {
 // Wallet cache: bounded so a long-lived tab doesn't reuse a Wallet with stale
 // keyset state. Mint keyset rotations are rare but possible, and a stale
 // wallet would silently produce proofs the mint rejects on next use.
+// The cache key now incorporates the seed fingerprint so two orders against
+// the same mint never share a Wallet (different seeds = different
+// deterministic counters; sharing a Wallet across seeds is a correctness bug).
 type CachedWallet = { promise: Promise<Wallet>; createdAt: number };
 const WALLET_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const walletCache = new Map<string, CachedWallet>();
 
-function getWalletCached(mintUrl: string, unit: CurrencyUnit = 'sat'): Promise<Wallet> {
-  const key = `${String(mintUrl).replace(/\/+$/, '')}|${unit}`;
+function getWalletCached(
+  mintUrl: string,
+  unit: CurrencyUnit,
+  seed: Uint8Array,
+  fingerprint: string,
+): Promise<Wallet> {
+  const key = `${String(mintUrl).replace(/\/+$/, '')}|${unit}|${fingerprint}`;
   const existing = walletCache.get(key);
   if (existing && Date.now() - existing.createdAt < WALLET_CACHE_TTL_MS) {
     return existing.promise;
   }
   if (existing) walletCache.delete(key);
   const promise = (async () => {
-    const w = new Wallet(mintUrl, { unit, logger: new ConsoleLogger('debug') });
+    const w = new Wallet(mintUrl, {
+      unit,
+      bip39seed: seed,
+      logger: new ConsoleLogger('debug'),
+    });
     await w.loadMint();
     return w;
   })();
@@ -426,7 +438,17 @@ jQuery(function ($) {
   let chain: Promise<any> = Promise.resolve();
   let mintHandleP: Promise<void> | null = null;
   let userPending = 0;
-  const trustedWalletP = getWalletCached(data.trustedMint, 'sat');
+  // Seed is derived per-order from data-attrs already on the page. No persistence,
+  // no async, no browser-feature dependency (sha512 is from @noble/hashes,
+  // already a direct dep of cashu-ts).
+  const walletSeed = deriveWalletSeed(data.orderKey, data.mintQuote.id);
+  const walletSeedFp = seedFingerprint(walletSeed);
+  const trustedWalletP = getWalletCached(
+    data.trustedMint,
+    'sat',
+    walletSeed,
+    walletSeedFp,
+  );
   const ls = {
     change: 'cashu_wc_change',
   };
