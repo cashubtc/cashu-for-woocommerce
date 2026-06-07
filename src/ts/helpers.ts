@@ -239,6 +239,62 @@ export function formatCountdown(
 }
 
 // ----------------------------------------------------------------------------
+// Misc small helpers
+// ----------------------------------------------------------------------------
+
+/**
+ * Pick the next backoff interval from a list, indexed by `streak` and capped
+ * to the last entry. Used by pollOrderStatus to step through [5s, 15s, 30s]
+ * as consecutive PENDING responses accumulate, dropping mint-side
+ * amplification on long-routing LN payments. Negative streaks clamp to 0.
+ */
+export function selectPollIntervalMs(
+  streak: number,
+  intervals: readonly number[],
+): number {
+  if (intervals.length === 0) return 0;
+  const step = Math.min(Math.max(0, streak), intervals.length - 1);
+  return intervals[step];
+}
+
+/**
+ * Classify the post-throw mint state probe inside meltTrustedProofsToVendor.
+ * cashu-ts threw, we re-probed, and now need to decide whether the input
+ * proofs were spent at the mint (PAID), are still safe (UNPAID), or
+ * indeterminate (anything else — empty string from a 429, null from a
+ * separate throw, or a state we don't recognise).
+ */
+export type MeltFailureBranch =
+  | 'paid_inputs_spent'
+  | 'unpaid_inputs_safe'
+  | 'unknown_let_server_probe';
+
+export function deriveMeltFailureBranch(
+  postState: string | null | undefined,
+): MeltFailureBranch {
+  if (postState === 'PAID') return 'paid_inputs_spent';
+  if (postState === 'UNPAID') return 'unpaid_inputs_safe';
+  return 'unknown_let_server_probe';
+}
+
+/**
+ * Pull `payment_preimage` off a cashu-ts quote or melt-response wrapper, with
+ * the `unknown` typed-extraction (some mint responses surface preimage
+ * directly on the quote, some wrap it under `.quote`). Returns the empty
+ * string when absent or non-string. Centralises the cast that was previously
+ * duplicated at three call sites with `(x as any).payment_preimage`.
+ */
+export function extractPaymentPreimage(source: unknown): string {
+  if (!source || typeof source !== 'object') return '';
+  const direct = (source as { payment_preimage?: unknown }).payment_preimage;
+  if (typeof direct === 'string') return direct;
+  const wrapped = (source as { quote?: { payment_preimage?: unknown } }).quote
+    ?.payment_preimage;
+  if (typeof wrapped === 'string') return wrapped;
+  return '';
+}
+
+// ----------------------------------------------------------------------------
 // Order status decision logic
 // ----------------------------------------------------------------------------
 

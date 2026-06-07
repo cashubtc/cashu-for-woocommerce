@@ -16,13 +16,16 @@ import {
   clearStrandedProofs,
   createSerialRunner,
   deleteJson,
+  deriveMeltFailureBranch,
   deriveOrderStatusActions,
   deriveWalletSeed,
+  extractPaymentPreimage,
   loadChangePayload,
   loadStrandedProofs,
   saveJson,
   saveStrandedProofs,
   seedFingerprint,
+  selectPollIntervalMs,
   sweepStaleStrandedProofs,
 } from './helpers';
 import { createWalletGetter, tryRestore } from './wallet';
@@ -656,12 +659,8 @@ jQuery(function ($) {
       // change-display path. No-op when there were no change-proofs.
       const restoredChange = await tryRestore(trustedWallet);
       void saveProofs(restoredChange, trustedWallet);
-      const paidPreimage =
-        typeof (quote as any).payment_preimage === 'string'
-          ? (quote as any).payment_preimage
-          : '';
       setStatus(t('confirming_payment'));
-      void claimMeltPaid(paidPreimage);
+      void claimMeltPaid(extractPaymentPreimage(quote));
       return;
     }
 
@@ -682,32 +681,36 @@ jQuery(function ($) {
       } catch {
         // treat as unknown
       }
-      if (postState === MeltQuoteState.PAID) {
-        // Inputs are spent; the input token would be worthless. Recover
-        // any change-proofs via NUT-09 and let the server finalise.
-        clearStrandedProofs(data.mintQuote.id);
-        const restoredChange = await tryRestore(trustedWallet);
-        void saveProofs(restoredChange, trustedWallet);
-        setStatus(t('confirming_payment'));
-        void claimMeltPaid('');
-        return;
+      // Classify the post-throw probe and dispatch. The branch enum
+      // lives in helpers.ts so the classification is unit-testable.
+      switch (deriveMeltFailureBranch(postState)) {
+        case 'paid_inputs_spent': {
+          // Inputs are spent; the input token would be worthless. Recover
+          // any change-proofs via NUT-09 and let the server finalise.
+          clearStrandedProofs(data.mintQuote.id);
+          const restoredChange = await tryRestore(trustedWallet);
+          void saveProofs(restoredChange, trustedWallet);
+          setStatus(t('confirming_payment'));
+          void claimMeltPaid('');
+          return;
+        }
+        case 'unpaid_inputs_safe':
+          // Inputs were never spent — input token is a valid recovery.
+          showRecovery(token);
+          setStatus(t('payment_failed'), true);
+          return;
+        case 'unknown_let_server_probe':
+          // Cannot safely tell the customer whether their inputs are spent.
+          // Surface a "reconciling" status and notify the server —
+          // claim_melt_quote will probe the mint itself, and when the mint
+          // reports PENDING it writes _cashu_melt_pending_quote_id server-
+          // side so the MeltReconciler cron picks the order up if the
+          // customer closes their tab. This closes the LN-leg gap that
+          // previously left the order unreconcilable.
+          setStatus(t('reconciling_with_mint'), true);
+          void claimMeltPaid('');
+          return;
       }
-      if (postState === MeltQuoteState.UNPAID) {
-        // Inputs were never spent — input token is a valid recovery.
-        showRecovery(token);
-        setStatus(t('payment_failed'), true);
-        return;
-      }
-      // Unknown / pending: cannot safely tell the customer whether their
-      // inputs are spent. Surface a "reconciling" status and notify the
-      // server — claim_melt_quote will probe the mint itself, and when
-      // the mint reports PENDING it writes _cashu_melt_pending_quote_id
-      // server-side so the MeltReconciler cron picks the order up if
-      // the customer closes their tab. This closes the LN-leg gap that
-      // previously left the order unreconcilable.
-      setStatus(t('reconciling_with_mint'), true);
-      void claimMeltPaid('');
-      return;
     }
 
     // Proofs are spent at the mint — recovery snapshot is now stale and
@@ -727,8 +730,7 @@ jQuery(function ($) {
     // mint call. Either way the polling endpoint will see is_paid() next
     // tick — but we also redirect immediately on a PAID response so the
     // customer doesn't wait the next poll interval.
-    const preimage = (meltRes as any)?.quote?.payment_preimage;
-    void claimMeltPaid(typeof preimage === 'string' ? preimage : '');
+    void claimMeltPaid(extractPaymentPreimage(meltRes));
   }
 
   // Single-flight gate over the success branch shared by claimMeltPaid()
@@ -855,8 +857,7 @@ jQuery(function ($) {
       }
       let pendingStreak = 0;
       while (!ac.signal.aborted && Date.now() <= data.quoteExpiryMs) {
-        const step = Math.min(pendingStreak, POLL_INTERVALS_MS.length - 1);
-        await delay(POLL_INTERVALS_MS[step]);
+        await delay(selectPollIntervalMs(pendingStreak, POLL_INTERVALS_MS));
         const r = await run(() => checkOrderStatus());
         if (r?.state === 'PAID' || r?.state === 'EXPIRED') return;
         pendingStreak = r?.state === 'PENDING' ? pendingStreak + 1 : 0;
