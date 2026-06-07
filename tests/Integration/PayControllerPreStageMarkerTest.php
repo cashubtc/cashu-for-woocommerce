@@ -152,4 +152,245 @@ final class PayControllerPreStageMarkerTest extends IntegrationTestCase {
 		$this->assertSame( '', $order->get_meta( '_cashu_melt_pending_quote_id' ) );
 		$this->assertSame( '', $order->get_meta( '_cashu_melt_pending_at' ) );
 	}
+
+	public function test_probe_finalises_order_when_mint_says_paid_after_throw(): void {
+		$this->stubBaseline();
+		$this->setUpFakeWpdb();
+
+		$expected_id = substr( wp_hash( '42|key|cashu_payment_id' ), 0, 16 );
+
+		$order = $this->mockOrder( 42, array(
+			'_cashu_melt_mint'     => 'https://m.example',
+			'_cashu_melt_quote_id' => 'q_throw_paid',
+			'_cashu_melt_total'    => '10',
+			'_cashu_spot_time'     => (string) time(),
+			'_cashu_payment_hash'  => '',
+		) );
+		$order->shouldReceive( 'is_paid' )->andReturn( false );
+		$order->shouldReceive( 'key_is_valid' )->andReturn( true );
+		$order->shouldReceive( 'payment_complete' )->once()->andReturn( true );
+		$order->shouldReceive( 'add_order_note' )->andReturn( 1 );
+
+		Functions\when( 'wc_get_order' )->justReturn( $order );
+
+		// POST throws (timeout); follow-up GET probe says PAID.
+		Functions\expect( 'wp_remote_post' )->once()->andReturn(
+			new WP_Error( 'http_request_failed', 'timeout' )
+		);
+		Functions\expect( 'wp_remote_get' )->once()->andReturn( array(
+			'response' => array( 'code' => 200 ),
+			'body'     => json_encode( array(
+				'state'            => 'PAID',
+				'payment_preimage' => str_repeat( '0', 64 ),
+				'amount'           => 10,
+			) ),
+		) );
+
+		$controller = new PayController();
+		$response   = $controller->pay( $this->requestWithBody( 42, 'key', array(
+			'mint'   => 'https://m.example',
+			'unit'   => 'sat',
+			'id'     => $expected_id,
+			'proofs' => array( array( 'id' => 'k', 'amount' => 10, 'secret' => 's', 'C' => 'c' ) ),
+		) ) );
+
+		$this->assertInstanceOf( WP_REST_Response::class, $response );
+		$this->assertSame( 'ok', $response->get_data()['status'] );
+		$this->assertSame( '', $order->get_meta( '_cashu_melt_pending_quote_id' ) );
+	}
+
+	public function test_probe_returns_pending_keeps_marker(): void {
+		$this->stubBaseline();
+		$this->setUpFakeWpdb();
+		$expected_id = substr( wp_hash( '42|key|cashu_payment_id' ), 0, 16 );
+
+		$order = $this->mockOrder( 42, array(
+			'_cashu_melt_mint'     => 'https://m.example',
+			'_cashu_melt_quote_id' => 'q_throw_pending',
+			'_cashu_melt_total'    => '10',
+			'_cashu_spot_time'     => (string) time(),
+		) );
+		$order->shouldReceive( 'is_paid' )->andReturn( false );
+		$order->shouldReceive( 'key_is_valid' )->andReturn( true );
+
+		Functions\when( 'wc_get_order' )->justReturn( $order );
+		Functions\expect( 'wp_remote_post' )->once()->andReturn(
+			new WP_Error( 'http_request_failed', 'timeout' )
+		);
+		Functions\expect( 'wp_remote_get' )->once()->andReturn( array(
+			'response' => array( 'code' => 200 ),
+			'body'     => json_encode( array( 'state' => 'PENDING' ) ),
+		) );
+
+		$controller = new PayController();
+		$response   = $controller->pay( $this->requestWithBody( 42, 'key', array(
+			'mint'   => 'https://m.example',
+			'unit'   => 'sat',
+			'id'     => $expected_id,
+			'proofs' => array( array( 'id' => 'k', 'amount' => 10, 'secret' => 's', 'C' => 'c' ) ),
+		) ) );
+
+		$this->assertSame( 'pending', $response->get_data()['status'] );
+		$this->assertSame( 'q_throw_pending', $order->get_meta( '_cashu_melt_pending_quote_id' ) );
+	}
+
+	public function test_probe_returns_unpaid_drops_marker(): void {
+		$this->stubBaseline();
+		$this->setUpFakeWpdb();
+		$expected_id = substr( wp_hash( '42|key|cashu_payment_id' ), 0, 16 );
+
+		$order = $this->mockOrder( 42, array(
+			'_cashu_melt_mint'     => 'https://m.example',
+			'_cashu_melt_quote_id' => 'q_throw_unpaid',
+			'_cashu_melt_total'    => '10',
+			'_cashu_spot_time'     => (string) time(),
+		) );
+		$order->shouldReceive( 'is_paid' )->andReturn( false );
+		$order->shouldReceive( 'key_is_valid' )->andReturn( true );
+
+		Functions\when( 'wc_get_order' )->justReturn( $order );
+		Functions\expect( 'wp_remote_post' )->once()->andReturn(
+			new WP_Error( 'http_request_failed', 'timeout' )
+		);
+		Functions\expect( 'wp_remote_get' )->once()->andReturn( array(
+			'response' => array( 'code' => 200 ),
+			'body'     => json_encode( array( 'state' => 'UNPAID' ) ),
+		) );
+
+		$controller = new PayController();
+		$response   = $controller->pay( $this->requestWithBody( 42, 'key', array(
+			'mint'   => 'https://m.example',
+			'unit'   => 'sat',
+			'id'     => $expected_id,
+			'proofs' => array( array( 'id' => 'k', 'amount' => 10, 'secret' => 's', 'C' => 'c' ) ),
+		) ) );
+
+		$this->assertInstanceOf( WP_Error::class, $response );
+		$this->assertSame( 'cashu_mint_error', $response->get_error_code() );
+		$this->assertSame( '', $order->get_meta( '_cashu_melt_pending_quote_id' ) );
+	}
+
+	public function test_probe_failure_keeps_marker_for_later_reconciliation(): void {
+		$this->stubBaseline();
+		$this->setUpFakeWpdb();
+		$expected_id = substr( wp_hash( '42|key|cashu_payment_id' ), 0, 16 );
+
+		$order = $this->mockOrder( 42, array(
+			'_cashu_melt_mint'     => 'https://m.example',
+			'_cashu_melt_quote_id' => 'q_double_fail',
+			'_cashu_melt_total'    => '10',
+			'_cashu_spot_time'     => (string) time(),
+		) );
+		$order->shouldReceive( 'is_paid' )->andReturn( false );
+		$order->shouldReceive( 'key_is_valid' )->andReturn( true );
+
+		Functions\when( 'wc_get_order' )->justReturn( $order );
+		Functions\expect( 'wp_remote_post' )->once()->andReturn(
+			new WP_Error( 'http_request_failed', 'timeout' )
+		);
+		// Probe also fails — mint genuinely unreachable.
+		Functions\expect( 'wp_remote_get' )->once()->andReturn(
+			new WP_Error( 'http_request_failed', 'timeout' )
+		);
+
+		$controller = new PayController();
+		$response   = $controller->pay( $this->requestWithBody( 42, 'key', array(
+			'mint'   => 'https://m.example',
+			'unit'   => 'sat',
+			'id'     => $expected_id,
+			'proofs' => array( array( 'id' => 'k', 'amount' => 10, 'secret' => 's', 'C' => 'c' ) ),
+		) ) );
+
+		$this->assertInstanceOf( WP_Error::class, $response );
+		$this->assertSame( 'cashu_mint_error', $response->get_error_code() );
+		// Marker MUST persist so MeltReconciler can pick this up later.
+		$this->assertSame( 'q_double_fail', $order->get_meta( '_cashu_melt_pending_quote_id' ) );
+	}
+
+	public function test_state_mismatch_probe_paid_finalises_order(): void {
+		$this->stubBaseline();
+		$this->setUpFakeWpdb();
+		$expected_id = substr( wp_hash( '42|key|cashu_payment_id' ), 0, 16 );
+
+		$order = $this->mockOrder( 42, array(
+			'_cashu_melt_mint'     => 'https://m.example',
+			'_cashu_melt_quote_id' => 'q_mismatch_paid',
+			'_cashu_melt_total'    => '10',
+			'_cashu_spot_time'     => (string) time(),
+			'_cashu_payment_hash'  => '',
+		) );
+		$order->shouldReceive( 'is_paid' )->andReturn( false );
+		$order->shouldReceive( 'key_is_valid' )->andReturn( true );
+		$order->shouldReceive( 'payment_complete' )->once()->andReturn( true );
+		$order->shouldReceive( 'add_order_note' )->andReturn( 1 );
+
+		Functions\when( 'wc_get_order' )->justReturn( $order );
+
+		// POST returns 200 with an unknown state — drops into the state-mismatch
+		// branch. Probe says PAID — order finalises.
+		Functions\expect( 'wp_remote_post' )->once()->andReturn( array(
+			'response' => array( 'code' => 200 ),
+			'body'     => json_encode( array( 'state' => 'UNKNOWN' ) ),
+		) );
+		Functions\expect( 'wp_remote_get' )->once()->andReturn( array(
+			'response' => array( 'code' => 200 ),
+			'body'     => json_encode( array(
+				'state'            => 'PAID',
+				'payment_preimage' => str_repeat( '0', 64 ),
+				'amount'           => 10,
+			) ),
+		) );
+
+		$controller = new PayController();
+		$response   = $controller->pay( $this->requestWithBody( 42, 'key', array(
+			'mint'   => 'https://m.example',
+			'unit'   => 'sat',
+			'id'     => $expected_id,
+			'proofs' => array( array( 'id' => 'k', 'amount' => 10, 'secret' => 's', 'C' => 'c' ) ),
+		) ) );
+
+		$this->assertInstanceOf( WP_REST_Response::class, $response );
+		$this->assertSame( 'ok', $response->get_data()['status'] );
+		$this->assertSame( '', $order->get_meta( '_cashu_melt_pending_quote_id' ) );
+	}
+
+	public function test_state_mismatch_probe_failure_returns_cashu_unpaid(): void {
+		$this->stubBaseline();
+		$this->setUpFakeWpdb();
+		$expected_id = substr( wp_hash( '42|key|cashu_payment_id' ), 0, 16 );
+
+		$order = $this->mockOrder( 42, array(
+			'_cashu_melt_mint'     => 'https://m.example',
+			'_cashu_melt_quote_id' => 'q_mismatch_unknown',
+			'_cashu_melt_total'    => '10',
+			'_cashu_spot_time'     => (string) time(),
+		) );
+		$order->shouldReceive( 'is_paid' )->andReturn( false );
+		$order->shouldReceive( 'key_is_valid' )->andReturn( true );
+
+		Functions\when( 'wc_get_order' )->justReturn( $order );
+
+		Functions\expect( 'wp_remote_post' )->once()->andReturn( array(
+			'response' => array( 'code' => 200 ),
+			'body'     => json_encode( array( 'state' => 'UNKNOWN' ) ),
+		) );
+		// Probe also fails (or returns nothing useful) — terminal must be
+		// cashu_unpaid (not cashu_mint_error) and marker must persist.
+		Functions\expect( 'wp_remote_get' )->once()->andReturn(
+			new WP_Error( 'http_request_failed', 'mint unreachable' )
+		);
+
+		$controller = new PayController();
+		$response   = $controller->pay( $this->requestWithBody( 42, 'key', array(
+			'mint'   => 'https://m.example',
+			'unit'   => 'sat',
+			'id'     => $expected_id,
+			'proofs' => array( array( 'id' => 'k', 'amount' => 10, 'secret' => 's', 'C' => 'c' ) ),
+		) ) );
+
+		$this->assertInstanceOf( WP_Error::class, $response );
+		$this->assertSame( 'cashu_unpaid', $response->get_error_code() );
+		// Marker persists for cron / polling reconciliation.
+		$this->assertSame( 'q_mismatch_unknown', $order->get_meta( '_cashu_melt_pending_quote_id' ) );
+	}
 }

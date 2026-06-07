@@ -261,7 +261,34 @@ final class PayController {
 			try {
 				$mint_response = $gateway->request_melt_bolt11( $quote_id, $proofs, $trusted_mint );
 			} catch ( \Throwable $e ) {
-				Logger::debug( 'Cashu melt failed: ' . $e->getMessage() );
+				Logger::debug( 'Cashu melt failed for order ' . $order->get_id() . ', quote ' . $quote_id . ': ' . $e->getMessage() . ' — probing mint state' );
+				$probed       = $gateway->fetch_melt_quote_state_safely( $quote_id, $trusted_mint );
+				$probed_state = isset( $probed['state'] ) ? (string) $probed['state'] : '';
+
+				if ( 'PAID' === $probed_state ) {
+					return $this->finalise_paid( $order, $quote_id, $probed, $expected_id, $expected_amount );
+				}
+				if ( 'PENDING' === $probed_state ) {
+					// Marker already set by pre-stage. Refresh timestamp.
+					$order->update_meta_data( '_cashu_melt_pending_at', time() );
+					$order->save();
+					return rest_ensure_response(
+						array(
+							'status' => 'pending',
+							'id'     => $expected_id,
+						)
+					);
+				}
+				if ( 'UNPAID' === $probed_state ) {
+					// Mint never consumed the proofs — they're still spendable. Drop
+					// the marker so future polls don't waste a mint hit on a dead quote.
+					$order->delete_meta_data( '_cashu_melt_pending_quote_id' );
+					$order->delete_meta_data( '_cashu_melt_pending_at' );
+					$order->save();
+					return new WP_Error( 'cashu_mint_error', 'Mint melt failed.', array( 'status' => 502 ) );
+				}
+				// Unknown / probe also failed — KEEP the marker so confirm_melt_quote
+				// and MeltReconciler can keep trying.
 				return new WP_Error( 'cashu_mint_error', 'Mint melt failed.', array( 'status' => 502 ) );
 			}
 
@@ -292,67 +319,99 @@ final class PayController {
 				// Don't dump the full mint response — even on non-PAID states the
 				// body can carry sensitive fields (e.g. a partial preimage on
 				// some mint impls). The state + quote_id is enough to trace.
-				Logger::debug( 'Mint returned non-PAID state "' . $state . '" for order ' . $order->get_id() . ', quote ' . $quote_id );
+				Logger::debug( 'Mint returned non-PAID state "' . $state . '" for order ' . $order->get_id() . ', quote ' . $quote_id . ' — probing mint state' );
+				$probed       = $gateway->fetch_melt_quote_state_safely( $quote_id, $trusted_mint );
+				$probed_state = isset( $probed['state'] ) ? (string) $probed['state'] : '';
+
+				if ( 'PAID' === $probed_state ) {
+					return $this->finalise_paid( $order, $quote_id, $probed, $expected_id, $expected_amount );
+				}
+				if ( 'PENDING' === $probed_state ) {
+					$order->update_meta_data( '_cashu_melt_pending_at', time() );
+					$order->save();
+					return rest_ensure_response(
+						array(
+							'status' => 'pending',
+							'id'     => $expected_id,
+						)
+					);
+				}
+				if ( 'UNPAID' === $probed_state ) {
+					$order->delete_meta_data( '_cashu_melt_pending_quote_id' );
+					$order->delete_meta_data( '_cashu_melt_pending_at' );
+					$order->save();
+				}
 				return new WP_Error( 'cashu_unpaid', 'Mint did not settle the invoice.', array( 'status' => 502 ) );
 			}
 
-			// Persist preimage + change. Verify the mint-supplied preimage
-			// against the stored payment_hash before storing it — a misbehaving
-			// or compromised mint could otherwise poison the audit trail. A
-			// mismatch isn't fatal (the proofs ARE consumed at the mint, so
-			// the merchant is paid) but the recorded preimage should not lie.
-			$raw_preimage      = isset( $mint_response['payment_preimage'] ) && is_string( $mint_response['payment_preimage'] )
-				? $mint_response['payment_preimage']
-				: '';
-			$stored_hash       = (string) $order->get_meta( '_cashu_payment_hash', true );
-			$verified_preimage = '';
-			if ( '' !== $raw_preimage ) {
-				if ( '' === $stored_hash || Bolt11::preimageMatches( $raw_preimage, $stored_hash ) ) {
-					$verified_preimage = $raw_preimage;
-					$order->update_meta_data( '_cashu_payment_preimage', sanitize_text_field( $raw_preimage ) );
-				} else {
-					Logger::error( 'PayController: mint preimage does not match invoice hash for order ' . $order->get_id() );
-				}
-			}
-			$change = isset( $mint_response['change'] ) && is_array( $mint_response['change'] ) ? $mint_response['change'] : array();
-
-			$order->delete_meta_data( '_cashu_melt_pending_quote_id' );
-			$order->delete_meta_data( '_cashu_melt_pending_at' );
-
-			$order->payment_complete( $quote_id );
-
-			// Prefer the LN address snapshotted at quote creation; fall back
-			// to the current option for legacy orders that pre-date that snapshot.
-			$lightning_address = (string) $order->get_meta( '_cashu_invoice_ln_address', true );
-			if ( '' === $lightning_address ) {
-				$lightning_address = (string) get_option( 'cashu_lightning_address', '' );
-			}
-			$paid_amount = isset( $mint_response['amount'] )
-				? (string) $mint_response['amount']
-				: (string) $expected_amount;
-
-			$order->add_order_note(
-				sprintf(
-					/* translators: %1$s: BTC Symbol, %2$s: amount, %3$s: Lightning Address, %4$s: Melt Quote ID, %5$s: Payment preimage */
-					__( "Cashu payment (NUT-18): %1\$s%2\$s\nSent to: %3\$s\nMelt quote: %4\$s\nPayment preimage: %5\$s", 'cashu-for-woocommerce' ),
-					CASHU_WC_BIP177_SYMBOL,
-					$paid_amount,
-					$lightning_address,
-					$quote_id,
-					$verified_preimage
-				)
-			);
-
-			return rest_ensure_response(
-				array(
-					'status' => 'ok',
-					'id'     => $expected_id,
-					'change' => $change,
-				)
-			);
+			return $this->finalise_paid( $order, $quote_id, $mint_response, $expected_id, $expected_amount );
 		} finally {
 			OrderLock::release( $order_id, 'pay' );
 		}
+	}
+
+	/**
+	 * Finalise an order against a PAID mint response. Reused by the direct-PAID
+	 * branch and the reconciliation probe so they share one source of truth on
+	 * the preimage check, order note, and marker clear.
+	 *
+	 * @param array $mint_response Mint's reply (decoded). Must carry state=PAID.
+	 */
+	private function finalise_paid( \WC_Order $order, string $quote_id, array $mint_response, string $expected_id, int $expected_amount ): \WP_REST_Response {
+		// Persist preimage + change. Verify the mint-supplied preimage
+		// against the stored payment_hash before storing it — a misbehaving
+		// or compromised mint could otherwise poison the audit trail. A
+		// mismatch isn't fatal (the proofs ARE consumed at the mint, so
+		// the merchant is paid) but the recorded preimage should not lie.
+		$raw_preimage      = isset( $mint_response['payment_preimage'] ) && is_string( $mint_response['payment_preimage'] )
+			? $mint_response['payment_preimage']
+			: '';
+		$stored_hash       = (string) $order->get_meta( '_cashu_payment_hash', true );
+		$verified_preimage = '';
+		if ( '' !== $raw_preimage ) {
+			if ( '' === $stored_hash || Bolt11::preimageMatches( $raw_preimage, $stored_hash ) ) {
+				$verified_preimage = $raw_preimage;
+				$order->update_meta_data( '_cashu_payment_preimage', sanitize_text_field( $raw_preimage ) );
+			} else {
+				Logger::error( 'PayController: mint preimage does not match invoice hash for order ' . $order->get_id() );
+			}
+		}
+		$change = isset( $mint_response['change'] ) && is_array( $mint_response['change'] ) ? $mint_response['change'] : array();
+
+		$order->delete_meta_data( '_cashu_melt_pending_quote_id' );
+		$order->delete_meta_data( '_cashu_melt_pending_at' );
+
+		$order->payment_complete( $quote_id );
+
+		// Prefer the LN address snapshotted at quote creation; fall back
+		// to the current option for legacy orders that pre-date that snapshot.
+		$lightning_address = (string) $order->get_meta( '_cashu_invoice_ln_address', true );
+		if ( '' === $lightning_address ) {
+			$lightning_address = (string) get_option( 'cashu_lightning_address', '' );
+		}
+		$paid_amount = isset( $mint_response['amount'] )
+			? (string) $mint_response['amount']
+			: (string) $expected_amount;
+
+		$order->add_order_note(
+			sprintf(
+				/* translators: %1$s: BTC Symbol, %2$s: amount, %3$s: Lightning Address, %4$s: Melt Quote ID, %5$s: Payment preimage */
+				__( "Cashu payment (NUT-18): %1\$s%2\$s\nSent to: %3\$s\nMelt quote: %4\$s\nPayment preimage: %5\$s", 'cashu-for-woocommerce' ),
+				CASHU_WC_BIP177_SYMBOL,
+				$paid_amount,
+				$lightning_address,
+				$quote_id,
+				$verified_preimage
+			)
+		);
+
+		return rest_ensure_response(
+			array(
+				'status' => 'ok',
+				'id'     => $expected_id,
+				'change' => $change,
+			)
+		);
 	}
 
 	private function read_json_body( WP_REST_Request $request ): mixed {
