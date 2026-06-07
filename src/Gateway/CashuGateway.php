@@ -521,7 +521,20 @@ class CashuGateway extends \WC_Payment_Gateway {
 				// — preserve, since rotating on a network blip would orphan a
 				// possibly-paid quote (recovery would have to come through the
 				// admin archive meta-box).
-				$mint_state   = $this->fetch_melt_quote_state_safely( $quote_id );
+				//
+				// Share the same `cashu_melt_state_*` transient cache as the
+				// polling endpoint so refreshes-during-pending don't bypass
+				// the rate-limit conservation. Cache TTL matches the polling
+				// path (60s fresh, 120s empty).
+				$cache_key = 'cashu_melt_state_' . md5( $quote_id );
+				$cached    = get_transient( $cache_key );
+				if ( false !== $cached && is_array( $cached ) ) {
+					$mint_state = $cached;
+				} else {
+					$mint_state = $this->fetch_melt_quote_state_safely( $quote_id );
+					$ttl        = empty( $mint_state ) ? ( 2 * MINUTE_IN_SECONDS ) : MINUTE_IN_SECONDS;
+					set_transient( $cache_key, $mint_state, $ttl );
+				}
 				$state_string = isset( $mint_state['state'] ) ? (string) $mint_state['state'] : '';
 				if ( 'PAID' === $state_string || 'PENDING' === $state_string || '' === $state_string ) {
 					return;
