@@ -382,6 +382,17 @@ class CashuGateway extends \WC_Payment_Gateway {
 				$fresh
 			);
 
+			// Re-check is_paid from a fresh DB read immediately before
+			// update_status. A concurrent payment_complete (cashu leg
+			// PayController, LN leg mark_paid, or MeltReconciler) can flip
+			// the order to a paid status between the is_paid() check above
+			// and this point — update_status('pending') would silently
+			// un-pay the order and fire WC's processing→pending transition.
+			$latest = wc_get_order( $order_id );
+			if ( $latest && $latest->is_paid() ) {
+				return;
+			}
+
 			// Set order status.
 			$fresh->update_status(
 				$process_payment_status,
@@ -804,6 +815,19 @@ class CashuGateway extends \WC_Payment_Gateway {
 		if ( is_string( $encoded ) ) {
 			$order->update_meta_data( '_cashu_archived_melt_quotes', $encoded );
 		}
+
+		// Clear any pending-melt marker pointing at the rotated quote so
+		// MeltReconciler and the polling endpoint don't keep probing a quote
+		// we've moved on from. Rotation only happens when the mint positively
+		// returned UNPAID (see ensure_melt_quote_for_order), so proofs were
+		// never consumed and the marker is safely dead. Also flush the
+		// shared mint-state transient cached against the rotated quote id.
+		$pending_quote_id = (string) $order->get_meta( '_cashu_melt_pending_quote_id', true );
+		if ( $pending_quote_id === $current ) {
+			$order->delete_meta_data( '_cashu_melt_pending_quote_id' );
+			$order->delete_meta_data( '_cashu_melt_pending_at' );
+		}
+		delete_transient( 'cashu_melt_state_' . md5( $current ) );
 	}
 
 	/**

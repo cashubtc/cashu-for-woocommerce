@@ -27,6 +27,16 @@
 	<rule ref="WordPress-Extra"/>
 	<!-- <rule ref="WordPress-Docs"/> -->
 
+	<!-- Tell the capabilities sniff about WooCommerce's custom caps so
+	     current_user_can( 'manage_woocommerce' ) doesn't warn. -->
+	<rule ref="WordPress.WP.Capabilities">
+		<properties>
+			<property name="custom_capabilities" type="array">
+				<element value="manage_woocommerce"/>
+			</property>
+		</properties>
+	</rule>
+
 	<!-- Example of relaxed line length, tweak if you prefer stricter -->
 	<exclude name="Generic.Files.LineLength.TooLong"/>
 	<exclude name="Generic.Files.LineLength.MaxExceeded"/>

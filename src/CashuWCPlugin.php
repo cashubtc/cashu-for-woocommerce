@@ -187,6 +187,15 @@ final class CashuWCPlugin {
 	}
 
 	public function enqueueAdminScripts(): void {
+		// Only the audience that can act on the review notice (admins /
+		// shop managers) needs the dismiss-nonce — leaking it to every
+		// subscriber visiting wp-admin/profile.php would let them write
+		// the cashu_review_dismissed_forever option through the AJAX
+		// handler below. Cheap belt-and-braces on top of the capability
+		// check in processAjaxNotification().
+		if ( ! current_user_can( 'manage_woocommerce' ) ) {
+			return;
+		}
 		wp_enqueue_script(
 			'cashu-notifications',
 			CASHU_WC_URL . 'assets/js/backend/notifications.js',
@@ -207,6 +216,14 @@ final class CashuWCPlugin {
 	public function processAjaxNotification(): void {
 		if ( ! check_ajax_referer( 'cashu-notifications-nonce', 'nonce', false ) ) {
 			wp_send_json_error( array( 'message' => __( 'Unauthorized', 'cashu-for-woocommerce' ) ), 401 );
+		}
+
+		// Nonce alone is not enough: any logged-in user (subscriber,
+		// customer) can pull the nonce from their own admin page DOM, and
+		// the handler ultimately writes a site-wide option. Require the
+		// same capability that gates seeing the notice in the first place.
+		if ( ! current_user_can( 'manage_woocommerce' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Forbidden', 'cashu-for-woocommerce' ) ), 403 );
 		}
 
 		// Nonce already verified above via check_ajax_referer().

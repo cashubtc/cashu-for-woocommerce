@@ -73,6 +73,9 @@ final class ResolvePendingMeltTest extends IntegrationTestCase {
 			)
 		);
 		$order->shouldReceive( 'is_paid' )->andReturn( false );
+		// Age-out writes an orphan order note matching MeltReconciler's, so
+		// the admin sees the same recovery hint whichever path wins.
+		$order->shouldReceive( 'add_order_note' )->once()->andReturn( 1 );
 
 		Functions\when( 'wc_get_order' )->justReturn( $order );
 		// The mint MUST NOT be hit when the marker is past TTL.

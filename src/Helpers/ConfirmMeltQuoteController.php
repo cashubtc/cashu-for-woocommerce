@@ -229,6 +229,17 @@ final class ConfirmMeltQuoteController {
 		$pending_at = absint( $order->get_meta( '_cashu_melt_pending_at', true ) );
 		if ( $pending_at > 0 && ( time() - $pending_at ) > self::PENDING_MARKER_MAX_AGE ) {
 			Logger::error( 'pending melt marker aged out for order ' . $order->get_id() . ', quote ' . $pending_quote_id );
+			// Match MeltReconciler's age-out so the admin gets the same
+			// recovery hint whichever path wins the race past the TTL.
+			// Without this note, a browser-poll that hits the age-out first
+			// would silently drop the marker and leave no audit trail.
+			$order->add_order_note(
+				sprintf(
+					/* translators: %s: melt quote id */
+					__( 'Cashu melt left unresolved past 24h. Quote: %s. Check the mint manually if the merchant LN address has received funds.', 'cashu-for-woocommerce' ),
+					$pending_quote_id
+				)
+			);
 			$order->delete_meta_data( '_cashu_melt_pending_quote_id' );
 			$order->delete_meta_data( '_cashu_melt_pending_at' );
 			$order->save();
@@ -404,6 +415,20 @@ final class ConfirmMeltQuoteController {
 			return new WP_Error( 'cashu_no_mint', 'Order has no recorded mint URL.', array( 'status' => 500 ) );
 		}
 
+		// Pre-stage the pending marker BEFORE the mint probe. Any client
+		// reaching this branch has just called wallet.meltProofsBolt11 on
+		// the trusted mint — proofs may already be committed and the LN
+		// payment in flight. If our probe below fails (network blip) or
+		// the customer closes the tab before we reach a state-specific
+		// branch, this marker is the only durable signal MeltReconciler
+		// can follow to finalise the order. Mirrors PayController's
+		// pre-stage pattern (commit 0691181). Idempotent — refreshes the
+		// timestamp on every claim attempt; the UNPAID branch below
+		// clears it when the mint positively says proofs are unconsumed.
+		$order->update_meta_data( '_cashu_melt_pending_quote_id', $quote_id );
+		$order->update_meta_data( '_cashu_melt_pending_at', time() );
+		$order->save();
+
 		$url = rtrim( $order_mint, '/' ) . '/v1/melt/quote/bolt11/' . rawurlencode( $quote_id );
 		$res = wp_remote_get(
 			$url,
@@ -435,32 +460,22 @@ final class ConfirmMeltQuoteController {
 		$reported_amount = isset( $data['amount'] ) ? (string) $data['amount'] : '';
 
 		if ( 'PAID' !== $state ) {
-			if ( 'PENDING' === $state ) {
-				// The LN leg's wallet.meltProofsBolt11 either returned
-				// state=PENDING (mint received proofs, still routing LN) or
-				// threw with a follow-up probe finding PENDING. Either way
-				// the proofs are committed at the mint but the LN payment
-				// hasn't settled yet. Write the pending-melt marker so the
-				// existing MeltReconciler cron sweep (which only covers the
-				// PR leg by virtue of PayController setting the marker)
-				// also catches this LN-leg case if the customer closes the
-				// tab before the mint finishes. Idempotent — overwrites any
-				// existing marker for the same quote with a fresh timestamp.
-				$order->update_meta_data( '_cashu_melt_pending_quote_id', $quote_id );
-				$order->update_meta_data( '_cashu_melt_pending_at', time() );
-				$order->save();
-			} elseif ( 'UNPAID' === $state ) {
+			if ( 'UNPAID' === $state ) {
 				// Mint says the merchant melt quote was never paid. For the
 				// LN leg, that means the customer's mint-quote proofs were
 				// never melted to the vendor — recovery is via NUT-09
 				// restore on the next reload (which the browser's
 				// startMintQuoteWatcher already handles when state is
-				// ISSUED). Stamp the failed-attempt timestamp so the
-				// receipt page still shows a "previous attempt didn't
-				// reach the mint" banner instead of silently reverting.
+				// ISSUED). Clear the pre-staged marker (no proofs at risk)
+				// and stamp the failed-attempt timestamp so the receipt
+				// page surfaces "previous attempt didn't reach the mint".
+				$order->delete_meta_data( '_cashu_melt_pending_quote_id' );
+				$order->delete_meta_data( '_cashu_melt_pending_at' );
 				$order->update_meta_data( '_cashu_last_payment_attempt_at', time() );
 				$order->save();
 			}
+			// PENDING (and empty/unknown): keep the pre-staged marker so
+			// MeltReconciler picks it up; nothing more to do here.
 			return rest_ensure_response(
 				array(
 					'ok'    => true,
@@ -574,6 +589,11 @@ final class ConfirmMeltQuoteController {
 			if ( null !== $preimage && '' !== $preimage ) {
 				$fresh->update_meta_data( '_cashu_payment_preimage', sanitize_text_field( $preimage ) );
 			}
+			// Clear all pending-state markers in one place so every settlement
+			// path (cryptographic-preimage, mint-probed PAID, reconciler) leaves
+			// the order in the same final shape.
+			$fresh->delete_meta_data( '_cashu_melt_pending_quote_id' );
+			$fresh->delete_meta_data( '_cashu_melt_pending_at' );
 			$fresh->delete_meta_data( '_cashu_last_payment_attempt_at' );
 			$fresh->payment_complete( $quote_id );
 

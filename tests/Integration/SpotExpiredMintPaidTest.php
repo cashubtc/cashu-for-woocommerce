@@ -178,6 +178,9 @@ final class SpotExpiredMintPaidTest extends IntegrationTestCase {
 		);
 		$order->shouldReceive( 'is_paid' )->andReturn( false );
 		$order->shouldReceive( 'payment_complete' )->never();
+		// Aged-out marker writes an orphan note before falling through to
+		// the spot-expiry check.
+		$order->shouldReceive( 'add_order_note' )->once()->andReturn( 1 );
 
 		Functions\when( 'wc_get_order' )->justReturn( $order );
 		Functions\expect( 'wp_remote_get' )->never();

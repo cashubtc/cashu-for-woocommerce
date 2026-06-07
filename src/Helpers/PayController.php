@@ -148,9 +148,15 @@ final class PayController {
 
 		$trusted_mint = (string) $order->get_meta( '_cashu_melt_mint', true );
 		if ( '' === $trusted_mint || ! $this->same_mint( $body_mint, $trusted_mint ) ) {
+			// Strip CR/LF before interpolating so a wallet that sends
+			// "https://evil/\n[CRIT] forged log line" cannot inject fake
+			// log entries above this one. The mint is otherwise echoed
+			// verbatim so operators can see exactly what the client sent.
+			$safe_body    = str_replace( array( "\r", "\n" ), ' ', $body_mint );
+			$safe_trusted = str_replace( array( "\r", "\n" ), ' ', $trusted_mint );
 			Logger::debug(
 				'PayController::pay 400 cashu_bad_mint on order ' . $order_id
-				. ' — wallet sent "' . $body_mint . '", expected "' . $trusted_mint . '"'
+				. ' — wallet sent "' . $safe_body . '", expected "' . $safe_trusted . '"'
 			);
 			return new WP_Error( 'cashu_bad_mint', 'Proofs must originate at the merchant mint.', array( 'status' => 400 ) );
 		}
