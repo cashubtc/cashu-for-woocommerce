@@ -80,13 +80,15 @@ final class PayControllerPreStageMarkerTest extends IntegrationTestCase {
 
 		// wp_remote_post will throw a WP_Error to simulate a timeout. The marker
 		// must already be on the order before the call returns.
-		$wp_error = new WP_Error( 'http_request_failed', 'cURL error 28: timeout' );
+		$wp_error         = new WP_Error( 'http_request_failed', 'cURL error 28: timeout' );
+		$captured_at_mint = null;
 		Functions\expect( 'wp_remote_post' )
 			->once()
-			->andReturnUsing( function () use ( $order, $wp_error ) {
-				// Inside the mint call: the marker must already be persisted.
-				$marker = $order->get_meta( '_cashu_melt_pending_quote_id' );
-				assert( 'q_pre' === $marker, 'pre-stage marker not set before mint call' );
+			->andReturnUsing( function () use ( $order, $wp_error, &$captured_at_mint ) {
+				// Capture marker state at the moment of the mint call so the
+				// pre-stage-vs-post-stage ordering can be asserted reliably
+				// (assert() would be compiled out under zend.assertions=-1).
+				$captured_at_mint = $order->get_meta( '_cashu_melt_pending_quote_id' );
 				return $wp_error;
 			} );
 
@@ -102,6 +104,7 @@ final class PayControllerPreStageMarkerTest extends IntegrationTestCase {
 			'proofs' => array( $proof ),
 		) ) );
 
+		$this->assertSame( 'q_pre', $captured_at_mint, 'pre-stage marker must be persisted before mint call' );
 		$this->assertInstanceOf( WP_Error::class, $response );
 		$this->assertSame( 'cashu_mint_error', $response->get_error_code() );
 		// Marker survives the error.

@@ -151,6 +151,79 @@ final class ResolvePendingMeltTest extends IntegrationTestCase {
 		$this->assertSame( 'UNPAID', $response->get_data()['state'] );
 	}
 
+	public function test_unknown_mint_state_keeps_marker_for_cron(): void {
+		$this->stubControllerBaseline();
+		$this->setUpFakeWpdb();
+
+		$order = $this->mockOrder(
+			42,
+			array(
+				'_cashu_melt_pending_quote_id' => 'q_unreachable',
+				'_cashu_melt_pending_at'       => (string) ( time() - 30 ),
+				'_cashu_melt_mint'             => 'https://m.example',
+				'_cashu_spot_time'             => (string) time(),
+			)
+		);
+		$order->shouldReceive( 'is_paid' )->andReturn( false );
+
+		Functions\when( 'wc_get_order' )->justReturn( $order );
+
+		// Mint is unreachable — wp_remote_get returns an empty response.
+		// Pre-branch behaviour: dropped the marker. New behaviour: keep it,
+		// surface as PENDING so cron / next poll can retry.
+		Functions\expect( 'wp_remote_get' )
+			->once()
+			->andReturn(
+				array(
+					'response' => array( 'code' => 502 ),
+					'body'     => '',
+				)
+			);
+
+		$controller = new ConfirmMeltQuoteController();
+		$response   = $controller->confirm_melt_quote( $this->request( 42, 'k' ) );
+
+		$this->assertInstanceOf( WP_REST_Response::class, $response );
+		$this->assertSame( 'PENDING', $response->get_data()['state'] );
+		// Marker MUST persist so MeltReconciler can pick this up later.
+		$this->assertSame( 'q_unreachable', $order->get_meta( '_cashu_melt_pending_quote_id' ) );
+	}
+
+	public function test_explicit_unpaid_drops_marker(): void {
+		$this->stubControllerBaseline();
+		$this->setUpFakeWpdb();
+
+		$order = $this->mockOrder(
+			42,
+			array(
+				'_cashu_melt_pending_quote_id' => 'q_explicit_unpaid',
+				'_cashu_melt_pending_at'       => (string) ( time() - 30 ),
+				'_cashu_melt_mint'             => 'https://m.example',
+				'_cashu_spot_time'             => (string) time(),
+			)
+		);
+		$order->shouldReceive( 'is_paid' )->andReturn( false );
+
+		Functions\when( 'wc_get_order' )->justReturn( $order );
+		Functions\expect( 'wp_remote_get' )
+			->once()
+			->andReturn(
+				array(
+					'response' => array( 'code' => 200 ),
+					'body'     => json_encode( array( 'state' => 'UNPAID' ) ),
+				)
+			);
+
+		$controller = new ConfirmMeltQuoteController();
+		$response   = $controller->confirm_melt_quote( $this->request( 42, 'k' ) );
+
+		// Falls through to UNPAID/EXPIRED branch after marker drop — the
+		// assertion is that the marker is gone, NOT what state name comes back
+		// (the spot expiry vs UNPAID branch depends on time).
+		$this->assertInstanceOf( WP_REST_Response::class, $response );
+		$this->assertSame( '', $order->get_meta( '_cashu_melt_pending_quote_id' ) );
+	}
+
 	public function test_pending_marker_without_mint_url_skips_mint(): void {
 		// Edge case: the marker is set but the mint URL is empty. Without
 		// the order's mint URL we have nowhere to route the lookup; the

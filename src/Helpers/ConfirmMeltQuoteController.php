@@ -198,9 +198,12 @@ final class ConfirmMeltQuoteController {
 	 * browser polls share the cost). Returns:
 	 *
 	 *   - PAID response with redirect + marks the order paid, if mint settled
-	 *   - PENDING response (state remains pending, marker preserved)
-	 *   - null if the order is not in pending state, so the caller falls
-	 *     through to the regular UNPAID branch
+	 *   - PENDING response (state remains pending, marker preserved) — also
+	 *     returned for empty/unknown mint state so MeltReconciler can keep
+	 *     retrying instead of the marker being silently dropped on a blip
+	 *   - null if the mint positively returned UNPAID (marker dropped) or
+	 *     the marker was missing/aged/has no mint URL, so the caller falls
+	 *     through to the regular UNPAID/EXPIRED branch
 	 *
 	 * Bounded: ~6 mint hits per pending minute per order (at 5s poll + 10s
 	 * cache). Zero hits once the marker is cleared.
@@ -284,16 +287,31 @@ final class ConfirmMeltQuoteController {
 			);
 		}
 
-		// UNPAID or unknown — the mint either gave up routing or we
-		// couldn't reach it. Drop the marker so the order falls back to
-		// the regular UNPAID/EXPIRED flow on the next poll. The proofs
-		// (if returned to the wallet by the mint) are the customer's
-		// to retry with.
-		$order->delete_meta_data( '_cashu_melt_pending_quote_id' );
-		$order->delete_meta_data( '_cashu_melt_pending_at' );
-		$order->save();
-		delete_transient( $cache_key );
-		return null;
+		if ( 'UNPAID' === $state ) {
+			// Positive UNPAID from the mint: the proofs were never consumed,
+			// they're back with the customer's wallet. Drop the marker so we
+			// don't waste mint hits on a dead quote; the order falls through
+			// to the regular UNPAID/EXPIRED flow on the next poll.
+			$order->delete_meta_data( '_cashu_melt_pending_quote_id' );
+			$order->delete_meta_data( '_cashu_melt_pending_at' );
+			$order->save();
+			delete_transient( $cache_key );
+			return null;
+		}
+
+		// Empty / unknown — mint unreachable or returned a state we don't
+		// recognise. KEEP the marker: PayController and MeltReconciler will
+		// keep trying. Surface as PENDING to the polling browser so it shows
+		// "settling at mint" rather than dropping the customer back to the
+		// cart on a network blip. Don't delete the cache_key transient — we
+		// WANT the cached value to expire naturally (10s TTL) so the next
+		// probe re-fetches.
+		return rest_ensure_response(
+			array(
+				'ok'    => true,
+				'state' => 'PENDING',
+			)
+		);
 	}
 
 	/**

@@ -35,11 +35,17 @@ final class MeltReconciler {
 			return;
 		}
 
+		// Order by oldest _cashu_melt_pending_at first so a backlog larger
+		// than MAX_PER_RUN can't starve older orders — each tick takes the
+		// 20 oldest, the next tick takes the next batch, etc.
 		$orders = wc_get_orders(
 			array(
 				'status'         => array( 'pending', 'on-hold' ),
 				'payment_method' => 'cashu_default',
 				'limit'          => self::MAX_PER_RUN,
+				'meta_key'       => '_cashu_melt_pending_at',
+				'orderby'        => 'meta_value_num',
+				'order'          => 'ASC',
 				'meta_query'     => array(
 					array(
 						'key'     => '_cashu_melt_pending_quote_id',
