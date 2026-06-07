@@ -65,7 +65,7 @@ final class OrderMetaBox {
 			echo '<span style="color:#2f8f3a;font-weight:600;">' . esc_html__( 'Paid.', 'cashu-for-woocommerce' ) . '</span> ';
 			echo esc_html__( 'Open the receipt page to verify or run recovery.', 'cashu-for-woocommerce' );
 		} else {
-			echo esc_html__( 'Open the customer\'s receipt page in a new tab. If the payment settled at the mint but never claimed (e.g. the customer\'s browser died mid-payment), the page-load watcher will mint the proofs and finalize the order.', 'cashu-for-woocommerce' );
+			echo esc_html__( 'Open the customer\'s receipt page in a new tab. If the payment settled at the mint but the proofs were never spent (browser died mid-payment), the page-load recovery tool will pull the stranded proofs from the mint via NUT-09 and finalise the order. Safe to retry.', 'cashu-for-woocommerce' );
 		}
 		echo '</p>';
 
@@ -74,7 +74,7 @@ final class OrderMetaBox {
 		if ( '' !== $pending_quote && ! $order->is_paid() ) {
 			$elapsed_min = $pending_at > 0 ? max( 0, (int) ( ( time() - $pending_at ) / MINUTE_IN_SECONDS ) ) : 0;
 			echo '<p style="margin:0 0 10px;padding:6px 8px;background:#fff8e6;border-left:3px solid #dba617;">';
-			echo '<strong>' . esc_html__( 'Reconciling with mint…', 'cashu-for-woocommerce' ) . '</strong><br>';
+			echo '<strong>' . esc_html__( 'Reconciling with mint...', 'cashu-for-woocommerce' ) . '</strong><br>';
 			printf(
 				/* translators: %d: minutes since marker was set */
 				esc_html__( 'Pending melt attempt %d minutes ago. Hourly cron will finalise this order automatically once the mint reports PAID, or drop it after 24h with an orphan note.', 'cashu-for-woocommerce' ),

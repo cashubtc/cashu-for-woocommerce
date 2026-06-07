@@ -174,11 +174,11 @@ msgstr ""
 
 #: src/Admin/OrderMetaBox.php:68
 msgid ""
-"Open the customer's receipt page in a new tab. If the payment settled at the mint but never claimed (e.g. the customer's browser died mid-payment), the page-load watcher will mint the proofs and finalize the order."
+"Open the customer's receipt page in a new tab. If the payment settled at the mint but the proofs were never spent (browser died mid-payment), the page-load recovery tool will pull the stranded proofs from the mint via NUT-09 and finalise the order. Safe to retry."
 msgstr ""
 
-#: src/Admin/OrderMetaBox.php:77
-msgid "Reconciling with mint…"
+#: src/Admin/OrderMetaBox.php:77 src/Gateway/CashuGateway.php:180
+msgid "Reconciling with mint..."
 msgstr ""
 
 #: src/Admin/OrderMetaBox.php:80
@@ -411,10 +411,6 @@ msgstr ""
 
 #: src/Gateway/CashuGateway.php:179
 msgid "Could not recover payment. Please contact the merchant."
-msgstr ""
-
-#: src/Gateway/CashuGateway.php:180
-msgid "Reconciling with mint..."
 msgstr ""
 
 #: src/Gateway/CashuGateway.php:183
