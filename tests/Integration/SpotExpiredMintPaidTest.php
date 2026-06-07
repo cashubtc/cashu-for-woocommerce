@@ -165,7 +165,7 @@ final class SpotExpiredMintPaidTest extends IntegrationTestCase {
 
 		$now             = time();
 		$ancient_spot    = $now - 1200;
-		$aged_pending_at = $now - HOUR_IN_SECONDS - 60;
+		$aged_pending_at = $now - DAY_IN_SECONDS - 60;
 
 		$order = $this->mockOrder(
 			42,

@@ -61,14 +61,13 @@ final class ConfirmMeltQuoteController {
 
 	/**
 	 * Maximum age of a `_cashu_melt_pending_quote_id` marker before we
-	 * stop probing the mint and let the order fall back to UNPAID/EXPIRED.
-	 * Real LN payments settle in seconds to a few minutes; a marker still
-	 * present an hour past creation means either the mint is genuinely
-	 * stuck or its state endpoint isn't returning a terminal answer. We
-	 * prefer to stop burning mint hits (6/min/order while any browser
-	 * polls) and surface the failure rather than spinning forever.
+	 * stop probing the mint and let MeltReconciler write a final
+	 * orphan-archive note. 24 hours gives the cron sweep room to catch
+	 * slow-settling melts even when the customer's tab is long closed.
+	 * Customer-side amplification is bounded by the per-order confirm
+	 * rate-limit (720/hr) and the 10-s mint-state transient cache.
 	 */
-	private const PENDING_MARKER_MAX_AGE = HOUR_IN_SECONDS;
+	private const PENDING_MARKER_MAX_AGE = DAY_IN_SECONDS;
 
 	public function register_routes(): void {
 		register_rest_route(

@@ -17,7 +17,7 @@ use WP_REST_Response;
  * an in-flight LN payment after PayController stashed the pending marker.
  *
  * H2 from 61c9936: a stuck pending marker would otherwise burn ~6 mint hits
- * per pending minute per order indefinitely. The 1h PENDING_MARKER_MAX_AGE
+ * per pending minute per order indefinitely. The 24h PENDING_MARKER_MAX_AGE
  * TTL drops the marker and falls through to UNPAID/EXPIRED.
  */
 final class ResolvePendingMeltTest extends IntegrationTestCase {
@@ -60,7 +60,7 @@ final class ResolvePendingMeltTest extends IntegrationTestCase {
 		$this->setUpFakeWpdb();
 
 		$now              = time();
-		$aged_pending_at  = $now - HOUR_IN_SECONDS - 60; // 1 minute past TTL
+		$aged_pending_at  = $now - DAY_IN_SECONDS - 60; // 1 minute past TTL
 		$spot_time        = $now - 100;                  // spot still valid
 
 		$order = $this->mockOrder(
