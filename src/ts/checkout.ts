@@ -6,7 +6,6 @@ import {
   MeltQuoteState,
   MeltQuoteBolt11Response,
   MeltProofsResponse,
-  ConsoleLogger,
   PaymentRequest,
   PaymentRequestTransportType,
 } from '@cashu/cashu-ts';
@@ -15,6 +14,7 @@ import { copyTextToClipboard, doConfettiBomb, delay, getErrorMessage } from './u
 import {
   ChangeItem,
   clearStrandedProofs,
+  createSerialRunner,
   deleteJson,
   deriveWalletSeed,
   formatCountdown,
@@ -25,6 +25,7 @@ import {
   seedFingerprint,
   sweepStaleStrandedProofs,
 } from './helpers';
+import { createWalletGetter, tryRestore } from './wallet';
 
 // ------------------------------
 // Types
@@ -43,8 +44,6 @@ type CashuWindow = Window & {
 declare const window: CashuWindow;
 
 declare const wp: { i18n: { sprintf: (format: string, ...args: any[]) => string } };
-
-type CurrencyUnit = 'btc' | 'sat' | 'msat' | string;
 
 type ConfirmPaidResponse = {
   ok?: boolean;
@@ -93,87 +92,10 @@ const ac = new AbortController();
 window.addEventListener('pagehide', () => ac.abort(), { once: true });
 window.addEventListener('beforeunload', () => ac.abort(), { once: true });
 
-/**
- * Walk active sat-unit keysets and call NUT-09 wallet.restore(0, 64, ...)
- * on each, accumulating recovered Proofs. Used as the slow-path recovery
- * whenever a flow would otherwise have lost in-flight proofs (mint death,
- * melt death, change loss). cashu-ts splits an amount into power-of-two
- * denominations (popcount minting) so even large orders never exceed ~16
- * outputs per operation; 64 is a safe over-allocation. If 64 ever turns
- * out to be insufficient (e.g. cashu-ts changes its split strategy), swap
- * for wallet.batchRestore(300, 300, 0, keysetId) — same shape with
- * built-in gap-limit early-stop on consecutive empty batches.
- *
- * Filtering to active sat keysets avoids hammering the mint walking
- * msat/btc keysets we'd never have minted into, and skips inactive
- * keysets (the mint won't have signatures against them for this seed).
- *
- * API note: cashu-ts v4.5.1 exposes keysets via wallet.keyChain.getKeysets()
- * (unit-filtered to the wallet's unit) and Keyset.isActive (not .active).
- */
-async function tryRestore(wallet: Wallet, targetAmount?: number): Promise<Proof[]> {
-  const out: Proof[] = [];
-  const keysets = wallet.keyChain
-    .getKeysets()
-    .filter((k) => k.unit === 'sat' && k.isActive);
-  for (const ks of keysets) {
-    try {
-      const { proofs, lastCounterWithSignature } = await wallet.restore(0, 64, {
-        keysetId: ks.id,
-      });
-      // NUT-09 restore returns proofs but does NOT advance the wallet's
-      // deterministic counter source. Without this, a subsequent mint or
-      // melt operation against this wallet would derive blinded outputs
-      // at counters the mint has already signed — collision territory.
-      // wallet.restore returns the highest counter it saw a signature
-      // for; advance to one past that so future ops use unused tuples.
-      if (proofs.length > 0 && lastCounterWithSignature !== undefined) {
-        await wallet.counters.advanceToAtLeast(ks.id, lastCounterWithSignature + 1);
-      }
-      out.push(...proofs);
-      if (targetAmount && sumProofs(out).toNumber() >= targetAmount) break;
-    } catch (e) {
-      console.warn(`restore failed for keyset ${ks.id}:`, getErrorMessage(e));
-    }
-  }
-  return out;
-}
-
-// Wallet cache: bounded so a long-lived tab doesn't reuse a Wallet with stale
-// keyset state. Mint keyset rotations are rare but possible, and a stale
-// wallet would silently produce proofs the mint rejects on next use.
-// The cache key now incorporates the seed fingerprint so two orders against
-// the same mint never share a Wallet (different seeds = different
-// deterministic counters; sharing a Wallet across seeds is a correctness bug).
-type CachedWallet = { promise: Promise<Wallet>; createdAt: number };
-const WALLET_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
-const walletCache = new Map<string, CachedWallet>();
-
-function getWalletCached(
-  mintUrl: string,
-  unit: CurrencyUnit,
-  seed: Uint8Array,
-  fingerprint: string,
-): Promise<Wallet> {
-  const key = `${String(mintUrl).replace(/\/+$/, '')}|${unit}|${fingerprint}`;
-  const existing = walletCache.get(key);
-  if (existing && Date.now() - existing.createdAt < WALLET_CACHE_TTL_MS) {
-    return existing.promise;
-  }
-  if (existing) walletCache.delete(key);
-  const promise = (async () => {
-    const w = new Wallet(mintUrl, {
-      unit,
-      bip39seed: seed,
-      logger: new ConsoleLogger('debug'),
-    });
-    await w.loadMint();
-    return w;
-  })();
-  promise.catch(() => walletCache.delete(key));
-  walletCache.set(key, { promise, createdAt: Date.now() });
-  return promise;
-}
+// tryRestore (NUT-09) and the wallet cache (createWalletGetter) live in
+// `./wallet` so they can be unit-tested with a stub cashu-ts Wallet,
+// without touching the real mint over HTTP.
+const getWalletCached = createWalletGetter();
 
 function readRootData($root: JQuery<HTMLElement>): RootData {
   const orderId = Number($root.data('order-id'));
@@ -308,7 +230,10 @@ jQuery(function ($) {
   let copyTexts: Record<QrMode, string> = { unified: '', cashu: '', lightning: '' };
   let currentMode: QrMode = data.defaultTab;
 
-  let chain: Promise<any> = Promise.resolve();
+  // Serial runner: queues async work onto a single Promise chain so concurrent
+  // callers (WS, poll, page-load) can't interleave a mint/melt mid-flight.
+  // The chain itself never rejects — fn errors are surfaced via setStatus.
+  const run = createSerialRunner(setStatus);
   let mintHandleP: Promise<void> | null = null;
   // Seed is derived per-order from data-attrs already on the page. No
   // persistence, no async, no browser-feature dependency (sha512 is from
@@ -484,19 +409,6 @@ jQuery(function ($) {
       await delay(500);
       setStatus(t('waiting_for_payment'));
     });
-  }
-
-  // Serialize async work against a single chain so concurrent callers
-  // (WS, poll, page-load) can't interleave a mint/melt mid-flight.
-  // Errors are surfaced to the status line; the chain itself is never
-  // rejected so subsequent run() calls keep flowing.
-  async function run<T>(fn: () => Promise<T>): Promise<T | undefined> {
-    const p = chain.then(fn).catch((e) => {
-      setStatus(getErrorMessage(e), true);
-      return undefined as unknown as T;
-    });
-    chain = p.then(() => undefined);
-    return p;
   }
 
   async function saveProofs(changeProofs: Proof[], wallet: Wallet): Promise<void> {

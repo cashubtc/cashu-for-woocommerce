@@ -5,6 +5,7 @@
 
 import { sha512 } from '@noble/hashes/sha2.js';
 import type { Proof } from '@cashu/cashu-ts';
+import { getErrorMessage } from './utils';
 
 // ------------------------------
 // Types
@@ -196,6 +197,29 @@ export function seedFingerprint(seed: Uint8Array): string {
 // ------------------------------
 // Misc
 // ------------------------------
+
+/**
+ * Create a serial-runner closure that queues async work onto a single Promise
+ * chain so concurrent callers can't interleave a mint/melt mid-flight. Each
+ * runner instance owns its own chain — tests get isolation, production gets
+ * one per receipt page. Errors thrown from `fn` are routed to `setStatus` so
+ * the chain itself never rejects and subsequent run() calls keep flowing.
+ */
+export type SerialRunner = <T>(fn: () => Promise<T>) => Promise<T | undefined>;
+
+export function createSerialRunner(
+  setStatus: (msg: string, isError?: boolean) => void,
+): SerialRunner {
+  let chain: Promise<unknown> = Promise.resolve();
+  return async function run<T>(fn: () => Promise<T>): Promise<T | undefined> {
+    const p = chain.then(fn).catch((e) => {
+      setStatus(getErrorMessage(e), true);
+      return undefined as unknown as T;
+    });
+    chain = p.then(() => undefined);
+    return p;
+  };
+}
 
 /**
  * Format a Unix-seconds target as `MM:SS` remaining. Returns `00:00` if the
