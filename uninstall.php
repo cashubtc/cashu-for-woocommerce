@@ -88,6 +88,10 @@ function cashu_wc_uninstall_cleanup() {
 			$lock_like
 		)
 	);
+
+	// Clear the recurring reconciliation cron event. Hard-coded hook name
+	// because MeltReconciler may not be autoloaded in uninstall context.
+	wp_clear_scheduled_hook( 'cashu_wc_reconcile_pending_melts' );
 }
 
 if ( is_multisite() ) {

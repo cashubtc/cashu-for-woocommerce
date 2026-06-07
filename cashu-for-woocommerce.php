@@ -39,5 +39,25 @@ spl_autoload_register(
 	}
 );
 
+register_activation_hook(
+	__FILE__,
+	static function (): void {
+		if ( ! wp_next_scheduled( \Cashu\WC\Helpers\MeltReconciler::HOOK ) ) {
+			wp_schedule_event( time() + MINUTE_IN_SECONDS, 'hourly', \Cashu\WC\Helpers\MeltReconciler::HOOK );
+		}
+	}
+);
+
+register_deactivation_hook(
+	__FILE__,
+	static function (): void {
+		$timestamp = wp_next_scheduled( \Cashu\WC\Helpers\MeltReconciler::HOOK );
+		if ( false !== $timestamp ) {
+			wp_unschedule_event( $timestamp, \Cashu\WC\Helpers\MeltReconciler::HOOK );
+		}
+		wp_clear_scheduled_hook( \Cashu\WC\Helpers\MeltReconciler::HOOK );
+	}
+);
+
 // * Instantiate main plugin
 \Cashu\WC\CashuWCPlugin::instance()->run();

@@ -8,6 +8,7 @@ use Cashu\WC\Gateway\CashuGateway;
 use Cashu\WC\Helpers\CashuHelper;
 use Cashu\WC\Helpers\ConfirmMeltQuoteController;
 use Cashu\WC\Helpers\Logger;
+use Cashu\WC\Helpers\MeltReconciler;
 use Cashu\WC\Helpers\PayController;
 
 final class CashuWCPlugin {
@@ -63,6 +64,21 @@ final class CashuWCPlugin {
 			function (): void {
 				( new ConfirmMeltQuoteController() )->register_routes();
 				( new PayController() )->register_routes();
+			}
+		);
+
+		// Cron: scan for orders with a pending-melt marker and try to finalise
+		// them via the mint's authoritative state. Scheduled on plugin activation.
+		add_action( MeltReconciler::HOOK, array( MeltReconciler::class, 'reconcile_pending' ) );
+
+		// Defensive schedule: if the activation hook didn't fire (e.g. plugin
+		// updated via SVN without a real activation), schedule on the next init.
+		add_action(
+			'init',
+			static function (): void {
+				if ( ! wp_next_scheduled( MeltReconciler::HOOK ) ) {
+					wp_schedule_event( time() + MINUTE_IN_SECONDS, 'hourly', MeltReconciler::HOOK );
+				}
 			}
 		);
 
