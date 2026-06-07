@@ -16,8 +16,8 @@ import {
   clearStrandedProofs,
   createSerialRunner,
   deleteJson,
+  deriveOrderStatusActions,
   deriveWalletSeed,
-  formatCountdown,
   loadChangePayload,
   loadStrandedProofs,
   saveJson,
@@ -799,62 +799,36 @@ jQuery(function ($) {
       });
       const json = (await res.json()) as ConfirmPaidResponse;
 
-      // Server is the authoritative source for the spot-quote expiry. The
-      // value rendered into data-spot-quote-expiry at page load can drift
-      // if setup ran again (rare but possible after a stale-quote
-      // rotation). Trust each fresh response — `json.expiry` is unix
-      // seconds; convert to ms before comparing with Date.now().
-      if (typeof json?.expiry === 'number' && json.expiry > 0) {
-        data.quoteExpiryMs = json.expiry * 1000;
-      }
-
-      if (json?.state === 'PAID') {
-        // Server reached PAID independently — clear any stranded-proof
-        // snapshot so a future reload of this order doesn't try to
-        // re-melt already-spent proofs.
-        clearStrandedProofs(data.mintQuote.id);
-        if (finalised) return json;
-        finalised = true;
-        setStatus(t('payment_confirmed'));
-        doConfettiBomb();
-        await delay(2000);
-        window.location.assign(String(json.redirect ?? data.returnUrl));
-        return json;
-      }
-
-      if (json?.state === 'EXPIRED') {
-        // Quote window closed: snapshot can't help anymore and would only
-        // distract future polls.
-        clearStrandedProofs(data.mintQuote.id);
-        setStatus(t('invoice_expired'), true);
-        await delay(2000);
-        window.location.assign(String(data.returnUrl));
-        return json;
-      }
-      if (json?.state === 'PENDING') {
-        // Server saw the wallet's POST go through but the mint is still
-        // routing LN. Polling continues; show progress so the customer
-        // knows it's working, not stuck.
-        setStatus(t('settling_at_mint'));
-      }
-      if (
-        json?.state === 'UNPAID' &&
-        typeof json.last_attempt === 'number' &&
-        json.last_attempt > 0
-      ) {
-        // The server dropped a pending-melt marker because the mint
-        // returned UNPAID — a previous payment attempt was made but the
-        // mint never received the proofs. Surface a banner so the
-        // customer knows they need to retry (likely with a wallet
-        // reclaim first) instead of seeing the default "Waiting for
-        // payment" and assuming the page is broken.
-        setStatus(t('previous_attempt_failed'), true);
-      }
-      if (json?.expiry) {
-        const msg = t('invoice_expires_in', formatCountdown(json.expiry));
-        const seconds = json.expiry - Date.now() / 1000;
-        if (seconds < 300) {
-          setStatus(msg, seconds < 60);
+      // Pure decision logic lives in deriveOrderStatusActions; this
+      // dispatcher just performs the resulting side effects. Splitting
+      // the two means the priority cascade (UNPAID+last_attempt > PENDING
+      // > expiry countdown) is unit-tested in helpers.test.ts.
+      const actions = deriveOrderStatusActions({
+        json,
+        nowSeconds: Date.now() / 1000,
+        finalised,
+        mintQuoteId: data.mintQuote.id,
+        returnUrl: data.returnUrl,
+      });
+      for (const a of actions) {
+        switch (a.type) {
+          case 'updateQuoteExpiry':
+            data.quoteExpiryMs = a.ms;
+            break;
+          case 'clearStranded':
+            clearStrandedProofs(a.quoteId);
+            break;
+          case 'markFinalised':
+            finalised = true;
+            break;
+          case 'setStatus':
+            setStatus(t(a.key, ...(a.args ?? [])), a.isError);
+            break;
+          case 'redirect':
+            if (a.withConfetti) doConfettiBomb();
+            await delay(a.delayMs);
+            window.location.assign(a.url);
+            break;
         }
       }
 

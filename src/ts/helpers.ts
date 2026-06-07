@@ -237,3 +237,126 @@ export function formatCountdown(
   const ss = String(seconds).padStart(2, '0');
   return `${mm}:${ss}`;
 }
+
+// ----------------------------------------------------------------------------
+// Order status decision logic
+// ----------------------------------------------------------------------------
+
+/**
+ * Server's response to /confirm_melt_quote. Mirrors ConfirmPaidResponse in
+ * checkout.ts (which re-uses MeltQuoteState from cashu-ts). Decoupled here so
+ * deriveOrderStatusActions can be unit-tested without importing cashu-ts.
+ */
+export type OrderStatusResponse = {
+  ok?: boolean;
+  state?: 'UNPAID' | 'PENDING' | 'PAID' | 'EXPIRED' | string;
+  redirect?: string;
+  message?: string;
+  expiry?: number | null;
+  last_attempt?: number | null;
+};
+
+export type OrderStatusAction =
+  | { type: 'updateQuoteExpiry'; ms: number }
+  | { type: 'clearStranded'; quoteId: string }
+  | { type: 'markFinalised' }
+  | { type: 'setStatus'; key: string; isError: boolean; args?: unknown[] }
+  | { type: 'redirect'; url: string; withConfetti: boolean; delayMs: number };
+
+export type OrderStatusContext = {
+  json: OrderStatusResponse | null;
+  nowSeconds: number;
+  finalised: boolean;
+  mintQuoteId: string;
+  returnUrl: string;
+};
+
+/**
+ * Pure decision logic for the `/confirm_melt_quote` polling response.
+ *
+ * Returns an ordered list of side-effect actions for the caller to dispatch.
+ * Splitting the decision from the side effects lets us unit-test every
+ * branch — particularly the priority resolution that was previously buggy
+ * (UNPAID+last_attempt's "previous attempt failed" banner was silently
+ * overwritten by the expiry countdown when the quote was within 5 minutes
+ * of expiry).
+ *
+ * Priority for non-terminal (non PAID / non EXPIRED) status updates:
+ *
+ *   1. UNPAID + last_attempt → "previous attempt didn't reach the mint"
+ *   2. PENDING → "settling at mint"
+ *   3. Expiry within 5 minutes → "expires in MM:SS" countdown
+ *
+ * These are mutually exclusive; only ONE setStatus is emitted. PAID and
+ * EXPIRED short-circuit the whole list with their own redirect actions.
+ */
+export function deriveOrderStatusActions(ctx: OrderStatusContext): OrderStatusAction[] {
+  const { json, nowSeconds, finalised, mintQuoteId, returnUrl } = ctx;
+  const out: OrderStatusAction[] = [];
+  if (!json) return out;
+
+  // Server-authoritative expiry refresh. Trust each fresh response — the
+  // data-attr value can drift if setup ran again. Convert unix seconds to ms.
+  if (typeof json.expiry === 'number' && json.expiry > 0) {
+    out.push({ type: 'updateQuoteExpiry', ms: json.expiry * 1000 });
+  }
+
+  // Terminal: PAID. Drop the stranded snapshot so a future reload of this
+  // order doesn't try to re-melt already-spent proofs. Single-flight gate
+  // via the finalised flag — both checkOrderStatus and claimMeltPaid can
+  // race to PAID, but only one runs the confetti + redirect.
+  if (json.state === 'PAID') {
+    out.push({ type: 'clearStranded', quoteId: mintQuoteId });
+    if (!finalised) {
+      out.push({ type: 'markFinalised' });
+      out.push({ type: 'setStatus', key: 'payment_confirmed', isError: false });
+      out.push({
+        type: 'redirect',
+        url: json.redirect ?? returnUrl,
+        withConfetti: true,
+        delayMs: 2000,
+      });
+    }
+    return out;
+  }
+
+  // Terminal: EXPIRED. Quote window closed; the stranded snapshot can't
+  // help anymore and would only distract a future reload.
+  if (json.state === 'EXPIRED') {
+    out.push({ type: 'clearStranded', quoteId: mintQuoteId });
+    out.push({ type: 'setStatus', key: 'invoice_expired', isError: true });
+    out.push({
+      type: 'redirect',
+      url: returnUrl,
+      withConfetti: false,
+      delayMs: 2000,
+    });
+    return out;
+  }
+
+  // Non-terminal status, priority cascade.
+  if (
+    json.state === 'UNPAID' &&
+    typeof json.last_attempt === 'number' &&
+    json.last_attempt > 0
+  ) {
+    out.push({ type: 'setStatus', key: 'previous_attempt_failed', isError: true });
+  } else if (json.state === 'PENDING') {
+    out.push({ type: 'setStatus', key: 'settling_at_mint', isError: false });
+  } else if (typeof json.expiry === 'number' && json.expiry > 0) {
+    const secondsLeft = json.expiry - nowSeconds;
+    if (secondsLeft < 300) {
+      // Caller's t() will sprintf the formatted countdown into the
+      // i18n string. We pass the target as args[0] so the dispatcher
+      // can apply formatCountdown without us doing string formatting here.
+      out.push({
+        type: 'setStatus',
+        key: 'invoice_expires_in',
+        isError: secondsLeft < 60,
+        args: [formatCountdown(json.expiry, nowSeconds * 1000)],
+      });
+    }
+  }
+
+  return out;
+}
