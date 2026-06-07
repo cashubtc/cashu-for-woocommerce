@@ -60,12 +60,32 @@ final class ConfirmMeltQuoteController {
 	private const CONFIRM_RATE_LIMIT_TTL = HOUR_IN_SECONDS;
 
 	/**
+	 * Cache TTL for a successful mint state probe. A polling browser at 5-s
+	 * cadence will short-circuit ~11 of every 12 polls; the worst-case
+	 * mint-PAID-to-browser-redirect latency is one TTL window. Tuned up
+	 * from the original 10 s after we observed mints actively returning
+	 * HTTP 429 on tight probe loops (one customer alone at 5-s + 10-s TTL
+	 * triggers a probe every 10 s, which several mints rate-limit).
+	 */
+	private const MELT_STATE_FRESH_TTL = MINUTE_IN_SECONDS;
+
+	/**
+	 * Cache TTL for a mint probe that returned an empty / non-200 response
+	 * (HTTP 429, network blip, mint unreachable). Longer than the fresh
+	 * TTL so a clearly-rate-limited mint isn't hammered every poll cycle.
+	 * The marker is preserved either way; MeltReconciler and a later
+	 * un-rate-limited probe will still flip the order PAID. Worst-case
+	 * additional latency is one empty-TTL window past the mint recovering.
+	 */
+	private const MELT_STATE_EMPTY_TTL = 2 * MINUTE_IN_SECONDS;
+
+	/**
 	 * Maximum age of a `_cashu_melt_pending_quote_id` marker before we
 	 * stop probing the mint and let MeltReconciler write a final
 	 * orphan-archive note. 24 hours gives the cron sweep room to catch
 	 * slow-settling melts even when the customer's tab is long closed.
 	 * Customer-side amplification is bounded by the per-order confirm
-	 * rate-limit (720/hr) and the 10-s mint-state transient cache.
+	 * rate-limit (720/hr) and the mint-state transient cache (above).
 	 */
 	private const PENDING_MARKER_MAX_AGE = DAY_IN_SECONDS;
 
@@ -241,7 +261,11 @@ final class ConfirmMeltQuoteController {
 		} else {
 			$gateway       = new CashuGateway();
 			$mint_response = $gateway->fetch_melt_quote_state_safely( $pending_quote_id, $order_mint );
-			set_transient( $cache_key, $mint_response, 10 );
+			// Empty response = mint unreachable, rate-limited, or other
+			// non-200. Cache longer to avoid hammering a struggling mint;
+			// the marker survives so a later probe still finalises the order.
+			$ttl = empty( $mint_response ) ? self::MELT_STATE_EMPTY_TTL : self::MELT_STATE_FRESH_TTL;
+			set_transient( $cache_key, $mint_response, $ttl );
 		}
 
 		$state = isset( $mint_response['state'] ) ? (string) $mint_response['state'] : '';
