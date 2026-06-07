@@ -14,11 +14,9 @@ import { copyTextToClipboard, doConfettiBomb, delay, getErrorMessage } from './u
 import {
   CHANGE_PAYLOAD_KEY,
   clearStrandedProofs,
-  composeRestUrl,
   createSerialRunner,
   deleteJson,
   deriveMeltFailureBranch,
-  deriveOrderStatusActions,
   deriveWalletSeed,
   extractPaymentPreimage,
   loadStrandedProofs,
@@ -28,6 +26,12 @@ import {
   selectPollIntervalMs,
   sweepStaleStrandedProofs,
 } from './helpers';
+import {
+  checkOrderStatus as checkOrderStatusDispatch,
+  claimMeltPaid as claimMeltPaidDispatch,
+  type ConfirmPaidResponse,
+  type DispatcherDeps,
+} from './dispatchers';
 import { createWalletGetter, tryRestore } from './wallet';
 
 // ------------------------------
@@ -47,20 +51,6 @@ type CashuWindow = Window & {
 declare const window: CashuWindow;
 
 declare const wp: { i18n: { sprintf: (format: string, ...args: any[]) => string } };
-
-type ConfirmPaidResponse = {
-  ok?: boolean;
-  state?: MeltQuoteState | 'EXPIRED';
-  redirect?: string;
-  message?: string;
-  expiry?: number | null;
-  // Unix seconds of the most recent failed payment attempt. Server returns
-  // this on UNPAID responses so the receipt page can show a "previous
-  // attempt didn't reach the mint, please try again" banner instead of
-  // silently reverting to the default "Waiting for payment" placeholder.
-  // Null on fresh orders that have never had a marker-drop event.
-  last_attempt?: number | null;
-};
 
 type QrMode = 'unified' | 'cashu' | 'lightning';
 
@@ -726,108 +716,38 @@ jQuery(function ($) {
   // Single-flight gate over the success branch shared by claimMeltPaid()
   // and checkOrderStatus(). Both endpoints are server-idempotent and either
   // can win the race on a Lightning settlement, but only one needs to fire
-  // confetti + redirect.
-  let finalised = false;
+  // confetti + redirect. Lives on a state object so the dispatchers
+  // (extracted to ./dispatchers) can mutate it through their deps handle.
+  const dispatcherState = { finalised: false };
 
-  async function claimMeltPaid(preimage: string): Promise<void> {
-    const endpoint = composeRestUrl(
-      String(window.cashu_wc?.rest_root ?? ''),
-      String(window.cashu_wc?.claim_route ?? ''),
-    );
-    if (!endpoint) return;
+  const dispatcherDeps: DispatcherDeps = {
+    config: {
+      restRoot: String(window.cashu_wc?.rest_root ?? ''),
+      claimRoute: String(window.cashu_wc?.claim_route ?? ''),
+      confirmRoute: String(window.cashu_wc?.confirm_route ?? ''),
+    },
+    data,
+    state: dispatcherState,
+    signal: ac.signal,
+    nowSeconds: () => Date.now() / 1000,
+    setStatus,
+    t,
+    delay,
+    doConfettiBomb,
+    clearStrandedProofs,
+    redirect: (url: string) => window.location.assign(url),
+  };
 
-    try {
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        signal: ac.signal,
-        body: JSON.stringify({
-          order_id: data.orderId,
-          order_key: data.orderKey,
-          preimage,
-        }),
-      });
-      const json = (await res.json()) as ConfirmPaidResponse;
-      if (json?.state === 'PAID') {
-        if (finalised) return;
-        finalised = true;
-        setStatus(t('payment_confirmed'));
-        doConfettiBomb();
-        await delay(2000);
-        window.location.assign(String(json.redirect ?? data.returnUrl));
-      }
-    } catch (e) {
-      if (ac.signal.aborted) return;
-      // Background pollOrderStatus will catch the settlement on the next tick.
-      console.warn('Claim POST failed, falling back to poll:', getErrorMessage(e));
-    }
+  function claimMeltPaid(preimage: string): Promise<void> {
+    return claimMeltPaidDispatch(dispatcherDeps, preimage);
   }
 
   // ------------------------------
   // Order Status - drives the redirect for either settlement leg.
   // ------------------------------
 
-  async function checkOrderStatus(): Promise<ConfirmPaidResponse | null> {
-    const endpoint = composeRestUrl(
-      String(window.cashu_wc?.rest_root ?? ''),
-      String(window.cashu_wc?.confirm_route ?? ''),
-    );
-    if (!endpoint) return null;
-
-    const payload: any = {
-      order_id: data.orderId,
-      order_key: data.orderKey,
-      quote_id: data.quoteId,
-    };
-
-    try {
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        signal: ac.signal,
-        body: JSON.stringify(payload),
-      });
-      const json = (await res.json()) as ConfirmPaidResponse;
-
-      // Pure decision logic lives in deriveOrderStatusActions; this
-      // dispatcher just performs the resulting side effects. Splitting
-      // the two means the priority cascade (UNPAID+last_attempt > PENDING
-      // > expiry countdown) is unit-tested in helpers.test.ts.
-      const actions = deriveOrderStatusActions({
-        json,
-        nowSeconds: Date.now() / 1000,
-        finalised,
-        mintQuoteId: data.mintQuote.id,
-        returnUrl: data.returnUrl,
-      });
-      for (const a of actions) {
-        switch (a.type) {
-          case 'updateQuoteExpiry':
-            data.quoteExpiryMs = a.ms;
-            break;
-          case 'clearStranded':
-            clearStrandedProofs(a.quoteId);
-            break;
-          case 'markFinalised':
-            finalised = true;
-            break;
-          case 'setStatus':
-            setStatus(t(a.key, ...(a.args ?? [])), a.isError);
-            break;
-          case 'redirect':
-            if (a.withConfetti) doConfettiBomb();
-            await delay(a.delayMs);
-            window.location.assign(a.url);
-            break;
-        }
-      }
-
-      return json ?? null;
-    } catch {
-      return null;
-    }
+  function checkOrderStatus(): Promise<ConfirmPaidResponse | null> {
+    return checkOrderStatusDispatch(dispatcherDeps);
   }
 
   let pollOrderStatusRunning = false;
