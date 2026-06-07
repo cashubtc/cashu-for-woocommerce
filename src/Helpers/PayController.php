@@ -243,6 +243,16 @@ final class PayController {
 				return new WP_Error( 'cashu_no_quote', 'Missing melt quote on order.', array( 'status' => 500 ) );
 			}
 
+			// Pre-stage the pending marker. From here on, every code path that
+			// might consume proofs at the mint leaves a durable signal — either
+			// we clear it on confirmed PAID below, or we leave it for the
+			// polling endpoint / MeltReconciler to resolve. This means a PHP
+			// fatal, HTTP timeout, or reverse-proxy 5xx mid-melt cannot strand
+			// the order in a state nothing knows to reconcile.
+			$order->update_meta_data( '_cashu_melt_pending_quote_id', $quote_id );
+			$order->update_meta_data( '_cashu_melt_pending_at', time() );
+			$order->save();
+
 			// Hand off to the mint. Route through the mint stored on the order,
 			// not the current gateway setting — an admin-side mint change between
 			// quote creation and settlement must not redirect the melt to a host
@@ -305,6 +315,9 @@ final class PayController {
 				}
 			}
 			$change = isset( $mint_response['change'] ) && is_array( $mint_response['change'] ) ? $mint_response['change'] : array();
+
+			$order->delete_meta_data( '_cashu_melt_pending_quote_id' );
+			$order->delete_meta_data( '_cashu_melt_pending_at' );
 
 			$order->payment_complete( $quote_id );
 

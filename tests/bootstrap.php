@@ -111,13 +111,17 @@ if (!class_exists('WC_Order')) {
 	}
 }
 
-// 6. WP_REST_Request skeleton. Only get_param() is used by the controllers
-//    under test; Mockery covers callers that need richer behaviour.
+// 6. WP_REST_Request skeleton. Only get_param() and get_body() are used by
+//    the controllers under test; Mockery covers callers that need richer
+//    behaviour.
 if (!class_exists('WP_REST_Request')) {
 	class WP_REST_Request {
 		private array $params = array();
+		private string $body = '';
 		public function set_params(array $params): void { $this->params = $params; }
 		public function get_param(string $key) { return $this->params[$key] ?? null; }
+		public function set_body(string $body): void { $this->body = $body; }
+		public function get_body(): string { return $this->body; }
 	}
 }
 
