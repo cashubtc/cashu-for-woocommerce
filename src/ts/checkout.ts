@@ -40,6 +40,12 @@ type ConfirmPaidResponse = {
   redirect?: string;
   message?: string;
   expiry?: number | null;
+  // Unix seconds of the most recent failed payment attempt. Server returns
+  // this on UNPAID responses so the receipt page can show a "previous
+  // attempt didn't reach the mint, please try again" banner instead of
+  // silently reverting to the default "Waiting for payment" placeholder.
+  // Null on fresh orders that have never had a marker-drop event.
+  last_attempt?: number | null;
 };
 
 type QrMode = 'unified' | 'cashu' | 'lightning';
@@ -149,7 +155,9 @@ async function tryRestore(wallet: Wallet, targetAmount?: number): Promise<Proof[
     .filter((k) => k.unit === 'sat' && k.isActive);
   for (const ks of keysets) {
     try {
-      const { proofs, lastCounterWithSignature } = await wallet.restore(0, 64, { keysetId: ks.id });
+      const { proofs, lastCounterWithSignature } = await wallet.restore(0, 64, {
+        keysetId: ks.id,
+      });
       // NUT-09 restore returns proofs but does NOT advance the wallet's
       // deterministic counter source. Without this, a subsequent mint or
       // melt operation against this wallet would derive blinded outputs
@@ -1113,6 +1121,19 @@ jQuery(function ($) {
         // routing LN. Polling continues; show progress so the customer
         // knows it's working, not stuck.
         setStatus(t('settling_at_mint'));
+      }
+      if (
+        json?.state === 'UNPAID' &&
+        typeof json.last_attempt === 'number' &&
+        json.last_attempt > 0
+      ) {
+        // The server dropped a pending-melt marker because the mint
+        // returned UNPAID — a previous payment attempt was made but the
+        // mint never received the proofs. Surface a banner so the
+        // customer knows they need to retry (likely with a wallet
+        // reclaim first) instead of seeing the default "Waiting for
+        // payment" and assuming the page is broken.
+        setStatus(t('previous_attempt_failed'), true);
       }
       if (json?.expiry) {
         const msg = t('invoice_expires_in', formatCountdown(json.expiry));

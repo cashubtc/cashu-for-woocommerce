@@ -178,6 +178,7 @@ class CashuGateway extends \WC_Payment_Gateway {
 					'recovering_proofs'       => __( 'Recovering payment from mint...', 'cashu-for-woocommerce' ),
 					'recovery_failed_contact' => __( 'Could not recover payment. Please contact the merchant.', 'cashu-for-woocommerce' ),
 					'reconciling_with_mint'   => __( 'Reconciling with mint...', 'cashu-for-woocommerce' ),
+					'previous_attempt_failed' => __( 'A previous payment attempt didn\'t reach the mint. Your wallet may have refunded the proofs — please try again.', 'cashu-for-woocommerce' ),
 
 					// Lightning leg progress
 					'payment_received'        => __( 'Payment received by our mint...', 'cashu-for-woocommerce' ),

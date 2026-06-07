@@ -203,11 +203,19 @@ final class ConfirmMeltQuoteController {
 			);
 		}
 
+		// Surface the timestamp of the most recent failed payment attempt
+		// (set by PayController's and resolve_pending_melt's marker-drop
+		// paths) so the receipt page can show "previous attempt didn't
+		// reach the mint — please try again" instead of the default
+		// "Waiting for payment" placeholder. Null when there's no prior
+		// attempt — fresh-page-load on a never-paid order.
+		$last_attempt = absint( $order->get_meta( '_cashu_last_payment_attempt_at', true ) );
 		return rest_ensure_response(
 			array(
-				'ok'     => true,
-				'state'  => 'UNPAID',
-				'expiry' => $spot_expiry,
+				'ok'           => true,
+				'state'        => 'UNPAID',
+				'expiry'       => $spot_expiry,
+				'last_attempt' => $last_attempt > 0 ? $last_attempt : null,
 			)
 		);
 	}
@@ -315,9 +323,13 @@ final class ConfirmMeltQuoteController {
 			// Positive UNPAID from the mint: the proofs were never consumed,
 			// they're back with the customer's wallet. Drop the marker so we
 			// don't waste mint hits on a dead quote; the order falls through
-			// to the regular UNPAID/EXPIRED flow on the next poll.
+			// to the regular UNPAID/EXPIRED flow on the next poll. Stamp the
+			// last-attempt timestamp so the receipt page can surface a
+			// "previous attempt didn't reach the mint" banner instead of
+			// silently reverting to the default "Waiting for payment".
 			$order->delete_meta_data( '_cashu_melt_pending_quote_id' );
 			$order->delete_meta_data( '_cashu_melt_pending_at' );
+			$order->update_meta_data( '_cashu_last_payment_attempt_at', time() );
 			$order->save();
 			delete_transient( $cache_key );
 			return null;
@@ -556,6 +568,7 @@ final class ConfirmMeltQuoteController {
 			if ( null !== $preimage && '' !== $preimage ) {
 				$fresh->update_meta_data( '_cashu_payment_preimage', sanitize_text_field( $preimage ) );
 			}
+			$fresh->delete_meta_data( '_cashu_last_payment_attempt_at' );
 			$fresh->payment_complete( $quote_id );
 
 			$this->add_paid_order_note( $fresh, $quote_id, $preimage, $amount );

@@ -169,6 +169,7 @@ final class MeltReconciler {
 
 			$fresh->delete_meta_data( '_cashu_melt_pending_quote_id' );
 			$fresh->delete_meta_data( '_cashu_melt_pending_at' );
+			$fresh->delete_meta_data( '_cashu_last_payment_attempt_at' );
 			$fresh->payment_complete( $quote_id );
 
 			$lightning_address = (string) $fresh->get_meta( '_cashu_invoice_ln_address', true );

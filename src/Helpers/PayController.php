@@ -282,8 +282,12 @@ final class PayController {
 				if ( 'UNPAID' === $probed_state ) {
 					// Mint never consumed the proofs — they're still spendable. Drop
 					// the marker so future polls don't waste a mint hit on a dead quote.
+					// Stamp the last-attempt timestamp so a returning customer's
+					// receipt page can surface "previous attempt didn't reach the
+					// mint" rather than silently reverting to "Waiting for payment".
 					$order->delete_meta_data( '_cashu_melt_pending_quote_id' );
 					$order->delete_meta_data( '_cashu_melt_pending_at' );
+					$order->update_meta_data( '_cashu_last_payment_attempt_at', time() );
 					$order->save();
 					return new WP_Error( 'cashu_mint_error', 'Mint melt failed.', array( 'status' => 502 ) );
 				}
@@ -339,6 +343,7 @@ final class PayController {
 				if ( 'UNPAID' === $probed_state ) {
 					$order->delete_meta_data( '_cashu_melt_pending_quote_id' );
 					$order->delete_meta_data( '_cashu_melt_pending_at' );
+					$order->update_meta_data( '_cashu_last_payment_attempt_at', time() );
 					$order->save();
 				}
 				return new WP_Error( 'cashu_unpaid', 'Mint did not settle the invoice.', array( 'status' => 502 ) );
@@ -380,6 +385,7 @@ final class PayController {
 
 		$order->delete_meta_data( '_cashu_melt_pending_quote_id' );
 		$order->delete_meta_data( '_cashu_melt_pending_at' );
+		$order->delete_meta_data( '_cashu_last_payment_attempt_at' );
 
 		$order->payment_complete( $quote_id );
 
