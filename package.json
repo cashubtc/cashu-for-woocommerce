@@ -51,7 +51,7 @@
     "i18n": "php scripts/build-pot.php",
     "i18n:mo": "wp-env run cli -- wp i18n make-mo wp-content/plugins/cashu-for-woocommerce/languages",
     "build": "vite build && npm run format && npm run lint && npm run lint:check && npm run start",
-    "check": "npm run format:check && npm run lint:check && npm test",
+    "check": "npm run format:check && npm run lint:check && composer test",
     "fix": "npm run format && npm run lint",
     "wp-env:start": "wp-env start",
     "wp-env:seed-store": "wp-env run cli wp plugin install wordpress-importer --activate && wp-env run cli wp import wp-content/plugins/woocommerce/sample-data/sample_products.xml --authors=create",
