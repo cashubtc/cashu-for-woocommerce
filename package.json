@@ -16,14 +16,17 @@
   "devDependencies": {
     "@prettier/plugin-php": "^0.25.0",
     "@types/jquery": "^4.0.0",
+    "@vitest/coverage-v8": "^4.1.8",
     "@wordpress/env": "^11.7.0",
     "git-cliff": "^2.12.0",
+    "jsdom": "^29.1.1",
     "prettier": "^3.3.3",
     "stylelint": "^17.12.0",
     "stylelint-config-standard": "^40.0.0",
     "stylelint-order": "^8.1.1",
     "typescript": "^5.9.3",
-    "vite": "^8.0.14"
+    "vite": "^8.0.14",
+    "vitest": "^4.1.8"
   },
   "prettier": {
     "plugins": [
@@ -41,6 +44,8 @@
     "lint:css:check": "stylelint \"assets/**/*.css\"",
     "lint:css": "stylelint \"assets/**/*.css\" --fix",
     "lint:ts:check": "tsc --noEmit",
+    "test:ts": "vitest run",
+    "test:ts:watch": "vitest",
     "lint:check": "npm run lint:php:check && npm run lint:css:check && npm run lint:ts:check",
     "lint": "npm run lint:php && npm run lint:css",
     "format:check": "prettier -c cashu-for-woocommerce.php src",
@@ -51,7 +56,7 @@
     "i18n": "php scripts/build-pot.php",
     "i18n:mo": "wp-env run cli -- wp i18n make-mo wp-content/plugins/cashu-for-woocommerce/languages",
     "build": "vite build && npm run format && npm run lint && npm run lint:check && npm run start",
-    "check": "npm run format:check && npm run lint:check && composer test",
+    "check": "npm run format:check && npm run lint:check && npm run test:ts && composer test",
     "fix": "npm run format && npm run lint",
     "wp-env:start": "wp-env start",
     "wp-env:seed-store": "wp-env run cli wp plugin install wordpress-importer --activate && wp-env run cli wp import wp-content/plugins/woocommerce/sample-data/sample_products.xml --authors=create",
