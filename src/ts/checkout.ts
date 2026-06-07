@@ -936,9 +936,42 @@ jQuery(function ($) {
     try {
       meltRes = await trustedWallet.meltProofsBolt11(quote, proofs);
     } catch (e) {
-      console.error(getErrorMessage(e));
-      showRecovery(token);
-      setStatus(t('payment_failed'), true);
+      console.warn('meltProofsBolt11 threw, re-checking quote state:', getErrorMessage(e));
+      // The mint may have spent the inputs and dropped the response.
+      // Probe state before showing the recovery UI — otherwise we'd offer
+      // the customer a token containing already-spent proofs.
+      let postState: MeltQuoteState | null = null;
+      try {
+        const recheck = await trustedWallet.checkMeltQuoteBolt11(data.quoteId);
+        postState = recheck.state;
+      } catch {
+        // treat as unknown
+      }
+      if (postState === MeltQuoteState.PAID) {
+        // Inputs are spent; the input token would be worthless. Recover
+        // any change-proofs via NUT-09 and let the server finalise.
+        clearStrandedProofs(data.mintQuote.id);
+        const restoredChange = await tryRestore(trustedWallet);
+        void saveProofs(restoredChange, trustedWallet);
+        setStatus(t('confirming_payment'));
+        void claimMeltPaid('');
+        return;
+      }
+      if (postState === MeltQuoteState.UNPAID) {
+        // Inputs were never spent — input token is a valid recovery.
+        showRecovery(token);
+        setStatus(t('payment_failed'), true);
+        return;
+      }
+      // Unknown / pending: cannot safely tell the customer whether their
+      // inputs are spent. Surface a "reconciling" status; the in-page
+      // pollOrderStatus background loop will catch the server-confirmed
+      // PAID transition. Any orphaned change-proofs will be recovered on
+      // the next reload via the PAID-state branch above. (The
+      // _cashu_melt_pending_quote_id cron sweep does NOT cover the LN leg
+      // today — it's set only by PayController::pay() for the PR leg.
+      // Extending it is a future change, out of scope here.)
+      setStatus(t('reconciling_with_mint'), true);
       return;
     }
 
