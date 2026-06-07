@@ -1,7 +1,7 @@
 [changelog]
 header = "# Changelog\n\n"
 body = """
-{% if version %}## {{ version }} ({{ date }}){% else %}## Unreleased{% endif %}
+{% if version %}## {{ version }}{% if date %} ({{ date }}){% endif %}{% else %}## Unreleased{% endif %}
 {% for group, commits in commits | group_by(attribute="group") %}
 ### {{ group }}
 {% for commit in commits %}
