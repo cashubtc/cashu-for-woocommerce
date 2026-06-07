@@ -73,14 +73,6 @@ type RootData = {
   defaultTab: QrMode; // initial active tab; server-side default-path resolution applied
 };
 
-type StoredMintQuote = {
-  mint: string;
-  amount: number;
-  quote: string;
-  request: string;
-  expiry?: number | null;
-};
-
 type ChangeItem = {
   mint: string;
   token: string;
@@ -504,16 +496,9 @@ jQuery(function ($) {
     change: 'cashu_wc_change',
   };
 
-  // The mint quote is now server-authoritative (rendered into data-attrs by
-  // the receipt page). Use it directly; no localStorage caching, no race
-  // against a page refresh.
-  const mintQuote: StoredMintQuote = {
-    mint: data.trustedMint,
-    amount: data.mintQuote.amount,
-    quote: data.mintQuote.id,
-    request: data.mintQuote.request,
-    expiry: data.mintQuote.expiry,
-  };
+  // The mint quote is server-authoritative (rendered into data-attrs by
+  // the receipt page). We read `data.mintQuote.*` directly throughout; no
+  // local copy, no localStorage caching, no race against a page refresh.
 
   // Best-effort clean up legacy localStorage from earlier versions of the
   // plugin; harmless if nothing is there.
@@ -618,7 +603,7 @@ jQuery(function ($) {
     // mode (5.5 bits/char) instead of byte mode (8 bits/char) — same payload,
     // denser QR, easier scan. bech32 forbids mixed case so the whole token
     // must be one case; bolt11 is case-insensitive, so all-upper is valid.
-    const lightningInvoice = mq.request;
+    const lightningInvoice = data.mintQuote.request;
     const lightningUri = 'LIGHTNING:' + lightningInvoice.toUpperCase();
 
     // cashu-ts v4 PaymentRequest constructor is positional. Args, in order:
@@ -640,9 +625,10 @@ jQuery(function ($) {
     // BIP-321 URI: fully uppercase to match CDK reference (the scheme and
     // query keys are case-insensitive per BIP-321; BOLT11 + CREQB are bech32
     // / bech32m so case-insensitive too). Same payload, denser QR potential,
-    // identical semantics. cashu-ts already returns CREQB uppercase;
-    // mq.request is lowercase from the mint, so uppercase it here.
-    const unifiedUri = 'BITCOIN:?LIGHTNING=' + mq.request.toUpperCase() + '&CREQ=' + creq;
+    // identical semantics. cashu-ts already returns CREQB uppercase; the
+    // mint quote request is lowercase from the mint, so uppercase it here.
+    const unifiedUri =
+      'BITCOIN:?LIGHTNING=' + data.mintQuote.request.toUpperCase() + '&CREQ=' + creq;
 
     qrTexts = {
       unified: unifiedUri,
@@ -726,7 +712,6 @@ jQuery(function ($) {
   // ------------------------------
 
   async function startMintQuoteWatcher(): Promise<void> {
-    const mq = mintQuote;
     const wallet = await trustedWalletP;
 
     // The effective deadline is the tighter of the spot quote window
@@ -746,16 +731,16 @@ jQuery(function ($) {
     // this check a quote that's already PAID on arrival would otherwise
     // wait the full poll interval.
     try {
-      const initial = await wallet.checkMintQuoteBolt11(mq.quote);
+      const initial = await wallet.checkMintQuoteBolt11(data.mintQuote.id);
       if (initial.state === 'PAID') {
-        void run(() => handleMintQuotePaid(mq));
+        void run(() => handleMintQuotePaid());
         return;
       }
       if (initial.state === 'ISSUED') {
         // Fast path: proofs were persisted to localStorage by a prior session.
-        const stranded = loadStrandedProofs(mq.quote);
+        const stranded = loadStrandedProofs(data.mintQuote.id);
         if (stranded) {
-          void run(() => handleMintQuotePaid(mq, stranded));
+          void run(() => handleMintQuotePaid(stranded));
           return;
         }
         // Slow path: NUT-09 restore via the deterministic seed. The mint
@@ -768,8 +753,13 @@ jQuery(function ($) {
           sumProofs(restored).toNumber() >= data.expectedAmount
         ) {
           // Persist immediately so a subsequent reload uses the fast path.
-          saveStrandedProofs(mq.quote, data.trustedMint, data.expectedAmount, restored);
-          void run(() => handleMintQuotePaid(mq, restored));
+          saveStrandedProofs(
+            data.mintQuote.id,
+            data.trustedMint,
+            data.expectedAmount,
+            restored,
+          );
+          void run(() => handleMintQuotePaid(restored));
           return;
         }
         console.warn('Mint quote ISSUED but restore returned no usable proofs');
@@ -798,7 +788,7 @@ jQuery(function ($) {
         const expiryMs = deadlineMs() - Date.now();
         if (expiryMs <= 0 || ac.signal.aborted) return false;
         try {
-          await wallet.on.onceMintPaid(mq.quote, {
+          await wallet.on.onceMintPaid(data.mintQuote.id, {
             signal: ac.signal,
             timeoutMs: expiryMs,
           });
@@ -831,7 +821,7 @@ jQuery(function ($) {
       try {
         while (!ac.signal.aborted && Date.now() < deadlineMs()) {
           await delay(12_000);
-          const q = await wallet.checkMintQuoteBolt11(mq.quote);
+          const q = await wallet.checkMintQuoteBolt11(data.mintQuote.id);
           if (q.state === 'PAID') return true;
         }
         return false;
@@ -843,13 +833,10 @@ jQuery(function ($) {
     const paid = (await wsPaid()) || (!ac.signal.aborted && (await pollPaid()));
     if (!paid) return;
 
-    void run(() => handleMintQuotePaid(mq));
+    void run(() => handleMintQuotePaid());
   }
 
-  async function handleMintQuotePaid(
-    mq: StoredMintQuote,
-    knownProofs?: Proof[],
-  ): Promise<void> {
+  async function handleMintQuotePaid(knownProofs?: Proof[]): Promise<void> {
     if (mintHandleP) return mintHandleP;
 
     mintHandleP = (async () => {
@@ -863,11 +850,19 @@ jQuery(function ($) {
         // the quote is already ISSUED.
         mintedProofs = knownProofs;
       } else {
-        mintedProofs = await wallet.mintProofsBolt11(data.expectedAmount, mq.quote);
+        mintedProofs = await wallet.mintProofsBolt11(
+          data.expectedAmount,
+          data.mintQuote.id,
+        );
         // Persist synchronously before any further await so a refresh
         // between here and meltProofsBolt11 can recover. The melt step
         // clears the snapshot once the proofs are spent at the mint.
-        saveStrandedProofs(mq.quote, data.trustedMint, data.expectedAmount, mintedProofs);
+        saveStrandedProofs(
+          data.mintQuote.id,
+          data.trustedMint,
+          data.expectedAmount,
+          mintedProofs,
+        );
       }
       await meltTrustedProofsToVendor(mintedProofs, wallet);
     })();
