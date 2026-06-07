@@ -112,17 +112,6 @@ function deriveWalletSeed(orderKey: string, mintQuoteId: string): Uint8Array {
 }
 
 /**
- * Stable short fingerprint of a seed for use in the wallet cache key, so
- * two orders against the same mint never share a Wallet instance (different
- * seeds → different deterministic counter state → fatal counter collision).
- */
-function seedFingerprint(seed: Uint8Array): string {
-  return Array.from(seed.slice(0, 8))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-}
-
-/**
  * Walk active sat-unit keysets and call NUT-09 wallet.restore(0, 64, ...)
  * on each, accumulating recovered Proofs. Used as the slow-path recovery
  * whenever a flow would otherwise have lost in-flight proofs (mint death,
@@ -310,19 +299,16 @@ function deleteJson(key: string): void {
 }
 
 function loadChangePayload(key: string): ChangePayload {
-  try {
-    const parsed = loadJson<ChangePayload>(key);
-    if (
-      !parsed ||
-      !Array.isArray(parsed.items) ||
-      Date.now() - parsed.created > 60 * 60 * 1000
-    ) {
-      return { v: 1, created: Date.now(), items: [] };
-    }
-    return parsed;
-  } catch {
+  // loadJson already catches; nothing else here throws.
+  const parsed = loadJson<ChangePayload>(key);
+  if (
+    !parsed ||
+    !Array.isArray(parsed.items) ||
+    Date.now() - parsed.created > 60 * 60 * 1000
+  ) {
     return { v: 1, created: Date.now(), items: [] };
   }
+  return parsed;
 }
 
 // ------------------------------
@@ -401,15 +387,14 @@ function sweepStaleStrandedProofs(): void {
         stale.push(key);
       }
     }
+    // The outer try covers localStorage.length / .key(i) access, which can
+    // throw in security-restricted iframes. removeItem itself doesn't
+    // throw on missing keys, so no per-key guard is needed.
     for (const key of stale) {
-      try {
-        localStorage.removeItem(key);
-      } catch {
-        // ignore
-      }
+      localStorage.removeItem(key);
     }
   } catch {
-    // ignore
+    // ignore — restricted-storage context, nothing recoverable
   }
 }
 
@@ -469,11 +454,16 @@ jQuery(function ($) {
 
   let chain: Promise<any> = Promise.resolve();
   let mintHandleP: Promise<void> | null = null;
-  // Seed is derived per-order from data-attrs already on the page. No persistence,
-  // no async, no browser-feature dependency (sha512 is from @noble/hashes,
-  // already a direct dep of cashu-ts).
+  // Seed is derived per-order from data-attrs already on the page. No
+  // persistence, no async, no browser-feature dependency (sha512 is from
+  // @noble/hashes, already a direct dep of cashu-ts). Cache-key fingerprint
+  // is the first 8 seed bytes as hex — so two orders against the same mint
+  // never share a Wallet (different seeds → different deterministic counter
+  // state → fatal counter collision).
   const walletSeed = deriveWalletSeed(data.orderKey, data.mintQuote.id);
-  const walletSeedFp = seedFingerprint(walletSeed);
+  const walletSeedFp = Array.from(walletSeed.slice(0, 8))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
   const trustedWalletP = getWalletCached(
     data.trustedMint,
     'sat',
@@ -489,12 +479,10 @@ jQuery(function ($) {
   // local copy, no localStorage caching, no race against a page refresh.
 
   // Best-effort clean up legacy localStorage from earlier versions of the
-  // plugin; harmless if nothing is there.
-  try {
-    deleteJson('cashu_wc_mq');
-    deleteJson('cashu_wc_recovery');
-    deleteJson(ls.change);
-  } catch {}
+  // plugin; harmless if nothing is there. deleteJson already swallows.
+  deleteJson('cashu_wc_mq');
+  deleteJson('cashu_wc_recovery');
+  deleteJson(ls.change);
 
   // Drop abandoned-order stranded-proof snapshots past TTL so localStorage
   // doesn't accumulate over the long tail. Active recovery for THIS quote
