@@ -146,6 +146,37 @@ final class MeltReconcilerTest extends IntegrationTestCase {
 		$this->assertSame( 'q_throttled', $order->get_meta( '_cashu_melt_pending_quote_id' ) );
 	}
 
+	public function test_force_bypasses_throttle(): void {
+		// Admin "Retry mint probe" passes force=true so the per-order
+		// hourly throttle doesn't suppress a deliberate manual probe.
+		// Without this, an admin investigating a stuck order would have
+		// to wait up to an hour after the prior cron probe before they
+		// could re-check, which defeats the point of the button.
+		$this->stubBaseline();
+		$this->setUpFakeWpdb();
+
+		Functions\when( 'get_transient' )->justReturn( '1' );
+
+		$order = $this->mockOrder( 42, array(
+			'_cashu_melt_pending_quote_id' => 'q_forced',
+			'_cashu_melt_pending_at'	   => (string) ( time() - 600 ),
+			'_cashu_melt_mint'			   => 'https://m.example',
+		) );
+		$order->shouldReceive( 'is_paid' )->andReturn( false );
+
+		Functions\when( 'wc_get_order' )->justReturn( $order );
+		Functions\expect( 'wp_remote_get' )->once()->andReturn( array(
+			'response' => array( 'code' => 200 ),
+			'body'	   => json_encode( array( 'state' => 'PENDING' ) ),
+		) );
+
+		MeltReconciler::reconcile_one( $order, true );
+
+		// Marker preserved on PENDING (same as the non-forced PENDING case),
+		// but the mint was actually hit — which is the whole point.
+		$this->assertSame( 'q_forced', $order->get_meta( '_cashu_melt_pending_quote_id' ) );
+	}
+
 	public function test_already_paid_order_drops_marker_without_probing(): void {
 		$this->stubBaseline();
 		$this->setUpFakeWpdb();

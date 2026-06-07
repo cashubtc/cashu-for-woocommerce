@@ -187,13 +187,103 @@ final class ValidateGlobalSettings {
 		}
 
 		$email = is_email( $value );
-		if ( $email ) {
-			return strtolower( $email );
+		if ( ! $email ) {
+			WC_Admin_Settings::add_error(
+				__( 'Lightning address must be a valid lightning address (name@domain).', 'cashu-for-woocommerce' )
+			);
+			return null;
 		}
 
-		WC_Admin_Settings::add_error(
-			__( 'Lightning address must be a valid lightning address (name@domain).', 'cashu-for-woocommerce' )
+		$address = strtolower( (string) $email );
+
+		// Skip the LNURL-pay probe when the value is unchanged — we don't
+		// want to hit the upstream provider on every "Save changes" click
+		// when the admin is editing unrelated settings.
+		$stored = strtolower( (string) get_option( 'cashu_lightning_address', '' ) );
+		if ( $address === $stored ) {
+			return $address;
+		}
+
+		$error = self::probe_lightning_address_resolves( $address );
+		if ( null !== $error ) {
+			WC_Admin_Settings::add_error( $error );
+			return null;
+		}
+
+		return $address;
+	}
+
+	/**
+	 * GET the LNURL-pay metadata endpoint for `{name}@{host}` and verify
+	 * the response is well-formed LUD-06 metadata advertising payRequest.
+	 * Mirrors the NUT-06 probe on trusted_mint: a typo or hostile-redirect
+	 * is caught at save time instead of stranding the first customer who
+	 * tries to check out. Without this, melt payouts could be routed to
+	 * an attacker-controlled host that returns a valid-looking BOLT11
+	 * (see the H1 finding in the CTF report — the LN provider is in the
+	 * merchant's TCB, but defense in depth bounds typo + admin-session-
+	 * compromise risk).
+	 *
+	 * Returns null on success, or a translated error string for the admin.
+	 */
+	private static function probe_lightning_address_resolves( string $address ): ?string {
+		// `name@host`. is_email already validated the shape; split is safe.
+		$parts = explode( '@', $address, 2 );
+		if ( 2 !== count( $parts ) || '' === $parts[0] || '' === $parts[1] ) {
+			return __( 'Lightning address must be of the form name@domain.', 'cashu-for-woocommerce' );
+		}
+		$lnurlp_url = sprintf(
+			'https://%s/.well-known/lnurlp/%s',
+			$parts[1],
+			rawurlencode( $parts[0] )
 		);
+
+		$response = wp_remote_get(
+			$lnurlp_url,
+			array(
+				'timeout' => 10,
+				'headers' => array( 'Accept' => 'application/json' ),
+			)
+		);
+
+		if ( is_wp_error( $response ) ) {
+			return sprintf(
+				/* translators: %s: lightning address */
+				__( 'Could not reach the Lightning address provider for %s. Check the address and try again.', 'cashu-for-woocommerce' ),
+				esc_html( $address )
+			);
+		}
+
+		$code = (int) wp_remote_retrieve_response_code( $response );
+		if ( 200 !== $code ) {
+			return sprintf(
+				/* translators: 1: lightning address, 2: HTTP status code */
+				__( 'Lightning address %1$s returned HTTP %2$d — is this a valid LNURL-pay endpoint?', 'cashu-for-woocommerce' ),
+				esc_html( $address ),
+				$code
+			);
+		}
+
+		$body = json_decode( (string) wp_remote_retrieve_body( $response ), true );
+		if ( ! is_array( $body ) ) {
+			return __( 'Lightning address provider returned a malformed response.', 'cashu-for-woocommerce' );
+		}
+
+		// LUD-06: tag must be "payRequest", callback must be a usable URL,
+		// minSendable/maxSendable must be numeric msat bounds.
+		if ( ( $body['tag'] ?? '' ) !== 'payRequest' ) {
+			return __( 'Lightning address provider does not advertise a payRequest endpoint.', 'cashu-for-woocommerce' );
+		}
+		if ( empty( $body['callback'] ) || ! is_string( $body['callback'] ) || ! wp_http_validate_url( $body['callback'] ) ) {
+			return __( 'Lightning address provider returned an invalid callback URL.', 'cashu-for-woocommerce' );
+		}
+		if ( ! isset( $body['minSendable'], $body['maxSendable'] )
+			|| ! is_numeric( $body['minSendable'] )
+			|| ! is_numeric( $body['maxSendable'] )
+			|| (int) $body['maxSendable'] < (int) $body['minSendable']
+		) {
+			return __( 'Lightning address provider returned invalid send-amount bounds.', 'cashu-for-woocommerce' );
+		}
 
 		return null;
 	}

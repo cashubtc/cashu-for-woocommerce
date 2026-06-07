@@ -345,4 +345,155 @@ final class ValidateGlobalSettingsTest extends IntegrationTestCase {
 		$this->assertSame( '', $result );
 		$this->assertCount( 0, WC_Admin_Settings::$errors );
 	}
+
+	/**
+	 * Build a valid LUD-06 LNURL-pay metadata body. Pass overrides to mutate
+	 * specific fields.
+	 */
+	private function validLnurlpBody( array $overrides = array() ): array {
+		$base = array(
+			'tag'            => 'payRequest',
+			'callback'       => 'https://lnurl.example/lnurlp/cb/abc',
+			'minSendable'    => 1000,
+			'maxSendable'    => 100000000,
+			'metadata'       => '[["text/plain","Pay to me"]]',
+			'commentAllowed' => 0,
+		);
+		return array_replace_recursive( $base, $overrides );
+	}
+
+	private function lnurlpResponse( array $body, int $code = 200 ): array {
+		return array(
+			'response' => array( 'code' => $code ),
+			'body'     => (string) json_encode( $body ),
+		);
+	}
+
+	public function test_sanitize_lightning_address_accepts_valid_lnurlp_response(): void {
+		Functions\when( 'is_email' )->alias( static fn ( $v ) => $v );
+		Functions\expect( 'wp_remote_get' )
+			->once()
+			->with( 'https://example.com/.well-known/lnurlp/me', \Mockery::any() )
+			->andReturn( $this->lnurlpResponse( $this->validLnurlpBody() ) );
+
+		$result = ValidateGlobalSettings::sanitize_lightning_address( 'me@example.com' );
+
+		$this->assertSame( 'me@example.com', $result );
+		$this->assertCount( 0, WC_Admin_Settings::$errors );
+	}
+
+	public function test_sanitize_lightning_address_skips_probe_when_unchanged(): void {
+		// Admin re-saves settings without touching the LN address. We
+		// MUST NOT hit the upstream provider — the value is already
+		// known-good.
+		$this->optionStore['cashu_lightning_address'] = 'me@example.com';
+		Functions\when( 'is_email' )->alias( static fn ( $v ) => $v );
+		Functions\expect( 'wp_remote_get' )->never();
+
+		$result = ValidateGlobalSettings::sanitize_lightning_address( 'me@example.com' );
+
+		$this->assertSame( 'me@example.com', $result );
+		$this->assertCount( 0, WC_Admin_Settings::$errors );
+	}
+
+	public function test_sanitize_lightning_address_rejects_invalid_email_shape(): void {
+		Functions\when( 'is_email' )->justReturn( false );
+		Functions\expect( 'wp_remote_get' )->never();
+
+		$result = ValidateGlobalSettings::sanitize_lightning_address( 'not-an-address' );
+
+		$this->assertNull( $result );
+		$this->assertStringContainsString( 'valid lightning address', WC_Admin_Settings::$errors[0] );
+	}
+
+	public function test_sanitize_lightning_address_rejects_when_provider_unreachable(): void {
+		Functions\when( 'is_email' )->alias( static fn ( $v ) => $v );
+		Functions\expect( 'wp_remote_get' )
+			->once()
+			->andReturn( new \WP_Error( 'http_request_failed', 'connect timeout' ) );
+
+		$result = ValidateGlobalSettings::sanitize_lightning_address( 'me@example.com' );
+
+		$this->assertNull( $result );
+		$this->assertStringContainsString( 'Could not reach the Lightning address provider', WC_Admin_Settings::$errors[0] );
+	}
+
+	public function test_sanitize_lightning_address_rejects_non_200_response(): void {
+		Functions\when( 'is_email' )->alias( static fn ( $v ) => $v );
+		Functions\expect( 'wp_remote_get' )
+			->once()
+			->andReturn(
+				array(
+					'response' => array( 'code' => 404 ),
+					'body'     => 'Not Found',
+				)
+			);
+
+		$result = ValidateGlobalSettings::sanitize_lightning_address( 'me@example.com' );
+
+		$this->assertNull( $result );
+		$this->assertStringContainsString( 'returned HTTP 404', WC_Admin_Settings::$errors[0] );
+	}
+
+	public function test_sanitize_lightning_address_rejects_response_with_wrong_tag(): void {
+		Functions\when( 'is_email' )->alias( static fn ( $v ) => $v );
+		Functions\expect( 'wp_remote_get' )
+			->once()
+			->andReturn(
+				$this->lnurlpResponse(
+					$this->validLnurlpBody( array( 'tag' => 'withdrawRequest' ) )
+				)
+			);
+
+		$result = ValidateGlobalSettings::sanitize_lightning_address( 'me@example.com' );
+
+		$this->assertNull( $result );
+		$this->assertStringContainsString( 'payRequest', WC_Admin_Settings::$errors[0] );
+	}
+
+	public function test_sanitize_lightning_address_rejects_response_with_invalid_callback(): void {
+		Functions\when( 'is_email' )->alias( static fn ( $v ) => $v );
+		Functions\expect( 'wp_remote_get' )
+			->once()
+			->andReturn(
+				$this->lnurlpResponse(
+					$this->validLnurlpBody( array( 'callback' => 'not-a-url' ) )
+				)
+			);
+
+		$result = ValidateGlobalSettings::sanitize_lightning_address( 'me@example.com' );
+
+		$this->assertNull( $result );
+		$this->assertStringContainsString( 'invalid callback URL', WC_Admin_Settings::$errors[0] );
+	}
+
+	public function test_sanitize_lightning_address_rejects_response_with_inverted_send_bounds(): void {
+		Functions\when( 'is_email' )->alias( static fn ( $v ) => $v );
+		Functions\expect( 'wp_remote_get' )
+			->once()
+			->andReturn(
+				$this->lnurlpResponse(
+					$this->validLnurlpBody(
+						array(
+							'minSendable' => 100000,
+							'maxSendable' => 1000,
+						)
+					)
+				)
+			);
+
+		$result = ValidateGlobalSettings::sanitize_lightning_address( 'me@example.com' );
+
+		$this->assertNull( $result );
+		$this->assertStringContainsString( 'invalid send-amount bounds', WC_Admin_Settings::$errors[0] );
+	}
+
+	public function test_sanitize_lightning_address_empty_value_passes_through(): void {
+		Functions\expect( 'wp_remote_get' )->never();
+
+		$result = ValidateGlobalSettings::sanitize_lightning_address( '   ' );
+
+		$this->assertSame( '', $result );
+		$this->assertCount( 0, WC_Admin_Settings::$errors );
+	}
 }

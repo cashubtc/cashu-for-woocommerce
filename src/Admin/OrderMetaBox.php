@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Cashu\WC\Admin;
 
+use Cashu\WC\Helpers\Logger;
+use Cashu\WC\Helpers\MeltReconciler;
 use WC_Order;
 
 /**
@@ -21,6 +23,7 @@ final class OrderMetaBox {
 
 	public static function register(): void {
 		add_action( 'add_meta_boxes', array( self::class, 'add' ) );
+		add_action( 'admin_post_cashu_wc_retry_melt', array( self::class, 'handle_retry_melt' ) );
 	}
 
 	public static function add(): void {
@@ -70,6 +73,27 @@ final class OrderMetaBox {
 		}
 		echo '</p>';
 
+		// Surface the result of the previous retry click (if any). This is
+		// a display-only notice key read from the post-redirect URL — no
+		// state mutation happens here, so no nonce is required (the nonce
+		// was checked in handle_retry_melt before the redirect).
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$retry_notice = isset( $_GET['cashu_retry'] ) ? sanitize_key( wp_unslash( (string) $_GET['cashu_retry'] ) ) : '';
+		if ( '' !== $retry_notice ) {
+			$messages = array(
+				'queued'    => __( 'Retry probe sent. Reload the page if the status hasn\'t updated.', 'cashu-for-woocommerce' ),
+				'no_order'  => __( 'Retry probe failed: order not found.', 'cashu-for-woocommerce' ),
+				'forbidden' => __( 'Retry probe failed: insufficient permissions.', 'cashu-for-woocommerce' ),
+			);
+			$message  = $messages[ $retry_notice ] ?? '';
+			if ( '' !== $message ) {
+				$class = 'queued' === $retry_notice ? '#46b450' : '#d63638';
+				echo '<p style="margin:0 0 10px;padding:6px 8px;background:#fff;border-left:3px solid ' . esc_attr( $class ) . ';">';
+				echo esc_html( $message );
+				echo '</p>';
+			}
+		}
+
 		$pending_quote = (string) $order->get_meta( '_cashu_melt_pending_quote_id', true );
 		$pending_at    = absint( $order->get_meta( '_cashu_melt_pending_at', true ) );
 		if ( '' !== $pending_quote && ! $order->is_paid() ) {
@@ -82,6 +106,17 @@ final class OrderMetaBox {
 				intval( $elapsed_min )
 			);
 			echo '</p>';
+
+			// Manual retry button — bypasses the per-order hourly throttle
+			// so a human investigating a stuck order can force a probe now
+			// without waiting for the next cron tick.
+			$action = admin_url( 'admin-post.php' );
+			echo '<form method="post" action="' . esc_url( $action ) . '" style="margin:0 0 12px;">';
+			echo '<input type="hidden" name="action" value="cashu_wc_retry_melt" />';
+			echo '<input type="hidden" name="order_id" value="' . intval( $order->get_id() ) . '" />';
+			wp_nonce_field( 'cashu_wc_retry_melt_' . $order->get_id() );
+			echo '<button type="submit" class="button">' . esc_html__( 'Retry mint probe', 'cashu-for-woocommerce' ) . '</button>';
+			echo '</form>';
 		}
 
 		echo '<p style="margin:0 0 12px;"><a class="button button-primary" target="_blank" rel="noopener" href="' . esc_url( $payment_url ) . '">';
@@ -137,5 +172,41 @@ final class OrderMetaBox {
 				}
 			}
 		}
+	}
+
+	/**
+	 * admin_post handler for the "Retry mint probe" button. Calls
+	 * MeltReconciler::reconcile_one with force=true so the per-order
+	 * hourly throttle doesn't suppress the probe. Always redirects back
+	 * to the order edit screen with a cashu_retry= notice key, even on
+	 * failure, so the admin gets feedback rather than a blank page.
+	 */
+	public static function handle_retry_melt(): void {
+		$order_id = isset( $_POST['order_id'] ) ? absint( wp_unslash( $_POST['order_id'] ) ) : 0;
+		$referer  = wp_get_referer() ?: admin_url();
+
+		if ( ! current_user_can( 'manage_woocommerce' ) ) {
+			wp_safe_redirect( add_query_arg( 'cashu_retry', 'forbidden', $referer ) );
+			exit;
+		}
+
+		// check_admin_referer wp_die's on failure — that's the correct
+		// behaviour for a nonce mismatch; no need to wrap with a notice.
+		check_admin_referer( 'cashu_wc_retry_melt_' . $order_id );
+
+		$order = wc_get_order( $order_id );
+		if ( ! $order ) {
+			wp_safe_redirect( add_query_arg( 'cashu_retry', 'no_order', $referer ) );
+			exit;
+		}
+
+		try {
+			MeltReconciler::reconcile_one( $order, true );
+		} catch ( \Throwable $e ) {
+			Logger::error( 'Admin retry-melt failed for order ' . $order_id . ': ' . $e->getMessage() );
+		}
+
+		wp_safe_redirect( add_query_arg( 'cashu_retry', 'queued', $referer ) );
+		exit;
 	}
 }
