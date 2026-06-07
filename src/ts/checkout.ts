@@ -489,7 +489,6 @@ jQuery(function ($) {
 
   let chain: Promise<any> = Promise.resolve();
   let mintHandleP: Promise<void> | null = null;
-  let userPending = 0;
   // Seed is derived per-order from data-attrs already on the page. No persistence,
   // no async, no browser-feature dependency (sha512 is from @noble/hashes,
   // already a direct dep of cashu-ts).
@@ -673,36 +672,17 @@ jQuery(function ($) {
     });
   }
 
-  async function run<T>(
-    fn: () => Promise<T>,
-    opts: { user?: boolean } = {},
-  ): Promise<T | undefined> {
-    const isUser = !!opts.user;
-
-    if (isUser && userPending > 0) {
-      setStatus(t('payment_in_progress'), true);
-      return Promise.resolve(undefined);
-    }
-
-    if (isUser) {
-      userPending++;
-    }
-
+  // Serialize async work against a single chain so concurrent callers
+  // (WS, poll, page-load) can't interleave a mint/melt mid-flight.
+  // Errors are surfaced to the status line; the chain itself is never
+  // rejected so subsequent run() calls keep flowing.
+  async function run<T>(fn: () => Promise<T>): Promise<T | undefined> {
     const p = chain.then(fn).catch((e) => {
-      const msg = getErrorMessage(e);
-      setStatus(msg, true);
+      setStatus(getErrorMessage(e), true);
       return undefined as unknown as T;
     });
-
     chain = p.then(() => undefined);
-
-    try {
-      return await p;
-    } finally {
-      if (isUser) {
-        userPending--;
-      }
-    }
+    return p;
   }
 
   async function saveProofs(changeProofs: Proof[], wallet: Wallet): Promise<void> {

@@ -159,9 +159,6 @@ class CashuGateway extends \WC_Payment_Gateway {
 					'data_incomplete'         => __( 'Payment data incomplete, please refresh and try again.', 'cashu-for-woocommerce' ),
 					'invoice_failed'          => __( 'Could not prepare the invoice, please refresh and try again', 'cashu-for-woocommerce' ),
 
-					// Status
-					'payment_in_progress'     => __( 'Payment already in progress', 'cashu-for-woocommerce' ),
-
 					// QR interactions
 					'copied'                  => __( 'Copied!', 'cashu-for-woocommerce' ),
 					'waiting_for_payment'     => __( 'Waiting for payment...', 'cashu-for-woocommerce' ),
