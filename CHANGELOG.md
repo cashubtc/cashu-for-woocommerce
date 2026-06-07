@@ -83,6 +83,8 @@
 
 - gate the success branch behind a single-flight flag (Rob Woodgate)
 
+- preserve marker through transient mint outages (Rob Woodgate)
+
 
 ### <!-- 10 -->💼 Other
 
@@ -117,6 +119,8 @@
 - note ts→js rebuild step for wp-env iteration (Rob Woodgate)
 
 - point Plugin URI at the repo and add Source section to readme (Rob Woodgate)
+
+- regenerate changelog for proof-loss reconciliation (Rob Woodgate)
 
 
 ### <!-- 5 -->🎨 Styling
