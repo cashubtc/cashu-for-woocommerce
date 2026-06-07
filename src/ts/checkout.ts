@@ -144,7 +144,9 @@ function seedFingerprint(seed: Uint8Array): string {
  */
 async function tryRestore(wallet: Wallet, targetAmount?: number): Promise<Proof[]> {
   const out: Proof[] = [];
-  const keysets = wallet.keyChain.getKeysets().filter((k) => k.unit === 'sat' && k.isActive);
+  const keysets = wallet.keyChain
+    .getKeysets()
+    .filter((k) => k.unit === 'sat' && k.isActive);
   for (const ks of keysets) {
     try {
       const { proofs } = await wallet.restore(0, 64, { keysetId: ks.id });
@@ -769,18 +771,11 @@ jQuery(function ($) {
           sumProofs(restored).toNumber() >= data.expectedAmount
         ) {
           // Persist immediately so a subsequent reload uses the fast path.
-          saveStrandedProofs(
-            mq.quote,
-            data.trustedMint,
-            data.expectedAmount,
-            restored,
-          );
+          saveStrandedProofs(mq.quote, data.trustedMint, data.expectedAmount, restored);
           void run(() => handleMintQuotePaid(mq, restored));
           return;
         }
-        console.warn(
-          'Mint quote ISSUED but restore returned no usable proofs',
-        );
+        console.warn('Mint quote ISSUED but restore returned no usable proofs');
         setStatus(t('recovery_failed_contact'), true);
         return;
       }
@@ -922,6 +917,13 @@ jQuery(function ($) {
     // customer redirects to thank-you.
     if (quote.state === MeltQuoteState.PAID) {
       clearStrandedProofs(data.mintQuote.id);
+      // The melt completed in a prior session; if the response carried
+      // change-proofs they would have only existed in JS heap until
+      // saveProofs ran. Death between those two points orphans the change.
+      // One NUT-09 sweep on reload recovers any orphans into the existing
+      // change-display path. No-op when there were no change-proofs.
+      const restoredChange = await tryRestore(trustedWallet);
+      void saveProofs(restoredChange, trustedWallet);
       const paidPreimage =
         typeof (quote as any).payment_preimage === 'string'
           ? (quote as any).payment_preimage
