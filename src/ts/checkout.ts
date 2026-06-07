@@ -124,6 +124,39 @@ function seedFingerprint(seed: Uint8Array): string {
     .join('');
 }
 
+/**
+ * Walk active sat-unit keysets and call NUT-09 wallet.restore(0, 64, ...)
+ * on each, accumulating recovered Proofs. Used as the slow-path recovery
+ * whenever a flow would otherwise have lost in-flight proofs (mint death,
+ * melt death, change loss). cashu-ts splits an amount into power-of-two
+ * denominations (popcount minting) so even large orders never exceed ~16
+ * outputs per operation; 64 is a safe over-allocation. If 64 ever turns
+ * out to be insufficient (e.g. cashu-ts changes its split strategy), swap
+ * for wallet.batchRestore(300, 300, 0, keysetId) — same shape with
+ * built-in gap-limit early-stop on consecutive empty batches.
+ *
+ * Filtering to active sat keysets avoids hammering the mint walking
+ * msat/btc keysets we'd never have minted into, and skips inactive
+ * keysets (the mint won't have signatures against them for this seed).
+ *
+ * API note: cashu-ts v4.5.1 exposes keysets via wallet.keyChain.getKeysets()
+ * (unit-filtered to the wallet's unit) and Keyset.isActive (not .active).
+ */
+async function tryRestore(wallet: Wallet, targetAmount?: number): Promise<Proof[]> {
+  const out: Proof[] = [];
+  const keysets = wallet.keyChain.getKeysets().filter((k) => k.unit === 'sat' && k.isActive);
+  for (const ks of keysets) {
+    try {
+      const { proofs } = await wallet.restore(0, 64, { keysetId: ks.id });
+      out.push(...proofs);
+      if (targetAmount && sumProofs(out).toNumber() >= targetAmount) break;
+    } catch (e) {
+      console.warn(`restore failed for keyset ${ks.id}:`, getErrorMessage(e));
+    }
+  }
+  return out;
+}
+
 // Wallet cache: bounded so a long-lived tab doesn't reuse a Wallet with stale
 // keyset state. Mint keyset rotations are rare but possible, and a stale
 // wallet would silently produce proofs the mint rejects on next use.
