@@ -104,12 +104,12 @@ window.addEventListener('beforeunload', () => ac.abort(), { once: true });
  * different device, or a wiped localStorage all derive the same seed and
  * can NUT-09-restore proofs the mint has already issued.
  *
- * The 'cashu_wc_lnleg_seed_v1' domain string is versioned so a future
+ * The 'cashu_wc_wallet_seed_v1' domain string is versioned so a future
  * derivation-scheme change can rotate without colliding with existing
  * seeded orders.
  */
 function deriveWalletSeed(orderKey: string, mintQuoteId: string): Uint8Array {
-  const input = `cashu_wc_lnleg_seed_v1|${orderKey}|${mintQuoteId}`;
+  const input = `cashu_wc_wallet_seed_v1|${orderKey}|${mintQuoteId}`;
   return sha512(new TextEncoder().encode(input));
 }
 
