@@ -10,6 +10,7 @@ import {
   PaymentRequest,
   PaymentRequestTransportType,
 } from '@cashu/cashu-ts';
+import { sha512 } from '@noble/hashes/sha2.js';
 import qrcode from 'qrcode-generator';
 import { copyTextToClipboard, doConfettiBomb, delay, getErrorMessage } from './utils';
 
@@ -95,6 +96,33 @@ type ChangePayload = {
 const ac = new AbortController();
 window.addEventListener('pagehide', () => ac.abort(), { once: true });
 window.addEventListener('beforeunload', () => ac.abort(), { once: true });
+
+/**
+ * Deterministic 64-byte seed for the per-order cashu-ts Wallet. Recomputed
+ * identically on every page load from inputs that already live in receipt-
+ * page data-attrs (order_key + mint_quote_id), so a fresh browser, a
+ * different device, or a wiped localStorage all derive the same seed and
+ * can NUT-09-restore proofs the mint has already issued.
+ *
+ * The 'cashu_wc_lnleg_seed_v1' domain string is versioned so a future
+ * derivation-scheme change can rotate without colliding with existing
+ * seeded orders.
+ */
+function deriveWalletSeed(orderKey: string, mintQuoteId: string): Uint8Array {
+  const input = `cashu_wc_lnleg_seed_v1|${orderKey}|${mintQuoteId}`;
+  return sha512(new TextEncoder().encode(input));
+}
+
+/**
+ * Stable short fingerprint of a seed for use in the wallet cache key, so
+ * two orders against the same mint never share a Wallet instance (different
+ * seeds → different deterministic counter state → fatal counter collision).
+ */
+function seedFingerprint(seed: Uint8Array): string {
+  return Array.from(seed.slice(0, 8))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
 
 // Wallet cache: bounded so a long-lived tab doesn't reuse a Wallet with stale
 // keyset state. Mint keyset rotations are rare but possible, and a stale
