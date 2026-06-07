@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import {
+  composeRestUrl,
   deriveMeltFailureBranch,
   extractPaymentPreimage,
   selectPollIntervalMs,
@@ -132,5 +133,59 @@ describe('extractPaymentPreimage', () => {
 
   test('handles undefined nested quote without throwing', () => {
     expect(extractPaymentPreimage({ quote: undefined })).toBe('');
+  });
+});
+
+// ----------------------------------------------------------------------------
+// composeRestUrl
+// ----------------------------------------------------------------------------
+
+describe('composeRestUrl', () => {
+  // All four slash combinations must collapse to exactly one '/' between
+  // base + route. Naive concatenation produces '//foo' or 'rootfoo'
+  // depending on inputs; the helper guarantees neither.
+  test('base trailing slash + route leading slash', () => {
+    expect(composeRestUrl('https://x.test/wp-json/cashu-wc/v1/', '/claim-melt-quote')).toBe(
+      'https://x.test/wp-json/cashu-wc/v1/claim-melt-quote',
+    );
+  });
+
+  test('base trailing slash + route bare', () => {
+    expect(composeRestUrl('https://x.test/wp-json/cashu-wc/v1/', 'claim-melt-quote')).toBe(
+      'https://x.test/wp-json/cashu-wc/v1/claim-melt-quote',
+    );
+  });
+
+  test('base bare + route leading slash', () => {
+    expect(composeRestUrl('https://x.test/wp-json/cashu-wc/v1', '/claim-melt-quote')).toBe(
+      'https://x.test/wp-json/cashu-wc/v1/claim-melt-quote',
+    );
+  });
+
+  test('base bare + route bare', () => {
+    expect(composeRestUrl('https://x.test/wp-json/cashu-wc/v1', 'claim-melt-quote')).toBe(
+      'https://x.test/wp-json/cashu-wc/v1/claim-melt-quote',
+    );
+  });
+
+  // Missing config must return '' so the caller short-circuits rather than
+  // POSTing to a malformed URL.
+  test('empty restRoot returns empty string', () => {
+    expect(composeRestUrl('', 'claim-melt-quote')).toBe('');
+  });
+
+  test('empty route returns empty string', () => {
+    expect(composeRestUrl('https://x.test/wp-json/cashu-wc/v1/', '')).toBe('');
+  });
+
+  test('both empty returns empty string', () => {
+    expect(composeRestUrl('', '')).toBe('');
+  });
+
+  // The leading-slash strip only fires once — `//foo` collapses to `/foo`,
+  // not `foo`. This matters because some WP setups namespace REST under a
+  // subdir and a double-slashed route shouldn't break the join.
+  test('route with multiple leading slashes preserves all but the first', () => {
+    expect(composeRestUrl('https://x.test/', '//foo')).toBe('https://x.test//foo');
   });
 });

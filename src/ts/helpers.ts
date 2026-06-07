@@ -296,6 +296,24 @@ export function deriveMeltFailureBranch(
 }
 
 /**
+ * Build a REST endpoint URL from a base + a route, idempotent on slashes.
+ * Both `cashu_wc.rest_root` and `cashu_wc.claim_route` / `.confirm_route` are
+ * server-side locale-shaped strings — `rest_root` ends with '/' in WP's
+ * default REST namespace, but a site that's filtered the namespace prefix
+ * can change that, and the routes themselves arrive both with and without
+ * a leading slash across WP versions. Concatenating naively yields
+ * `//confirm-melt-quote` or `confirm-melt-quotefoo` depending on inputs.
+ *
+ * Contract: produces exactly one '/' between the two halves regardless of
+ * trailing slash on `restRoot` or leading slash on `route`. Empty inputs
+ * pass through unchanged so the caller can detect missing config.
+ */
+export function composeRestUrl(restRoot: string, route: string): string {
+  if (!restRoot || !route) return '';
+  return restRoot.replace(/\/?$/, '/') + route.replace(/^\//, '');
+}
+
+/**
  * Pull `payment_preimage` off a cashu-ts quote or melt-response wrapper, with
  * the `unknown` typed-extraction (some mint responses surface preimage
  * directly on the quote, some wrap it under `.quote`). Returns the empty

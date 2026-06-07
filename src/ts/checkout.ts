@@ -14,6 +14,7 @@ import { copyTextToClipboard, doConfettiBomb, delay, getErrorMessage } from './u
 import {
   CHANGE_PAYLOAD_KEY,
   clearStrandedProofs,
+  composeRestUrl,
   createSerialRunner,
   deleteJson,
   deriveMeltFailureBranch,
@@ -729,11 +730,11 @@ jQuery(function ($) {
   let finalised = false;
 
   async function claimMeltPaid(preimage: string): Promise<void> {
-    const restRoot = String(window.cashu_wc?.rest_root ?? '');
-    const route = String(window.cashu_wc?.claim_route ?? '');
-    if (!restRoot || !route) return;
-
-    const endpoint = restRoot.replace(/\/?$/, '/') + route.replace(/^\//, '');
+    const endpoint = composeRestUrl(
+      String(window.cashu_wc?.rest_root ?? ''),
+      String(window.cashu_wc?.claim_route ?? ''),
+    );
+    if (!endpoint) return;
 
     try {
       const res = await fetch(endpoint, {
@@ -768,11 +769,11 @@ jQuery(function ($) {
   // ------------------------------
 
   async function checkOrderStatus(): Promise<ConfirmPaidResponse | null> {
-    const restRoot = String(window.cashu_wc?.rest_root ?? '');
-    const route = String(window.cashu_wc?.confirm_route ?? '');
-    if (!restRoot || !route) return null;
-
-    const endpoint = restRoot.replace(/\/?$/, '/') + route.replace(/^\//, '');
+    const endpoint = composeRestUrl(
+      String(window.cashu_wc?.rest_root ?? ''),
+      String(window.cashu_wc?.confirm_route ?? ''),
+    );
+    if (!endpoint) return null;
 
     const payload: any = {
       order_id: data.orderId,
