@@ -149,7 +149,16 @@ async function tryRestore(wallet: Wallet, targetAmount?: number): Promise<Proof[
     .filter((k) => k.unit === 'sat' && k.isActive);
   for (const ks of keysets) {
     try {
-      const { proofs } = await wallet.restore(0, 64, { keysetId: ks.id });
+      const { proofs, lastCounterWithSignature } = await wallet.restore(0, 64, { keysetId: ks.id });
+      // NUT-09 restore returns proofs but does NOT advance the wallet's
+      // deterministic counter source. Without this, a subsequent mint or
+      // melt operation against this wallet would derive blinded outputs
+      // at counters the mint has already signed — collision territory.
+      // wallet.restore returns the highest counter it saw a signature
+      // for; advance to one past that so future ops use unused tuples.
+      if (proofs.length > 0 && lastCounterWithSignature !== undefined) {
+        await wallet.counters.advanceToAtLeast(ks.id, lastCounterWithSignature + 1);
+      }
       out.push(...proofs);
       if (targetAmount && sumProofs(out).toNumber() >= targetAmount) break;
     } catch (e) {
