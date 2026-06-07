@@ -240,7 +240,13 @@ class CashuGateway extends \WC_Payment_Gateway {
 					'dismiss'     => __( 'Dismiss', 'cashu-for-woocommerce' ),
 
 					'lead'        => __(
-						'If you use a Cashu wallet, copy any change tokens below and paste them into your wallet.',
+						'Your Lightning payment fees were lower than expected. Here\'s the difference back as Cashu change. Copy each token into your Cashu wallet to claim it.',
+						'cashu-for-woocommerce'
+					),
+
+					/* translators: %s is the rendered <a href="https://cashu.me">cashu.me</a> link */
+					'no_wallet'   => __(
+						'New to Cashu? Try %s',
 						'cashu-for-woocommerce'
 					),
 
@@ -248,14 +254,14 @@ class CashuGateway extends \WC_Payment_Gateway {
 					'important'   => __( 'Important:', 'cashu-for-woocommerce' ),
 
 					'tip'         => __(
-						'save your change now, we do not store tokens on our server.',
+						'Copy your change now — it disappears soon.',
 						'cashu-for-woocommerce'
 					),
 
 					'dust_badge'  => __( 'Dust', 'cashu-for-woocommerce' ),
 
 					'dust_note'   => __(
-						'May be too small to spend on its own due to per proof fees.',
+						'Too small to spend on its own — save it with other change.',
 						'cashu-for-woocommerce'
 					),
 

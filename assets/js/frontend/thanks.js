@@ -87,6 +87,12 @@
     return;
   }
 
+  // cashu.me link injected via sprintf so translators see %s in the .po
+  // file and can move the visible text wherever the target grammar wants.
+  // The anchor literal is hard-coded — no user input flows in.
+  const cashuMeAnchor =
+    '<a href="https://cashu.me" target="_blank" rel="noopener noreferrer">cashu.me</a>';
+
   // Add change container
   root.classList.add('cashu-change');
   root.innerHTML = `
@@ -96,6 +102,9 @@
 		</div>
 		<div class="cashu-change-lead">
 			${t('lead')}
+		</div>
+		<div class="cashu-change-no-wallet">
+			${sprintf(t('no_wallet'), cashuMeAnchor)}
 		</div>
 		<div class="cashu-change-list"></div>
 		<div class="cashu-change-tip">

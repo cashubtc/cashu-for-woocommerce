@@ -485,33 +485,36 @@ msgstr "Votre rendu Cashu"
 msgid "Dismiss"
 msgstr "Fermer"
 
-#: src/Gateway/CashuGateway.php:217
+#: src/Gateway/CashuGateway.php:242
 msgid ""
-"If you use a Cashu wallet, copy any change tokens below and paste them into "
-"your wallet."
+"Your Lightning payment fees were lower than expected. Here's the difference "
+"back as Cashu change. Copy each token into your Cashu wallet to claim it."
 msgstr ""
-"Si vous utilisez un portefeuille Cashu, copiez les jetons de rendu ci-"
-"dessous puis collez-les dans votre portefeuille."
+"Les frais de votre paiement Lightning étaient plus bas que prévus. Voici la "
+"différence sous forme de rendu Cashu. Copiez chaque jeton dans votre "
+"portefeuille Cashu pour le récupérer."
 
-#. translators: %s is the word "Important:" (label) shown before the message
-#: src/Gateway/CashuGateway.php:223
+#. translators: %s is the rendered <a href="https://cashu.me">cashu.me</a> link
+#: src/Gateway/CashuGateway.php:248
+msgid "New to Cashu? Try %s"
+msgstr "Nouveau sur Cashu ? Essayez %s"
+
+#: src/Gateway/CashuGateway.php:254
 msgid "Important:"
 msgstr "Important :"
 
-#: src/Gateway/CashuGateway.php:225
-msgid "save your change now, we do not store tokens on our server."
-msgstr ""
-"Sauvegardez votre rendu maintenant, nous ne stockons pas de jetons sur notre "
-"serveur."
+#: src/Gateway/CashuGateway.php:256
+msgid "Copy your change now — it disappears soon."
+msgstr "Copiez votre rendu maintenant — il disparaîtra bientôt."
 
-#: src/Gateway/CashuGateway.php:230
+#: src/Gateway/CashuGateway.php:261
 msgid "Dust"
 msgstr "Poussière"
 
-#: src/Gateway/CashuGateway.php:232
-msgid "May be too small to spend on its own due to per proof fees."
+#: src/Gateway/CashuGateway.php:263
+msgid "Too small to spend on its own — save it with other change."
 msgstr ""
-"Peut être trop faible pour être dépensé seul à cause des frais par preuve."
+"Trop petit pour être dépensé seul — conservez-le avec d'autres rendus."
 
 #: src/Gateway/CashuGateway.php:237
 msgid "Copy"

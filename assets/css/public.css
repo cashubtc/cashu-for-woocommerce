@@ -353,6 +353,11 @@
   margin: 12px 0 0;
 }
 
+.cashu-change-no-wallet {
+  color: var(--cashu-muted);
+  margin: 8px 0 0;
+}
+
 @media (width <= 520px) {
   .cashu-change-row {
     flex-direction: column;
