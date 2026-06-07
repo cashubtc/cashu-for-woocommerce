@@ -753,20 +753,35 @@ jQuery(function ($) {
         return;
       }
       if (initial.state === 'ISSUED') {
-        // Proofs were minted in a prior session. If they were persisted to
-        // localStorage before the page died (refresh-between-mint-and-melt
-        // bug), resume the melt + claim path now. Otherwise this is the
-        // genuine stranded case — different device, cleared storage, or
-        // localStorage write failed at mint time — and only admin recovery
-        // can complete the order.
+        // Fast path: proofs were persisted to localStorage by a prior session.
         const stranded = loadStrandedProofs(mq.quote);
         if (stranded) {
           void run(() => handleMintQuotePaid(mq, stranded));
           return;
         }
+        // Slow path: NUT-09 restore via the deterministic seed. The mint
+        // returns any signatures it has against blinded outputs we'd have
+        // derived for this seed × keyset, which we unblind into Proofs.
+        setStatus(t('recovering_proofs'));
+        const restored = await tryRestore(wallet, data.expectedAmount);
+        if (
+          restored.length > 0 &&
+          sumProofs(restored).toNumber() >= data.expectedAmount
+        ) {
+          // Persist immediately so a subsequent reload uses the fast path.
+          saveStrandedProofs(
+            mq.quote,
+            data.trustedMint,
+            data.expectedAmount,
+            restored,
+          );
+          void run(() => handleMintQuotePaid(mq, restored));
+          return;
+        }
         console.warn(
-          'Mint quote already ISSUED but no local proofs; recovery requires admin intervention',
+          'Mint quote ISSUED but restore returned no usable proofs',
         );
+        setStatus(t('recovery_failed_contact'), true);
         return;
       }
     } catch (e) {
