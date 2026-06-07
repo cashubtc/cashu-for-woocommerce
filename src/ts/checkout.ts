@@ -936,7 +936,10 @@ jQuery(function ($) {
     try {
       meltRes = await trustedWallet.meltProofsBolt11(quote, proofs);
     } catch (e) {
-      console.warn('meltProofsBolt11 threw, re-checking quote state:', getErrorMessage(e));
+      console.warn(
+        'meltProofsBolt11 threw, re-checking quote state:',
+        getErrorMessage(e),
+      );
       // The mint may have spent the inputs and dropped the response.
       // Probe state before showing the recovery UI — otherwise we'd offer
       // the customer a token containing already-spent proofs.
