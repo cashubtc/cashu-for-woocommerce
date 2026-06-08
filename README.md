@@ -12,7 +12,7 @@ A disposable WordPress + WooCommerce sandbox boots in your browser with the late
 
 Checkout shows a single QR code that any of the following can pay:
 
-- **Lightning wallets** — settle via your trusted Cashu mint, paid out to your Lightning address
+- **Lightning wallets (BOLT11)** — settle via your trusted Cashu mint, paid out to your Lightning address
 - **Cashu wallets (NUT-18)** — proofs post directly to the plugin, which melts them at the trusted mint and pays your Lightning address
 - **BIP-321 wallets** — see both options at once and pick whichever they support
 

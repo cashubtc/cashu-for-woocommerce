@@ -1,14 +1,15 @@
 [changelog]
 header = "# Changelog\n\n"
 body = """
-{% if version %}## {{ version }}{% if date %} ({{ date }}){% endif %}{% else %}## Unreleased{% endif %}
+{% if version %}## {{ version }}{% if date %} ({{ date }}){% endif %}\
+{% else %}## Unreleased{% endif %}
 {% for group, commits in commits | group_by(attribute="group") %}
 ### {{ group }}
-{% for commit in commits %}
-- {{ commit.message | trim }}{% if commit.author %} ({{ commit.author.name }}){% endif %}
-{% endfor %}
-{% endfor %}
 
+{% for commit in commits -%}
+- {{ commit.message | split(pat="\n") | first | trim }}
+{% endfor %}
+{% endfor %}
 """
 footer = ""
 trim = true
@@ -16,41 +17,50 @@ trim = true
 [git]
 conventional_commits = true
 filter_unconventional = true
+filter_commits = true
 tag_pattern = "v[0-9]*"
 sort_commits = "oldest"
 
-[[commit_parsers]]
+[[git.commit_parsers]]
 message = "^feat"
 group = "Features"
 
-[[commit_parsers]]
+[[git.commit_parsers]]
 message = "^fix"
 group = "Bug Fixes"
 
-[[commit_parsers]]
+[[git.commit_parsers]]
 message = "^perf"
 group = "Performance"
 
-[[commit_parsers]]
+[[git.commit_parsers]]
 message = "^refactor"
 group = "Refactoring"
 
-[[commit_parsers]]
+[[git.commit_parsers]]
 message = "^docs"
 group = "Documentation"
 
-[[commit_parsers]]
+[[git.commit_parsers]]
 message = "^test"
 group = "Tests"
 
-[[commit_parsers]]
+[[git.commit_parsers]]
 message = "^build"
 group = "Build"
 
-[[commit_parsers]]
+[[git.commit_parsers]]
 message = "^ci"
 group = "CI"
 
-[[commit_parsers]]
+[[git.commit_parsers]]
 message = "^chore"
 group = "Chores"
+
+[[git.commit_parsers]]
+message = "^style"
+group = "Refactoring"
+
+[[git.commit_parsers]]
+message = "^i18n"
+group = "Documentation"
