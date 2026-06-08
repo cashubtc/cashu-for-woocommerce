@@ -2,7 +2,7 @@
 header = "# Changelog\n\n"
 body = """
 {% if version -%}
-## [{{ version }}]({% if previous.version %}https://github.com/robwoodgate/cashu-for-woocommerce/compare/{{ previous.version }}...{{ version }}{% else %}https://github.com/robwoodgate/cashu-for-woocommerce/releases/tag/{{ version }}{% endif %}){% if date %} ({{ date }}){% endif %}
+## [{{ version }}]({% if previous.version %}https://github.com/robwoodgate/cashu-for-woocommerce/compare/{{ previous.version }}...{{ version }}{% else %}https://github.com/robwoodgate/cashu-for-woocommerce/releases/tag/{{ version }}{% endif %}){% if timestamp %} ({{ timestamp | date(format="%Y-%m-%d") }}){% endif %}
 {%- else -%}
 ## Unreleased
 {%- endif %}

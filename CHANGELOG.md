@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [v0.2.0](https://github.com/robwoodgate/cashu-for-woocommerce/compare/v0.1.1...v0.2.0) (2026-06-08)
 
 ### Bug Fixes
 
@@ -94,5 +94,5 @@
 - extract readRootData to helpers.ts with adapter shape ([f97bf0d](https://github.com/robwoodgate/cashu-for-woocommerce/commit/f97bf0d57ba581815f1fdc95ea66b4776c2de6f9))
 - OrderLock per-acquirer tokens + reconciler force flag ([e992687](https://github.com/robwoodgate/cashu-for-woocommerce/commit/e9926875a5f799746b2b93c4d3f86ce555771d75))
 
-## [v0.1.0](https://github.com/robwoodgate/cashu-for-woocommerce/releases/tag/v0.1.0)
+## [v0.1.0](https://github.com/robwoodgate/cashu-for-woocommerce/releases/tag/v0.1.0) (2026-01-16)
 

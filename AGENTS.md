@@ -4,10 +4,10 @@
 
 - Update versions in `package.json`, `cashu-for-woocommerce.php` (header + `CASHU_WC_VERSION`), `tests/bootstrap.php`, and stable tag/changelog in `readme.txt`.
 - Run `./build.sh` to generate distributable assets and translation files.
-- Generate `CHANGELOG.md` via `npm run changelog` and use its latest section for the GitHub Release notes.
+- Regenerate `CHANGELOG.md` with the new tag: `npm run changelog -- --tag vX.Y.Z`. The `--tag` flag promotes the `## Unreleased` section to `## [vX.Y.Z](compare-url) (date)`.
 - Commit the changes and push to `main`.
 - Create an annotated tag `vX.Y.Z` and push tags.
-- Publish a GitHub release for the tag (non‑prerelease) to trigger `.github/workflows/release-zip.yml`, which builds and uploads `cashu-for-woocommerce.zip`.
+- Publish a GitHub release for the tag (non‑prerelease) — use GitHub's "Generate release notes" button for the body (auto "what's changed" + contributors). `CHANGELOG.md` in the repo is the canonical curated changelog; the GH release body can be the raw GH-generated one. Publishing fires `.github/workflows/release-zip.yml`, which builds and uploads `cashu-for-woocommerce.zip`.
 - The same release event also triggers `.github/workflows/wporg-deploy.yml`, which pushes the same build to the WordPress.org plugin directory (see "Publishing to WordPress.org" below for one-time setup).
 
 ## Publishing to WordPress.org
@@ -47,10 +47,13 @@ If a deploy fails partway, or you need to re-push a tag without cutting a new Gi
 
 - Use Conventional Commits (eg: `feat: ...`, `fix: ...`, `chore: ...`, `docs: ...`, `refactor: ...`, `test: ...`, `ci: ...`, `build: ...`).
 - Keep subjects concise and lowercase; include scope only when helpful (eg: `feat(checkout): ...`).
+- Extended commit messages are good, but keep them terse: a sparse, problem→fix shape with minimal framing is ideal. 3-4 sentences max overall.
 
-## Release notes from changelog
+## Changelog vs release notes
 
-- Generate the changelog: `npm run changelog`.
-- Use the latest section as release notes, for example:
-	`sed -n '1,120p' CHANGELOG.md > /tmp/release-notes.md`
-	then `gh release create vX.Y.Z --notes-file /tmp/release-notes.md`.
+Two separate artifacts, two audiences:
+
+- **`CHANGELOG.md`** is the canonical curated changelog (features, fixes, performance, refactoring; chores/tests/build/docs filtered). Regenerated at release time with `npm run changelog -- --tag vX.Y.Z`. Lives in the repo so anyone browsing GitHub sees it.
+- **GitHub release notes** can be GitHub's auto-generated "what's changed" — click *Generate release notes* in the release UI. Includes every PR/commit since the previous tag plus contributors. Useful for the release page; not duplicated in `CHANGELOG.md`.
+
+`npm run changelog` (no extra args) regenerates `CHANGELOG.md` with the unreleased section showing what's queued for the next release — handy for previewing before tagging.
