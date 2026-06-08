@@ -56,7 +56,13 @@
 				"woocommerce_allow_tracking": "no",
 				"woocommerce_cashu_default_settings": {
 					"enabled": "yes"
-				}
+				},
+				"cashu_paths": {
+					"unified": "no",
+					"cashu": "no",
+					"lightning": "yes"
+				},
+				"cashu_default_path": "lightning"
 			}
 		},
 		{
