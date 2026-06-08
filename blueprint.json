@@ -26,9 +26,32 @@
 		{
 			"step": "installPlugin",
 			"pluginData": {
-				"resource": "wordpress.org/plugins",
-				"slug": "cashu-for-woocommerce"
+				"resource": "url",
+				"url": "https://github.com/robwoodgate/cashu-for-woocommerce/releases/latest/download/cashu-for-woocommerce.zip"
 			}
+		},
+		{
+			"step": "setSiteOptions",
+			"options": {
+				"blogname": "Cashu Demo Store",
+				"woocommerce_store_address": "1 Demo Street",
+				"woocommerce_store_city": "London",
+				"woocommerce_default_country": "GB",
+				"woocommerce_store_postcode": "SW1A 1AA",
+				"woocommerce_currency": "GBP",
+				"woocommerce_onboarding_profile": {
+					"completed": true,
+					"skipped": true
+				},
+				"woocommerce_task_list_hidden": "yes",
+				"woocommerce_task_list_welcome_modal_dismissed": "yes",
+				"woocommerce_show_marketplace_suggestions": "no",
+				"woocommerce_allow_tracking": "no"
+			}
+		},
+		{
+			"step": "runPHP",
+			"code": "<?php require_once 'wordpress/wp-load.php'; if ( function_exists( 'wc_get_products' ) && ! wc_get_products( array( 'limit' => 1 ) ) ) { $p = new WC_Product_Simple(); $p->set_name( 'Sample T-Shirt' ); $p->set_regular_price( '19.99' ); $p->set_description( 'A test product to try Cashu checkout.' ); $p->set_short_description( 'Demo product.' ); $p->set_status( 'publish' ); $p->set_catalog_visibility( 'visible' ); $p->save(); }"
 		}
 	]
 }
