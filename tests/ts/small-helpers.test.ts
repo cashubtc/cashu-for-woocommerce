@@ -145,21 +145,21 @@ describe('composeRestUrl', () => {
   // base + route. Naive concatenation produces '//foo' or 'rootfoo'
   // depending on inputs; the helper guarantees neither.
   test('base trailing slash + route leading slash', () => {
-    expect(composeRestUrl('https://x.test/wp-json/cashu-wc/v1/', '/claim-melt-quote')).toBe(
-      'https://x.test/wp-json/cashu-wc/v1/claim-melt-quote',
-    );
+    expect(
+      composeRestUrl('https://x.test/wp-json/cashu-wc/v1/', '/claim-melt-quote'),
+    ).toBe('https://x.test/wp-json/cashu-wc/v1/claim-melt-quote');
   });
 
   test('base trailing slash + route bare', () => {
-    expect(composeRestUrl('https://x.test/wp-json/cashu-wc/v1/', 'claim-melt-quote')).toBe(
-      'https://x.test/wp-json/cashu-wc/v1/claim-melt-quote',
-    );
+    expect(
+      composeRestUrl('https://x.test/wp-json/cashu-wc/v1/', 'claim-melt-quote'),
+    ).toBe('https://x.test/wp-json/cashu-wc/v1/claim-melt-quote');
   });
 
   test('base bare + route leading slash', () => {
-    expect(composeRestUrl('https://x.test/wp-json/cashu-wc/v1', '/claim-melt-quote')).toBe(
-      'https://x.test/wp-json/cashu-wc/v1/claim-melt-quote',
-    );
+    expect(
+      composeRestUrl('https://x.test/wp-json/cashu-wc/v1', '/claim-melt-quote'),
+    ).toBe('https://x.test/wp-json/cashu-wc/v1/claim-melt-quote');
   });
 
   test('base bare + route bare', () => {

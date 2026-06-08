@@ -97,9 +97,9 @@ describe.each([
 
 describe('readRootData — mintQuote.expiry transform', () => {
   test('positive integer is preserved as-is', () => {
-    expect(readRootData(reader({ 'mint-quote-expiry': 1_700_000_999 })).mintQuote.expiry).toBe(
-      1_700_000_999,
-    );
+    expect(
+      readRootData(reader({ 'mint-quote-expiry': 1_700_000_999 })).mintQuote.expiry,
+    ).toBe(1_700_000_999);
   });
 
   test('zero collapses to null', () => {
@@ -131,14 +131,12 @@ describe('readRootData — defaultTab', () => {
   });
 
   test('unknown value falls back to unified', () => {
-    expect(
-      readRootData(reader({ 'default-tab': 'something-weird' })).defaultTab,
-    ).toBe('unified');
+    expect(readRootData(reader({ 'default-tab': 'something-weird' })).defaultTab).toBe(
+      'unified',
+    );
   });
 
   test('missing value falls back to unified', () => {
-    expect(readRootData(reader({ 'default-tab': undefined })).defaultTab).toBe(
-      'unified',
-    );
+    expect(readRootData(reader({ 'default-tab': undefined })).defaultTab).toBe('unified');
   });
 });
