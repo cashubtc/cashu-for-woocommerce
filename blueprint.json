@@ -53,7 +53,10 @@
 				"woocommerce_task_list_hidden": "yes",
 				"woocommerce_task_list_welcome_modal_dismissed": "yes",
 				"woocommerce_show_marketplace_suggestions": "no",
-				"woocommerce_allow_tracking": "no"
+				"woocommerce_allow_tracking": "no",
+				"woocommerce_cashu_default_settings": {
+					"enabled": "yes"
+				}
 			}
 		},
 		{
