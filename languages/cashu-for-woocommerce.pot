@@ -629,7 +629,7 @@ msgid "Order: #%1$s"
 msgstr ""
 
 #: src/Gateway/CashuGateway.php:61 src/Gateway/CashuGateway.php:104
-msgid "Cashu ecash"
+msgid "Bitcoin"
 msgstr ""
 
 #: src/Gateway/CashuGateway.php:62
@@ -660,7 +660,7 @@ msgid ""
 "Quote ID: %3$s"
 msgstr ""
 
-#: src/Helpers/ConfirmMeltQuoteController.php:239 src/Helpers/MeltReconciler.php:128
+#: src/Helpers/ConfirmMeltQuoteController.php:239 src/Helpers/MeltReconciler.php:133
 #. translators: %s: melt quote id
 msgid ""
 "Cashu melt left unresolved past 24h. Quote: %s. Check the mint manually if the merchant LN address has received funds."
@@ -675,7 +675,7 @@ msgid ""
 "Payment preimage: %5$s"
 msgstr ""
 
-#: src/Helpers/MeltReconciler.php:207
+#: src/Helpers/MeltReconciler.php:212
 #. translators: %1$s: BTC Symbol, %2$s: amount, %3$s: Lightning Address, %4$s: Melt Quote ID, %5$s: Payment preimage
 msgid ""
 "Cashu payment reconciled from mint: %1$s%2$s\n"

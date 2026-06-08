@@ -58,7 +58,7 @@ class CashuGateway extends \WC_Payment_Gateway {
 		// Init gateway
 		$this->id                 = 'cashu_default';
 		$this->icon               = CASHU_WC_URL . 'assets/images/cashu-logo-chip.png';
-		$this->method_title       = __( 'Cashu ecash', 'cashu-for-woocommerce' );
+		$this->method_title       = __( 'Bitcoin', 'cashu-for-woocommerce' );
 		$this->method_description = __(
 			'Accept Cashu tokens and melt them straight to your Bitcoin lightning address.',
 			'cashu-for-woocommerce'
@@ -67,7 +67,7 @@ class CashuGateway extends \WC_Payment_Gateway {
 		$this->supports           = array( 'products' );
 		$this->init_form_fields();
 
-		$this->title        = $this->get_option( 'title', 'Cashu ecash' );
+		$this->title        = $this->get_option( 'title', 'Bitcoin' );
 		$this->description  = $this->get_option(
 			'description',
 			__( 'Scan the QR code with a Lightning or Cashu wallet to pay.', 'cashu-for-woocommerce' )
@@ -101,7 +101,7 @@ class CashuGateway extends \WC_Payment_Gateway {
 			'title'       => array(
 				'title'   => __( 'Title', 'cashu-for-woocommerce' ),
 				'type'    => 'text',
-				'default' => __( 'Cashu ecash', 'cashu-for-woocommerce' ),
+				'default' => __( 'Bitcoin', 'cashu-for-woocommerce' ),
 			),
 			'description' => array(
 				'title'   => __( 'Checkout instructions', 'cashu-for-woocommerce' ),

@@ -1,5 +1,5 @@
 const settings = window.wc.wcSettings.getSetting('cashu_default_data', {});
-const label = window.wp.htmlEntities.decodeEntities(settings.title || 'Cashu ecash');
+const label = window.wp.htmlEntities.decodeEntities(settings.title || 'Bitcoin');
 const el = window.wp.element.createElement;
 
 const Content = () => {

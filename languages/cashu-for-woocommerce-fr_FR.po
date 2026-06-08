@@ -369,8 +369,8 @@ msgid "Docs"
 msgstr "Documentation"
 
 #: src/Gateway/CashuGateway.php:36 src/Gateway/CashuGateway.php:79
-msgid "Cashu ecash"
-msgstr "ecash Cashu"
+msgid "Bitcoin"
+msgstr "Bitcoin"
 
 #: src/Gateway/CashuGateway.php:37
 msgid ""
