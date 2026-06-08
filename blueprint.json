@@ -51,7 +51,7 @@
 		},
 		{
 			"step": "runPHP",
-			"code": "<?php require_once 'wordpress/wp-load.php'; if ( function_exists( 'wc_get_products' ) && ! wc_get_products( array( 'limit' => 1 ) ) ) { $p = new WC_Product_Simple(); $p->set_name( 'Sample T-Shirt' ); $p->set_regular_price( '19.99' ); $p->set_description( 'A test product to try Cashu checkout.' ); $p->set_short_description( 'Demo product.' ); $p->set_status( 'publish' ); $p->set_catalog_visibility( 'visible' ); $p->save(); }"
+			"code": "<?php require_once 'wordpress/wp-load.php'; if ( ! function_exists( 'wc_get_products' ) ) { return; } if ( wc_get_products( array( 'limit' => 1 ) ) ) { return; } $products = array( array( 'Sample T-Shirt', '19.99', 'A cotton tee. Try paying via Cashu at checkout.' ), array( 'Sample Coffee Mug', '9.99', 'Holds coffee. Pay with ecash.' ), array( 'Sample Sticker Pack', '4.99', 'Vinyl stickers. Lowest-value item to test small amounts.' ), array( 'Sample Hoodie', '49.99', 'Cozy hoodie. Larger amount to test melt fee handling.' ) ); foreach ( $products as $p ) { $product = new WC_Product_Simple(); $product->set_name( $p[0] ); $product->set_regular_price( $p[1] ); $product->set_description( $p[2] ); $product->set_short_description( $p[2] ); $product->set_status( 'publish' ); $product->set_catalog_visibility( 'visible' ); $product->save(); }"
 		}
 	]
 }

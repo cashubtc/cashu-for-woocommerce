@@ -59,7 +59,7 @@
     "check": "npm run format:check && npm run lint:check && npm run test:ts && composer test",
     "fix": "npm run format && npm run lint",
     "wp-env:start": "wp-env start",
-    "wp-env:seed-store": "wp-env run cli wp plugin install wordpress-importer --activate && wp-env run cli wp import wp-content/plugins/woocommerce/sample-data/sample_products.xml --authors=create",
+    "wp-env:seed-store": "bash scripts/seed-store.sh",
     "wp-env:clean": "wp-env clean",
     "wp-env:stop": "wp-env stop",
     "wp-env:destroy": "wp-env destroy",
