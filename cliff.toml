@@ -10,7 +10,14 @@ body = """
 ### {{ group }}
 
 {% for commit in commits -%}
-- {{ commit.message | split(pat="\n") | first | trim }} ([{{ commit.id | truncate(length=7, end="") }}](https://github.com/robwoodgate/cashu-for-woocommerce/commit/{{ commit.id }}))
+{%- set subject = commit.message | split(pat="\n") | first | trim -%}
+{%- set parts = subject | split(pat=" (#") -%}
+{%- set pr_candidate = parts | last | replace(from=")", to="") -%}
+{%- if parts | length == 2 and pr_candidate is matching("^[0-9]+$") -%}
+- {{ parts | first }} ([#{{ pr_candidate }}](https://github.com/robwoodgate/cashu-for-woocommerce/pull/{{ pr_candidate }})) ([{{ commit.id | truncate(length=7, end="") }}](https://github.com/robwoodgate/cashu-for-woocommerce/commit/{{ commit.id }}))
+{% else -%}
+- {{ subject }} ([{{ commit.id | truncate(length=7, end="") }}](https://github.com/robwoodgate/cashu-for-woocommerce/commit/{{ commit.id }}))
+{% endif -%}
 {% endfor %}
 {% endfor %}
 """
