@@ -56,7 +56,7 @@ class CashuGateway extends \WC_Payment_Gateway {
 
 	public function __construct() {
 		// Init gateway
-		$this->id                 = 'cashu_default';
+		$this->id = 'cashu_default';
 		// Merchant-facing icon (WC admin Payments overview reads $this->icon
 		// directly). Customer-facing icon is swapped in get_icon() below.
 		$this->icon               = CASHU_WC_URL . 'assets/images/cashu-logo-chip.png';
@@ -1204,7 +1204,7 @@ class CashuGateway extends \WC_Payment_Gateway {
 					<?php
 					printf(
 						/* translators: %1$s: Mint hostname */
-						esc_html__( 'Payments are settled at our mint: %1$s', 'cashu-for-woocommerce' ),
+						esc_html__( 'Payments are settled via our Cashu mint: %1$s', 'cashu-for-woocommerce' ),
 						'<strong>' . esc_html( $trusted_mint ) . '</strong>'
 					);
 					?>
