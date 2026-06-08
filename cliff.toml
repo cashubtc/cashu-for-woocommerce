@@ -1,13 +1,16 @@
 [changelog]
 header = "# Changelog\n\n"
 body = """
-{% if version %}## {{ version }}{% if date %} ({{ date }}){% endif %}\
-{% else %}## Unreleased{% endif %}
+{% if version -%}
+## [{{ version }}]({% if previous.version %}https://github.com/robwoodgate/cashu-for-woocommerce/compare/{{ previous.version }}...{{ version }}{% else %}https://github.com/robwoodgate/cashu-for-woocommerce/releases/tag/{{ version }}{% endif %}){% if date %} ({{ date }}){% endif %}
+{%- else -%}
+## Unreleased
+{%- endif %}
 {% for group, commits in commits | group_by(attribute="group") %}
 ### {{ group }}
 
 {% for commit in commits -%}
-- {{ commit.message | split(pat="\n") | first | trim }}
+- {{ commit.message | split(pat="\n") | first | trim }} ([{{ commit.id | truncate(length=7, end="") }}](https://github.com/robwoodgate/cashu-for-woocommerce/commit/{{ commit.id }}))
 {% endfor %}
 {% endfor %}
 """
