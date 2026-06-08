@@ -7,7 +7,7 @@
 - Regenerate `CHANGELOG.md` with the new tag: `npm run changelog -- --tag vX.Y.Z`. The `--tag` flag promotes the `## Unreleased` section to `## [vX.Y.Z](compare-url) (date)`.
 - Commit the changes and push to `main`.
 - Create an annotated tag `vX.Y.Z` and push tags.
-- Publish a GitHub release for the tag (non‑prerelease) — use GitHub's "Generate release notes" button for the body (auto "what's changed" + contributors). `CHANGELOG.md` in the repo is the canonical curated changelog; the GH release body can be the raw GH-generated one. Publishing fires `.github/workflows/release-zip.yml`, which builds and uploads `cashu-for-woocommerce.zip`.
+- Publish a GitHub release for the tag (non‑prerelease) — for the body, paste the relevant section of `CHANGELOG.md` (GitHub's "Generate release notes" button only walks PR merges and produces nothing useful for direct-to-main history). Publishing fires `.github/workflows/release-zip.yml`, which builds and uploads `cashu-for-woocommerce.zip`.
 - The same release event also triggers `.github/workflows/wporg-deploy.yml`, which pushes the same build to the WordPress.org plugin directory (see "Publishing to WordPress.org" below for one-time setup).
 
 ## Publishing to WordPress.org
@@ -51,9 +51,14 @@ If a deploy fails partway, or you need to re-push a tag without cutting a new Gi
 
 ## Changelog vs release notes
 
-Two separate artifacts, two audiences:
-
-- **`CHANGELOG.md`** is the canonical curated changelog (features, fixes, performance, refactoring; chores/tests/build/docs filtered). Regenerated at release time with `npm run changelog -- --tag vX.Y.Z`. Lives in the repo so anyone browsing GitHub sees it.
-- **GitHub release notes** can be GitHub's auto-generated "what's changed" — click *Generate release notes* in the release UI. Includes every PR/commit since the previous tag plus contributors. Useful for the release page; not duplicated in `CHANGELOG.md`.
+`CHANGELOG.md` is the canonical curated changelog (features, fixes, performance, refactoring; chores/tests/build/docs filtered). Regenerated at release time with `npm run changelog -- --tag vX.Y.Z`. Lives in the repo so anyone browsing GitHub sees it.
 
 `npm run changelog` (no extra args) regenerates `CHANGELOG.md` with the unreleased section showing what's queued for the next release — handy for previewing before tagging.
+
+**GitHub release body:** paste the relevant section of `CHANGELOG.md`. GitHub's "Generate release notes" button only walks PR merges, which is empty for direct-to-main history. Extract a single version section with:
+
+```bash
+awk '/^## \[vX\.Y\.Z\]/{p=1; print; next} /^## \[/{if (p) exit} p' CHANGELOG.md
+```
+
+…or skip the awk dance and use `gh release create vX.Y.Z --notes-file <(awk ... CHANGELOG.md)`. Once PR-based contributions become the norm, GitHub's auto-generator becomes the easier path.
