@@ -26,7 +26,7 @@ The mint is the one party you do have to trust: pick one you trust, and you can 
 
 A disposable WordPress + WooCommerce sandbox boots in your browser with the latest release of the plugin installed, the gateway pre-enabled, and sample products seeded. Add a Lightning address and a trusted mint on the Cashu Settings tab, place a test order, scan the QR. No install, nothing touches your machine; the sandbox is wiped when you close the tab.
 
-The demo defaults to the Lightning tab — Cashu wallet (NUT-18) payments rely on a cross-origin POST that Playground's sandbox can't pass through. To test the full Cashu leg, run a real install (see [CONTRIBUTING.md](./CONTRIBUTING.md)).
+The demo defaults to the Lightning tab — Cashu wallet (NUT-18) payments rely on a cross-origin POST that Playground's sandbox can't pass through. To test the full Cashu leg, run a full developer install (see [CONTRIBUTING.md](./CONTRIBUTING.md)) or install on your store.
 
 ## Install on your store
 
