@@ -26,6 +26,13 @@
 		{
 			"step": "installPlugin",
 			"pluginData": {
+				"resource": "wordpress.org/plugins",
+				"slug": "wordpress-importer"
+			}
+		},
+		{
+			"step": "installPlugin",
+			"pluginData": {
 				"resource": "url",
 				"url": "https://github.com/robwoodgate/cashu-for-woocommerce/releases/latest/download/cashu-for-woocommerce.zip"
 			}
@@ -50,8 +57,8 @@
 			}
 		},
 		{
-			"step": "runPHP",
-			"code": "<?php require_once 'wordpress/wp-load.php'; if ( ! function_exists( 'wc_get_products' ) ) { return; } if ( wc_get_products( array( 'limit' => 1 ) ) ) { return; } $products = array( array( 'Sample T-Shirt', '19.99', 'A cotton tee. Try paying via Cashu at checkout.' ), array( 'Sample Coffee Mug', '9.99', 'Holds coffee. Pay with ecash.' ), array( 'Sample Sticker Pack', '4.99', 'Vinyl stickers. Lowest-value item to test small amounts.' ), array( 'Sample Hoodie', '49.99', 'Cozy hoodie. Larger amount to test melt fee handling.' ) ); foreach ( $products as $p ) { $product = new WC_Product_Simple(); $product->set_name( $p[0] ); $product->set_regular_price( $p[1] ); $product->set_description( $p[2] ); $product->set_short_description( $p[2] ); $product->set_status( 'publish' ); $product->set_catalog_visibility( 'visible' ); $product->save(); }"
+			"step": "wp-cli",
+			"command": "wp import wp-content/plugins/woocommerce/sample-data/sample_products.xml --authors=create"
 		}
 	]
 }
