@@ -37,30 +37,33 @@ group = "Performance"
 message = "^refactor"
 group = "Refactoring"
 
+# Non-user-facing types are skipped — the GitHub commit history is the
+# audit trail for those. CHANGELOG.md is for features and fixes only,
+# matching the cashu-ts convention.
 [[git.commit_parsers]]
 message = "^docs"
-group = "Documentation"
+skip = true
 
 [[git.commit_parsers]]
 message = "^test"
-group = "Tests"
+skip = true
 
 [[git.commit_parsers]]
 message = "^build"
-group = "Build"
+skip = true
 
 [[git.commit_parsers]]
 message = "^ci"
-group = "CI"
+skip = true
 
 [[git.commit_parsers]]
 message = "^chore"
-group = "Chores"
+skip = true
 
 [[git.commit_parsers]]
 message = "^style"
-group = "Refactoring"
+skip = true
 
 [[git.commit_parsers]]
 message = "^i18n"
-group = "Documentation"
+skip = true
