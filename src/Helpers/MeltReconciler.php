@@ -38,14 +38,19 @@ final class MeltReconciler {
 		// Order by oldest _cashu_melt_pending_at first so a backlog larger
 		// than MAX_PER_RUN can't starve older orders — each tick takes the
 		// 20 oldest, the next tick takes the next batch, etc.
+		// Bounded cron sweep (20/tick) over a sparse marker meta written only by
+		// PayController when a melt is left in flight. No alternative lookup
+		// path exists; query is intentional and rate-limited per-order.
 		$orders = wc_get_orders(
 			array(
 				'status'         => array( 'pending', 'on-hold' ),
 				'payment_method' => 'cashu_default',
 				'limit'          => self::MAX_PER_RUN,
+				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
 				'meta_key'       => '_cashu_melt_pending_at',
 				'orderby'        => 'meta_value_num',
 				'order'          => 'ASC',
+				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
 				'meta_query'     => array(
 					array(
 						'key'     => '_cashu_melt_pending_quote_id',
