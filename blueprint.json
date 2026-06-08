@@ -59,6 +59,10 @@
 		{
 			"step": "wp-cli",
 			"command": "wp import wp-content/plugins/woocommerce/sample-data/sample_products.xml --authors=create"
+		},
+		{
+			"step": "runPHP",
+			"code": "<?php require_once 'wordpress/wp-load.php'; delete_transient( '_wc_activation_redirect' ); delete_transient( 'wc_activation_redirect' ); delete_transient( 'woocommerce_activation_redirect' ); delete_option( 'woocommerce_admin_install_timestamp' );"
 		}
 	]
 }
