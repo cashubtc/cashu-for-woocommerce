@@ -47,7 +47,7 @@ If a deploy fails partway, or you need to re-push a tag without cutting a new Gi
 
 - Use Conventional Commits (eg: `feat: ...`, `fix: ...`, `chore: ...`, `docs: ...`, `refactor: ...`, `test: ...`, `ci: ...`, `build: ...`).
 - Keep subjects concise and lowercase; include scope only when helpful (eg: `feat(checkout): ...`).
-- Extended commit messages are good, but keep them terse: a sparse, problem→fix shape with minimal framing is ideal. 3-4 sentences max overall.
+- Extended commit messages are good, but keep them terse: a sparse "what changed" summary with minimal framing is ideal. 3-4 sentences max overall.
 
 ## Changelog vs release notes
 
