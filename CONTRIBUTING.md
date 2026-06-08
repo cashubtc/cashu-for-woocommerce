@@ -44,15 +44,9 @@ npm run build
 ./build.sh
 ```
 
-## Quick try in WordPress Playground (no setup)
+## Just want to click around?
 
-If you just want to click around the plugin without installing Docker or Node, open it in [WordPress Playground](https://wordpress.org/playground/) — an in-browser WP+WC sandbox that boots in seconds:
-
-[**Open Cashu for WooCommerce in Playground →**](https://playground.wordpress.net/?blueprint-url=https%3A%2F%2Fraw.githubusercontent.com%2Frobwoodgate%2Fcashu-for-woocommerce%2Fmain%2Fblueprint.json)
-
-The blueprint at `blueprint.json` boots WordPress + WooCommerce, pulls the latest GitHub release zip of this plugin, dismisses the WooCommerce setup wizard, seeds a sample product, auto-logs in as admin, and lands on the Cashu settings tab. The sandbox is wiped when the tab closes — nothing touches your machine. Best for review and exploration; for active development use the wp-env workflow below.
-
-The playground shows the **latest GitHub release** of the plugin, not the current `main` branch. To demo unreleased changes, swap the `url` in `blueprint.json` for a release-candidate zip URL.
+The [Playground link in the main README](./README.md#try-it-now) boots a disposable WP + WooCommerce sandbox in your browser with the latest release installed — best for review and casual testing. For active development against the current `main` branch, use the wp-env workflow below.
 
 ## Local WordPress and WooCommerce environment with wp-env
 
