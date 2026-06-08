@@ -192,13 +192,13 @@ npm run wp-env:stop
 To reset the WordPress database for the current project you can use
 
 ```bash
-npm run wp-env:clean
+npm run wp-env:reset
 ```
 
-which runs `wp-env clean` under the hood. If you ever need a full reset for both development and test databases you can run, from the project root
+which runs `wp-env reset` under the hood and re-seeds the demo store. If you ever need a full reset for both development and test databases you can run, from the project root
 
 ```bash
-wp-env clean all
+wp-env reset all
 wp-env start
 ```
 
