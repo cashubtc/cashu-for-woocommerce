@@ -393,6 +393,10 @@ msgstr ""
 msgid "View order"
 msgstr ""
 
+#: src/Gateway/CashuGateway.php:104
+msgid "Bitcoin"
+msgstr ""
+
 #: src/Gateway/CashuGateway.php:107
 msgid "Checkout instructions"
 msgstr ""
@@ -404,10 +408,6 @@ msgstr ""
 
 #: src/Gateway/CashuGateway.php:1081
 msgid "Retry payment"
-msgstr ""
-
-#: src/Gateway/CashuGateway.php:109
-msgid "Make a private Bitcoin payment using Cashu ecash or Lightning."
 msgstr ""
 
 #: src/Gateway/CashuGateway.php:1092
@@ -628,13 +628,13 @@ msgstr ""
 msgid "Order: #%1$s"
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:61 src/Gateway/CashuGateway.php:104
-msgid "Bitcoin"
+#: src/Gateway/CashuGateway.php:61
+msgid "Cashu Bitcoin"
 msgstr ""
 
 #: src/Gateway/CashuGateway.php:62
 msgid ""
-"Accept Cashu tokens and melt them straight to your Bitcoin lightning address."
+"Accept Cashu ecash and Lightning payments, automatically melted to your Bitcoin lightning address."
 msgstr ""
 
 #: src/Gateway/CashuGateway.php:656
@@ -648,8 +648,8 @@ msgid ""
 "Quote ID: %5$s"
 msgstr ""
 
-#: src/Gateway/CashuGateway.php:73
-msgid "Scan the QR code with a Lightning or Cashu wallet to pay."
+#: src/Gateway/CashuGateway.php:73 src/Gateway/CashuGateway.php:109
+msgid "Make a private Bitcoin payment via Lightning or Cashu ecash."
 msgstr ""
 
 #: src/Gateway/CashuGateway.php:752

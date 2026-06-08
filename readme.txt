@@ -9,7 +9,7 @@ Stable tag: 0.2.0
 License: MIT
 License URI: https://github.com/robwoodgate/cashu-for-woocommerce/blob/main/license.txt
 
-Accept Cashu ecash and Lightning payments in WooCommerce, automatically melted to your Bitcoin lightning address.
+Accept Cashu ecash and Lightning payments, automatically melted to your Bitcoin lightning address.
 
 == Description ==
 

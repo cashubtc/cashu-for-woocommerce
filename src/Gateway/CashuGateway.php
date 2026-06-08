@@ -57,10 +57,12 @@ class CashuGateway extends \WC_Payment_Gateway {
 	public function __construct() {
 		// Init gateway
 		$this->id                 = 'cashu_default';
+		// Merchant-facing icon (WC admin Payments overview reads $this->icon
+		// directly). Customer-facing icon is swapped in get_icon() below.
 		$this->icon               = CASHU_WC_URL . 'assets/images/cashu-logo-chip.png';
-		$this->method_title       = __( 'Bitcoin', 'cashu-for-woocommerce' );
+		$this->method_title       = __( 'Cashu Bitcoin', 'cashu-for-woocommerce' );
 		$this->method_description = __(
-			'Accept Cashu tokens and melt them straight to your Bitcoin lightning address.',
+			'Accept Cashu ecash and Lightning payments, automatically melted to your Bitcoin lightning address.',
 			'cashu-for-woocommerce'
 		);
 		$this->has_fields         = true;
@@ -70,7 +72,7 @@ class CashuGateway extends \WC_Payment_Gateway {
 		$this->title        = $this->get_option( 'title', 'Bitcoin' );
 		$this->description  = $this->get_option(
 			'description',
-			__( 'Scan the QR code with a Lightning or Cashu wallet to pay.', 'cashu-for-woocommerce' )
+			__( 'Make a private Bitcoin payment via Lightning or Cashu ecash.', 'cashu-for-woocommerce' )
 		);
 		$this->enabled      = $this->get_option( 'enabled' );
 		$this->trusted_mint = (string) get_option( 'cashu_trusted_mint', '' );
@@ -107,7 +109,7 @@ class CashuGateway extends \WC_Payment_Gateway {
 				'title'   => __( 'Checkout instructions', 'cashu-for-woocommerce' ),
 				'type'    => 'textarea',
 				'default' => __(
-					'Make a private Bitcoin payment using Cashu ecash or Lightning.',
+					'Make a private Bitcoin payment via Lightning or Cashu ecash.',
 					'cashu-for-woocommerce'
 				),
 			),
@@ -122,11 +124,24 @@ class CashuGateway extends \WC_Payment_Gateway {
 	}
 
 	/**
-	 * Limit size of default icon
+	 * Customer-facing checkout icon. The Bitcoin mark is built here directly
+	 * rather than via $this->icon so the admin Payments overview (which reads
+	 * the raw $this->icon property) can keep showing the Cashu chip.
 	 */
 	public function get_icon() {
-		$icon = parent::get_icon();
-		return str_replace( 'src=', 'style="max-width:40px;" src=', $icon );
+		$src  = CASHU_WC_URL . 'assets/images/bitcoin-logo.svg';
+		$icon = '<img src="' . esc_url( $src ) . '" alt="' . esc_attr( $this->get_title() ) . '" style="max-width:40px;" />';
+		return apply_filters( 'woocommerce_gateway_icon', $icon, $this->id );
+	}
+
+	/**
+	 * Merchant-side: keep the Cashu chip in the gateway settings page header
+	 * even though the customer-facing icon is now the Bitcoin mark.
+	 */
+	public function admin_options() {
+		$chip = CASHU_WC_URL . 'assets/images/cashu-logo-chip.png';
+		echo '<img src="' . esc_url( $chip ) . '" alt="Cashu" style="float:right;max-width:64px;margin:0 0 8px 12px;" />';
+		parent::admin_options();
 	}
 
 	/**

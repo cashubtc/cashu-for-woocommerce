@@ -96,7 +96,7 @@ final class CashuGatewayBlocks extends AbstractPaymentMethodType {
 		return array(
 			'title'       => $title,
 			'description' => $description,
-			'icon'        => CASHU_WC_URL . 'assets/images/cashu-logo-chip.png',
+			'icon'        => CASHU_WC_URL . 'assets/images/bitcoin-logo.svg',
 			'supports'    => $this->get_supported_features(),
 			'enabled'     => $this->gateway ? $this->gateway->get_option( 'enabled' ) : 'no',
 		);
