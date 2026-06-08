@@ -1,14 +1,10 @@
 # Cashu for WooCommerce
 
-> Accept Bitcoin Lightning and Cashu ecash payments in WooCommerce, automatically melted to your Lightning address. Single-QR checkout, no private keys on the server, swap mints any time.
+A secure Cashu payment gateway for your WooCommerce store.
 
-## Try it now
+This plugin adds a checkout that accepts Lightning or Cashu ecash, paying out to your bitcoin lightning address. Ecash payments are converted (melted) via your trusted Cashu mint in real time.
 
-[**Open in WordPress Playground →**](https://playground.wordpress.net/?blueprint-url=https%3A%2F%2Fraw.githubusercontent.com%2Frobwoodgate%2Fcashu-for-woocommerce%2Fmain%2Fblueprint.json)
-
-A disposable WordPress + WooCommerce sandbox boots in your browser with the latest release of the plugin installed, the gateway pre-enabled, and sample products seeded. Add a Lightning address and a trusted mint on the Cashu Settings tab, place a test order, scan the QR. No install, nothing touches your machine; the sandbox is wiped when you close the tab.
-
-## What it does
+## How it works
 
 Checkout shows a single QR code that any of the following can pay:
 
@@ -18,9 +14,21 @@ Checkout shows a single QR code that any of the following can pay:
 
 Payments flow customer → mint → your Lightning address in real time. The mint never sees your customers; the server never sees your private keys; spot rates come from Coinbase / CoinGecko.
 
-## Install
+## Privacy
 
-- **From WordPress.org:** search for *Cashu for WooCommerce* in the plugin directory (once approved)
+Cashu works like paying with cash. You and your customer still know each other through the WooCommerce order (name, email, shipping) but no bank, card network, or payment processor records the payment. The mint never sees who paid or what they bought; your Lightning provider just sees "the mint paid me."
+
+The mint is the one party you do have to trust: pick one you trust, and you can swap to another any time without breaking your store.
+
+## Try a demo!
+
+[**Open in WordPress Playground →**](https://playground.wordpress.net/?blueprint-url=https%3A%2F%2Fraw.githubusercontent.com%2Frobwoodgate%2Fcashu-for-woocommerce%2Fmain%2Fblueprint.json)
+
+A disposable WordPress + WooCommerce sandbox boots in your browser with the latest release of the plugin installed, the gateway pre-enabled, and sample products seeded. Add a Lightning address and a trusted mint on the Cashu Settings tab, place a test order, scan the QR. No install, nothing touches your machine; the sandbox is wiped when you close the tab.
+
+## Install on your store
+
+- **From WordPress.org:** search for *Cashu for WooCommerce* in the plugin directory
 - **Latest release:** download `cashu-for-woocommerce.zip` from [GitHub Releases](https://github.com/robwoodgate/cashu-for-woocommerce/releases)
 
 Then activate, go to **WooCommerce → Settings → Cashu Settings**, and configure your Lightning address and trusted mint.
