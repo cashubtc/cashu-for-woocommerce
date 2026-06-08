@@ -56,14 +56,7 @@ The playground shows the **latest GitHub release** of the plugin, not the curren
 
 ## Local WordPress and WooCommerce environment with wp-env
 
-This repository includes a `.wp-env.json` and npm scripts to spin up a complete WordPress site with WooCommerce and the plugin already active.
-
-The environment runs two sites
-
-* Development site at `http://localhost:8888`
-* Test site at `http://localhost:3000`
-
-Both are separate WordPress installs backed by separate databases, but they share the same code from this repository.
+This repository includes a `.wp-env.json` and npm scripts to spin up a complete WordPress site with WooCommerce and the plugin already active. The dev site runs at `http://localhost:8888`.
 
 ### Starting the environment
 
@@ -85,7 +78,6 @@ When it finishes you should see something similar to
 
 ```text
 WordPress development site started at http://localhost:8888
-WordPress test site started at http://localhost:3000
 ```
 
 Log in to the development site at
@@ -117,24 +109,6 @@ After that, you will usually need to activate the Cashu for WooCommerce plugin a
 * Enable the Cashu ecash plugin
 
 You should now have a working dummy store where you can place test orders through the Cashu gateway straight away.
-
-### Development site vs test site
-
-The development site at `http://localhost:8888` is your playground. This is where you
-
-* Configure WooCommerce and the Cashu gateway
-* Change settings, run through the setup wizard, install extra plugins
-* Place manual test orders and watch how the gateway behaves
-
-The test site at `http://localhost:8889` uses a separate database and is intended for automated tests or destructive experiments. You can target it from wp-env using the `tests-cli` container if you decide to run tests inside Docker later on.
-
-At the moment, the npm scripts run wp-env commands against the development site via
-
-```bash
-wp-env run cli ...
-```
-
-so your dummy store data and XML imports all go to `http://localhost:8888`.
 
 ### Reading logs
 
