@@ -2,7 +2,8 @@
 	"$schema": "https://playground.wordpress.net/blueprint-schema.json",
 	"meta": {
 		"title": "Cashu for WooCommerce",
-		"description": "Try the plugin in a disposable WordPress + WooCommerce sandbox."
+		"description": "Try the plugin in a disposable WordPress + WooCommerce sandbox.",
+		"author": "robwoodgate"
 	},
 	"preferredVersions": {
 		"php": "8.3",
