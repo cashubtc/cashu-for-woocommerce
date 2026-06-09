@@ -8,7 +8,7 @@ This guide explains how to set up the development environment, run the tooling, 
 
 You will need
 
-* Node and npm for build, i18n and readme
+* Node and npm for the build pipeline
 * PHP and Composer for running unit tests
 * Docker for the wp-env local WordPress environment
 * A local clone of this repository
@@ -228,29 +228,6 @@ npm run build     # if you changed TS or JS assets
 
 Then refresh the page in the browser. There is no need to restart the wp-env containers for normal plugin changes.
 
-## Useful commands
-
-Two small PHP scripts under `scripts/` regenerate the build outputs, wired up as npm scripts
-
-```bash
-npm run start
-```
-
-That will
-
-* Regenerate the `languages/cashu-for-woocommerce.pot` file (via `scripts/build-pot.php`)
-* Convert `readme.txt` into `README.md` (via `scripts/build-readme.php`)
-
-You can run these individually if you prefer.
-
-```bash
-# Translations
-npm run i18n
-
-# readme conversion
-npm run readme
-```
-
 ## Code style and formatting
 
 We use Prettier to keep the code style consistent, especially for PHP in the main plugin file and the src folder.
@@ -280,7 +257,7 @@ Before opening a pull request, please run `npm run build` so your changes match 
 
 ## Internationalisation
 
-Cashu For WooCommerce is prepared for translation using the `cashu-for-woocommerce` text domain.
+The plugin is fully translation-ready using the `cashu-for-woocommerce` text domain. Once published, translations are managed via [translate.wordpress.org](https://translate.wordpress.org/) — language packs are delivered automatically to wp.org installs via WordPress's just-in-time loader. The repository ships no bundled POT/PO/MO files.
 
 When adding or updating strings in PHP
 
@@ -293,25 +270,7 @@ Example
 __( 'Pay with Cashu', 'cashu-for-woocommerce' );
 ```
 
-If you are unsure whether your strings are correctly set up, run
-
-```bash
-npm run i18n
-```
-
-which will update text domains where needed and regenerate the main pot file.
-
-When you have updated localized translations (eg: `cashu-for-woocommerce-fr_FR.po`), run either:
-
-```bash
-# Via wp-env (using wp-cli)
-npm run i18n:mo
-
-# Via the main build script (using gettext)
-./build.sh
-```
-
-to create the `.mo` files.
+To contribute a translation, please use translate.wordpress.org. For offline tooling, you can extract a fresh POT with wp-cli: `wp i18n make-pot . cashu-for-woocommerce.pot`.
 
 ## Development workflow
 
@@ -324,7 +283,7 @@ A typical workflow for a small change might look like this
 3. Run the tools
 
 	```bash
-	# Runs build, format, lint, i18n, readme etc
+	# Runs build, format, lint, etc
 	# Ensure it completes with "Done"
 	npm run build
 	```

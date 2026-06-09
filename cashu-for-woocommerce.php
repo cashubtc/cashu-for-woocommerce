@@ -8,7 +8,6 @@
  * License:     MIT
  * License URI: https://github.com/cashubtc/cashu-for-woocommerce/blob/main/license.txt
  * Text Domain: cashu-for-woocommerce
- * Domain Path: /languages
  * Requires Plugins: woocommerce
  * Version:     0.2.0
  *

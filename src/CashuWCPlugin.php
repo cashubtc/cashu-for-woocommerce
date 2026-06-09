@@ -39,9 +39,6 @@ final class CashuWCPlugin {
 		// after first run; runs at most once per install.
 		self::maybeMigrateSettings();
 
-		// Core boot.
-		add_action( 'init', array( $this, 'loadTextdomain' ) );
-
 		// WooCommerce integration.
 		add_filter( 'woocommerce_payment_gateways', array( self::class, 'initPaymentGateways' ) );
 		add_action( 'before_woocommerce_init', array( $this, 'declareWooCompat' ) );
@@ -104,15 +101,6 @@ final class CashuWCPlugin {
 		if ( ! function_exists( 'is_plugin_active' ) ) {
 			include_once ABSPATH . 'wp-admin/includes/plugin.php';
 		}
-	}
-
-	public function loadTextdomain(): void {
-		// phpcs:ignore PluginCheck.CodeAnalysis.DiscouragedFunctions.load_plugin_textdomainFound -- self-hosted installs (GitHub, ZIP) need this to pick up the shipped /languages/*.mo; wp.org auto-load only covers wp.org-hosted installs.
-		load_plugin_textdomain(
-			'cashu-for-woocommerce',
-			false,
-			dirname( CASHU_WC_BASE ) . '/languages/'
-		);
 	}
 
 	public static function initPaymentGateways( array $gateways ): array {

@@ -81,8 +81,7 @@ final class CashuGatewayBlocks extends AbstractPaymentMethodType {
 		if ( function_exists( 'wp_set_script_translations' ) ) {
 			wp_set_script_translations(
 				'cashu-gateway-blocks',
-				'cashu-for-woocommerce',
-				CASHU_WC_PATH . 'languages/'
+				'cashu-for-woocommerce'
 			);
 		}
 

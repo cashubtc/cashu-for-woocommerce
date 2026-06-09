@@ -37,26 +37,16 @@ jobs:
           node-version: '22.x'
           cache: npm
 
-      - name: Install zip + gettext
+      - name: Install zip
         run: |
           sudo apt-get update
-          sudo apt-get install -y zip gettext
+          sudo apt-get install -y zip
 
       - name: Build via build.sh
         run: bash ./build.sh
 
       - name: Verify zip was produced
         run: test -f cashu-for-woocommerce.zip
-
-      - name: Verify .mo generated when .po exists
-        run: |
-          set -euo pipefail
-          if ls languages/*.po >/dev/null 2>&1; then
-            for po in languages/*.po; do
-              mo="${po%.po}.mo"
-              test -f "$mo" || { echo "Missing $mo"; exit 1; }
-            done
-          fi
 
       - name: Run PHPUnit
         run: composer test

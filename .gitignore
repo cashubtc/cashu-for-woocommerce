@@ -12,7 +12,6 @@ var/
 *.sql
 *.tar.gz
 *.zip
-languages/*.mo
 PLAN.md
 PRD.md
 .phpunit.cache/
