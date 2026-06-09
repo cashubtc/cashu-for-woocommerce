@@ -1,7 +1,7 @@
 {
   "name": "cashu-for-woocommerce",
   "description": "Cashu For WooCommerce adds a secure Cashu payment gateway to your WooCommerce store",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": "Rob Woodgate",
   "license": "MIT",
   "keywords": [

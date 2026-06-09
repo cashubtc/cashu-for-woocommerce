@@ -5,7 +5,7 @@ Tags: payments, bitcoin, lightning, checkout, cashu
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 8.3
-Stable tag: 0.2.0
+Stable tag: 0.3.0
 License: MIT
 License URI: https://github.com/cashubtc/cashu-for-woocommerce/blob/main/license.txt
 
@@ -103,6 +103,12 @@ Cashu is a free and open-source project, supported by donations. If you love thi
 - Donate to OpenCash: https://opencash.dev
 
 == Changelog ==
+
+= 0.3.0 =
+Changed: plugin now lives in the official cashubtc GitHub organisation.
+Changed: wp.org Donate link points to OpenCash; the developer tip jar remains listed in the Donations section.
+Changed: in-admin review reminder links to the wp.org reviews page.
+Maintenance: removed bundled translations and local POT/PO/MO machinery; translate.wordpress.org now handles translations.
 
 = 0.2.0 =
 New: choose which payment tabs (Unified / Cashu / Lightning) appear at checkout, and which is the default.
