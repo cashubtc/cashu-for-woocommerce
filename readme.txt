@@ -95,6 +95,13 @@ Used as an alternative source for Bitcoin fiat pricing.
 
 Development happens on [GitHub](https://github.com/cashubtc/cashu-for-woocommerce). Issues and pull requests are welcome.
 
+== Donations ==
+
+Cashu is a free and open-source project, supported by donations. If you love this plugin, please consider supporting us in any of the ways below:
+
+- Tip the developer: https://donate.cogmentis.com
+- Donate to OpenCash: https://opencash.dev
+
 == Changelog ==
 
 = 0.2.0 =
