@@ -1,6 +1,6 @@
 === Cashu For WooCommerce ===
 Contributors: robwoodgate
-Donate link: https://donate.cogmentis.com/
+Donate link: https://opencash.dev/
 Tags: payments, bitcoin, lightning, checkout, cashu
 Requires at least: 6.5
 Tested up to: 7.0
