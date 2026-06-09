@@ -51,6 +51,13 @@ No, the plugin requires only your public lightning address.
 
 Payments in Cashu ecash are melted to bitcoin and sent to you via lightning in real time, so no sensitive keys are required on the server.
 
+== Screenshots ==
+
+1. Bitcoin gateway settings — set the title, the checkout description, and enable the gateway.
+2. Cashu Settings — configure your Lightning address, choose a trusted mint, and pick which payment paths to offer at checkout.
+3. Checkout — customers see a single Bitcoin payment option that accepts both Lightning and Cashu ecash.
+4. Pay screen — unified QR with Auto / Cashu / Lightning tabs; payments settle via the merchant's trusted Cashu mint.
+
 == External services ==
 
 This plugin connects to several third-party services to function. Each is described below: what it does, what data is sent, when, and links to the relevant terms.
