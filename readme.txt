@@ -51,6 +51,46 @@ No, the plugin requires only your public lightning address.
 
 Payments in Cashu ecash are melted to bitcoin and sent to you via lightning in real time, so no sensitive keys are required on the server.
 
+== External services ==
+
+This plugin connects to several third-party services to function. Each is described below: what it does, what data is sent, when, and links to the relevant terms.
+
+= Cashu mint (merchant-configured) =
+
+The mint is chosen by the merchant in plugin settings. It is used to mint Lightning invoices for customers paying via Lightning, and to melt Cashu ecash proofs received from customers into a Lightning payment to the merchant's Lightning address.
+
+- What is sent: Lightning quote/melt requests, Cashu ecash proofs (only when a customer pays in ecash), and the merchant's Lightning address. No personally identifying customer data is sent.
+- When: only during the active checkout flow (quoting, payment, settlement).
+- Terms of service and privacy policy depend on the mint configured by the merchant. Merchants should review the terms of their chosen mint before using it.
+
+= Lightning address provider (merchant-configured) =
+
+The plugin resolves the merchant's Lightning address (an LNURL-pay endpoint) to obtain a payable invoice. The endpoint is determined entirely by the Lightning address the merchant enters in plugin settings.
+
+- What is sent: the requested invoice amount and the username part of the merchant's Lightning address.
+- When: during checkout, when a payment quote is being generated.
+- Terms of service and privacy policy depend on the Lightning provider hosting the merchant's address.
+
+= Coinbase Spot Price API =
+
+Used to fetch the current Bitcoin spot price in the store's configured currency, so customers can see fiat-equivalent amounts at checkout.
+
+- What is sent: only the store's fiat currency code (e.g. "GBP", "USD") in the URL path. No customer or store-identifying data is sent.
+- When: when a checkout payment quote is created. Results are cached for 30 seconds.
+- Endpoint: https://api.coinbase.com/v2/prices/BTC-{CURRENCY}/spot
+- Terms of service: https://www.coinbase.com/legal/user_agreement
+- Privacy policy: https://www.coinbase.com/legal/privacy
+
+= CoinGecko Simple Price API =
+
+Used as an alternative source for Bitcoin fiat pricing.
+
+- What is sent: only the store's fiat currency code as a query parameter. No customer or store-identifying data is sent.
+- When: when a checkout payment quote is created. Results are cached for 30 seconds.
+- Endpoint: https://api.coingecko.com/api/v3/simple/price
+- Terms of service: https://www.coingecko.com/en/terms
+- Privacy policy: https://www.coingecko.com/en/privacy
+
 == Source ==
 
 Development happens on [GitHub](https://github.com/robwoodgate/cashu-for-woocommerce). Issues and pull requests are welcome.
