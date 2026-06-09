@@ -9,7 +9,7 @@
  * License URI: https://github.com/cashubtc/cashu-for-woocommerce/blob/main/license.txt
  * Text Domain: cashu-for-woocommerce
  * Requires Plugins: woocommerce
- * Version:     0.2.0
+ * Version:     0.3.0
  *
  * @package     Cashu_For_Woocommerce
  */
@@ -19,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'CASHU_WC_VERSION', '0.2.0' );
+define( 'CASHU_WC_VERSION', '0.3.0' );
 define( 'CASHU_WC_FILE', __FILE__ ); // absolute path to main plugin file
 define( 'CASHU_WC_PATH', plugin_dir_path( __FILE__ ) );
 define( 'CASHU_WC_URL', plugin_dir_url( __FILE__ ) );

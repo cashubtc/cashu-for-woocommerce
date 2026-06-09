@@ -1,5 +1,12 @@
 # Changelog
 
+## [v0.3.0](https://github.com/cashubtc/cashu-for-woocommerce/compare/v0.2.0...v0.3.0) (2026-06-09)
+
+### Bug Fixes
+
+- land Playground demo on Lightning-only tab ([f755468](https://github.com/cashubtc/cashu-for-woocommerce/commit/f75546861cb3d46041202fa878ef8428ab823f13))
+- centre the Bitcoin glyph in checkout icon ([4308a47](https://github.com/cashubtc/cashu-for-woocommerce/commit/4308a47b5d83b115911f9f4878c9e5c4e5b829bb))
+
 ## [v0.2.0](https://github.com/cashubtc/cashu-for-woocommerce/compare/v0.1.1...v0.2.0) (2026-06-08)
 
 ### Bug Fixes
