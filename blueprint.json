@@ -3,7 +3,7 @@
 	"meta": {
 		"title": "Cashu for WooCommerce",
 		"description": "Try the plugin in a disposable WordPress + WooCommerce sandbox.",
-		"author": "robwoodgate"
+		"author": "cashubtc"
 	},
 	"preferredVersions": {
 		"php": "8.3",
@@ -34,7 +34,7 @@
 			"step": "installPlugin",
 			"pluginData": {
 				"resource": "url",
-				"url": "https://github.com/robwoodgate/cashu-for-woocommerce/releases/latest/download/cashu-for-woocommerce.zip"
+				"url": "https://github.com/cashubtc/cashu-for-woocommerce/releases/latest/download/cashu-for-woocommerce.zip"
 			}
 		},
 		{

@@ -17,7 +17,7 @@ msgid "Cashu For WooCommerce"
 msgstr ""
 
 #. Plugin URI of the plugin
-msgid "https://github.com/robwoodgate/cashu-for-woocommerce"
+msgid "https://github.com/cashubtc/cashu-for-woocommerce"
 msgstr ""
 
 #. Description of the plugin

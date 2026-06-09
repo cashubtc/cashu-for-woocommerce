@@ -22,7 +22,7 @@ The mint is the one party you do have to trust: pick one you trust, and you can 
 
 ## Try a demo!
 
-[**Open in WordPress Playground →**](https://playground.wordpress.net/?blueprint-url=https%3A%2F%2Fraw.githubusercontent.com%2Frobwoodgate%2Fcashu-for-woocommerce%2Fmain%2Fblueprint.json)
+[**Open in WordPress Playground →**](https://playground.wordpress.net/?blueprint-url=https%3A%2F%2Fraw.githubusercontent.com%2Fcashubtc%2Fcashu-for-woocommerce%2Fmain%2Fblueprint.json)
 
 A disposable WordPress + WooCommerce sandbox boots in your browser with the latest release of the plugin installed, the gateway pre-enabled, and sample products seeded. Add a Lightning address and a trusted mint on the Cashu Settings tab, place a test order, scan the QR. No install, nothing touches your machine; the sandbox is wiped when you close the tab.
 
@@ -31,7 +31,7 @@ The demo defaults to the Lightning tab — Cashu wallet (NUT-18) payments rely o
 ## Install on your store
 
 - **From WordPress.org:** search for *Cashu for WooCommerce* in the plugin directory
-- **Latest release:** download `cashu-for-woocommerce.zip` from [GitHub Releases](https://github.com/robwoodgate/cashu-for-woocommerce/releases)
+- **Latest release:** download `cashu-for-woocommerce.zip` from [GitHub Releases](https://github.com/cashubtc/cashu-for-woocommerce/releases)
 
 Then activate, go to **WooCommerce → Settings → Cashu Settings**, and configure your Lightning address and trusted mint.
 
@@ -39,7 +39,7 @@ PHP 8.3+ required.
 
 ## Links
 
-- [Changelog (GitHub Releases)](https://github.com/robwoodgate/cashu-for-woocommerce/releases)
-- [Issue tracker](https://github.com/robwoodgate/cashu-for-woocommerce/issues)
+- [Changelog (GitHub Releases)](https://github.com/cashubtc/cashu-for-woocommerce/releases)
+- [Issue tracker](https://github.com/cashubtc/cashu-for-woocommerce/issues)
 - [Contributing & development setup](./CONTRIBUTING.md)
 - [License (MIT)](./license.txt)

@@ -2,7 +2,7 @@
 header = "# Changelog\n\n"
 body = """
 {% if version -%}
-## [{{ version }}]({% if previous.version %}https://github.com/robwoodgate/cashu-for-woocommerce/compare/{{ previous.version }}...{{ version }}{% else %}https://github.com/robwoodgate/cashu-for-woocommerce/releases/tag/{{ version }}{% endif %}){% if timestamp %} ({{ timestamp | date(format="%Y-%m-%d") }}){% endif %}
+## [{{ version }}]({% if previous.version %}https://github.com/cashubtc/cashu-for-woocommerce/compare/{{ previous.version }}...{{ version }}{% else %}https://github.com/cashubtc/cashu-for-woocommerce/releases/tag/{{ version }}{% endif %}){% if timestamp %} ({{ timestamp | date(format="%Y-%m-%d") }}){% endif %}
 {%- else -%}
 ## Unreleased
 {%- endif %}
@@ -14,9 +14,9 @@ body = """
 {%- set parts = subject | split(pat=" (#") -%}
 {%- set pr_candidate = parts | last | replace(from=")", to="") -%}
 {%- if parts | length == 2 and pr_candidate is matching("^[0-9]+$") -%}
-- {{ parts | first }} ([#{{ pr_candidate }}](https://github.com/robwoodgate/cashu-for-woocommerce/pull/{{ pr_candidate }})) ([{{ commit.id | truncate(length=7, end="") }}](https://github.com/robwoodgate/cashu-for-woocommerce/commit/{{ commit.id }}))
+- {{ parts | first }} ([#{{ pr_candidate }}](https://github.com/cashubtc/cashu-for-woocommerce/pull/{{ pr_candidate }})) ([{{ commit.id | truncate(length=7, end="") }}](https://github.com/cashubtc/cashu-for-woocommerce/commit/{{ commit.id }}))
 {% else -%}
-- {{ subject }} ([{{ commit.id | truncate(length=7, end="") }}](https://github.com/robwoodgate/cashu-for-woocommerce/commit/{{ commit.id }}))
+- {{ subject }} ([{{ commit.id | truncate(length=7, end="") }}](https://github.com/cashubtc/cashu-for-woocommerce/commit/{{ commit.id }}))
 {% endif -%}
 {% endfor %}
 {% endfor %}

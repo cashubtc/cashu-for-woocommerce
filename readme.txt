@@ -7,7 +7,7 @@ Tested up to: 7.0
 Requires PHP: 8.3
 Stable tag: 0.2.0
 License: MIT
-License URI: https://github.com/robwoodgate/cashu-for-woocommerce/blob/main/license.txt
+License URI: https://github.com/cashubtc/cashu-for-woocommerce/blob/main/license.txt
 
 Accept Cashu ecash and Lightning payments, automatically melted to your Bitcoin lightning address.
 
@@ -93,7 +93,7 @@ Used as an alternative source for Bitcoin fiat pricing.
 
 == Source ==
 
-Development happens on [GitHub](https://github.com/robwoodgate/cashu-for-woocommerce). Issues and pull requests are welcome.
+Development happens on [GitHub](https://github.com/cashubtc/cashu-for-woocommerce). Issues and pull requests are welcome.
 
 == Changelog ==
 
