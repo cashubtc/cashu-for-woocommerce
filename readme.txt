@@ -106,9 +106,7 @@ Cashu is a free and open-source project, supported by donations. If you love thi
 
 = 0.3.0 =
 Changed: plugin now lives in the official cashubtc GitHub organisation.
-Changed: wp.org Donate link points to OpenCash; the developer tip jar remains listed in the Donations section.
-Changed: in-admin review reminder links to the wp.org reviews page.
-Maintenance: removed bundled translations and local POT/PO/MO machinery; translate.wordpress.org now handles translations.
+Maintenance: removed bundled translations; translate.wordpress.org now handles translations.
 
 = 0.2.0 =
 New: choose which payment tabs (Unified / Cashu / Lightning) appear at checkout, and which is the default.
