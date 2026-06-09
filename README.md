@@ -37,6 +37,13 @@ Then activate, go to **WooCommerce → Settings → Cashu Settings**, and config
 
 PHP 8.3+ required.
 
+## Donations
+
+Cashu is a free and open-source project, supported by donations. If you love this plugin, please consider supporting us in any of the ways below:
+
+- Tip the developer: [donate.cogmentis.com](https://donate.cogmentis.com)
+- Donate to OpenCash: [opencash.dev](https://opencash.dev)
+
 ## Links
 
 - [Changelog (GitHub Releases)](https://github.com/cashubtc/cashu-for-woocommerce/releases)
