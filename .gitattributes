@@ -1,2 +1,0 @@
-# Treat .pot files as text, but ignore line-ending / whitespace-only changes in blame/diff
-languages/*.pot text diff

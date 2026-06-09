@@ -95,10 +95,10 @@ jobs:
           [ "${TAG_VER}" = "${PLUGIN_VER}" ]   || { echo "::error::Mismatch: tag vs plugin header";   exit 1; }
           [ "${TAG_VER}" = "${README_STABLE}" ] || { echo "::error::Mismatch: tag vs readme.txt Stable tag — wp.org install page would still show the old version"; exit 1; }
 
-      - name: Install build prereqs (gettext, zip)
+      - name: Install build prereqs (zip)
         run: |
           sudo apt-get update
-          sudo apt-get install -y gettext zip
+          sudo apt-get install -y zip
 
       - name: Build via build.sh
         # Single source of truth for what's in the package — exactly what

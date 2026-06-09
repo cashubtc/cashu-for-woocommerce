@@ -1,14 +1,13 @@
 <?php
 /**
  * Plugin Name: Cashu For WooCommerce
- * Plugin URI:  https://github.com/robwoodgate/cashu-for-woocommerce
+ * Plugin URI:  https://github.com/cashubtc/cashu-for-woocommerce
  * Description: This plugin adds a secure Cashu payment gateway to your WooCommerce store, allowing you to receive bitcoin ecash payments to your lightning address.
  * Author:      Rob Woodgate
  * Author URI:  https://www.github.com/robwoodgate
  * License:     MIT
- * License URI: https://github.com/robwoodgate/cashu-for-woocommerce/blob/main/license.txt
+ * License URI: https://github.com/cashubtc/cashu-for-woocommerce/blob/main/license.txt
  * Text Domain: cashu-for-woocommerce
- * Domain Path: /languages
  * Requires Plugins: woocommerce
  * Version:     0.2.0
  *

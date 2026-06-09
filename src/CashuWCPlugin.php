@@ -39,9 +39,6 @@ final class CashuWCPlugin {
 		// after first run; runs at most once per install.
 		self::maybeMigrateSettings();
 
-		// Core boot.
-		add_action( 'init', array( $this, 'loadTextdomain' ) );
-
 		// WooCommerce integration.
 		add_filter( 'woocommerce_payment_gateways', array( self::class, 'initPaymentGateways' ) );
 		add_action( 'before_woocommerce_init', array( $this, 'declareWooCompat' ) );
@@ -104,15 +101,6 @@ final class CashuWCPlugin {
 		if ( ! function_exists( 'is_plugin_active' ) ) {
 			include_once ABSPATH . 'wp-admin/includes/plugin.php';
 		}
-	}
-
-	public function loadTextdomain(): void {
-		// phpcs:ignore PluginCheck.CodeAnalysis.DiscouragedFunctions.load_plugin_textdomainFound -- self-hosted installs (GitHub, ZIP) need this to pick up the shipped /languages/*.mo; wp.org auto-load only covers wp.org-hosted installs.
-		load_plugin_textdomain(
-			'cashu-for-woocommerce',
-			false,
-			dirname( CASHU_WC_BASE ) . '/languages/'
-		);
 	}
 
 	public static function initPaymentGateways( array $gateways ): array {
@@ -305,9 +293,9 @@ final class CashuWCPlugin {
 		}
 
 		$reviewMessage = sprintf(
-			/* translators: 1: opening <a> tag to the donation page, 2: closing </a> tag, 3: opening <button> tag for "remind me later", 4: closing </button> tag, 5: opening <button> tag for "stop reminding forever", 6: closing </button> tag. Do not translate the HTML tags, keep the placeholder numbers. */
-			__( 'Thank you for using Cashu for WooCommerce! If you like the plugin, %1$splease buy the developer a coffee%2$s. %3$sRemind me later%4$s %5$sStop reminding me forever%6$s', 'cashu-for-woocommerce' ),
-			'<a href="https://donate.cogmentis.com" target="_blank" rel="noopener noreferrer">',
+			/* translators: 1: opening <a> tag to the WordPress.org review page, 2: closing </a> tag, 3: opening <button> tag for "remind me later", 4: closing </button> tag, 5: opening <button> tag for "stop reminding forever", 6: closing </button> tag. Do not translate the HTML tags, keep the placeholder numbers. */
+			__( 'Thank you for using Cashu for WooCommerce! If you like the plugin, we would love if you %1$sleave us a review%2$s. %3$sRemind me later%4$s %5$sStop reminding me forever%6$s', 'cashu-for-woocommerce' ),
+			'<a href="https://wordpress.org/support/plugin/cashu-for-woocommerce/reviews/#new-post" target="_blank" rel="noopener noreferrer">',
 			'</a>',
 			'<button class="cashu-review-dismiss" type="button">',
 			'</button>',

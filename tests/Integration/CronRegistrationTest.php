@@ -20,7 +20,6 @@ final class CronRegistrationTest extends IntegrationTestCase {
 		Functions\when( 'add_filter' )->justReturn( true );
 		Functions\when( 'wp_next_scheduled' )->justReturn( false );
 		Functions\when( 'wp_schedule_event' )->justReturn( true );
-		Functions\when( 'load_plugin_textdomain' )->justReturn( true );
 		Functions\when( 'is_plugin_active' )->justReturn( true );
 		Functions\when( 'get_option' )->justReturn( '' );
 		Functions\when( 'update_option' )->justReturn( true );
