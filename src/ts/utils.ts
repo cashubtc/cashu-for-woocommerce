@@ -34,9 +34,8 @@ export async function copyTextToClipboard(text: string) {
  * Activates the confetti bomb effect
  */
 export function doConfettiBomb() {
-  // Do the confetti bomb
-  var duration = 0.25 * 1000; //secs
-  var end = Date.now() + duration;
+  const duration = 0.25 * 1000;
+  const end = Date.now() + duration;
 
   (function frame() {
     // launch a few confetti from the left edge
@@ -67,8 +66,7 @@ export function doConfettiBomb() {
 }
 
 /**
- * Returns apromise to create a delay
- * @param delay time in ms
+ * Returns a promise that resolves after `ms` milliseconds.
  * @example await delay(1000); // waits 1 second
  */
 export const delay = (ms: number): Promise<void> =>

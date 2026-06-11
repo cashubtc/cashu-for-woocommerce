@@ -89,8 +89,8 @@ export function loadChangePayload(key: string): ChangePayload {
  * Append a change item to the change-payload localStorage, deduplicated by
  * token and trimmed to the last CHANGE_PAYLOAD_MAX_ITEMS entries. Adding a
  * token that's already present is a no-op (no resurrection). The TTL-based
- * clear and per-order init clear (see project_change_is_ephemeral memory)
- * are handled at the call site — this helper just maintains the list.
+ * clear and per-order init clear are handled at the call site — this
+ * helper just maintains the list.
  */
 export function rememberChangeItem(item: ChangeItem): void {
   const payload = loadChangePayload(CHANGE_PAYLOAD_KEY);
@@ -102,7 +102,7 @@ export function rememberChangeItem(item: ChangeItem): void {
 }
 
 // ------------------------------
-// Stranded-proof recovery (Option B: localStorage persistence)
+// Stranded-proof recovery (localStorage persistence)
 // ------------------------------
 // After mintProofsBolt11 transitions a mint quote PAID -> ISSUED, the proofs
 // only exist in JS memory until meltProofsBolt11 spends them. A refresh in
@@ -314,11 +314,10 @@ export function composeRestUrl(restRoot: string, route: string): string {
 }
 
 /**
- * Pull `payment_preimage` off a cashu-ts quote or melt-response wrapper, with
- * the `unknown` typed-extraction (some mint responses surface preimage
- * directly on the quote, some wrap it under `.quote`). Returns the empty
- * string when absent or non-string. Centralises the cast that was previously
- * duplicated at three call sites with `(x as any).payment_preimage`.
+ * Pull `payment_preimage` off a cashu-ts quote or melt-response wrapper
+ * (some mint responses surface the preimage directly on the quote, some
+ * wrap it under `.quote`). Returns the empty string when absent or
+ * non-string.
  */
 export function extractPaymentPreimage(source: unknown): string {
   if (!source || typeof source !== 'object') return '';
@@ -368,10 +367,7 @@ export type OrderStatusContext = {
  *
  * Returns an ordered list of side-effect actions for the caller to dispatch.
  * Splitting the decision from the side effects lets us unit-test every
- * branch — particularly the priority resolution that was previously buggy
- * (UNPAID+last_attempt's "previous attempt failed" banner was silently
- * overwritten by the expiry countdown when the quote was within 5 minutes
- * of expiry).
+ * branch, especially the priority resolution below.
  *
  * Priority for non-terminal (non PAID / non EXPIRED) status updates:
  *
@@ -526,10 +522,8 @@ export type MeltAction =
  * Project a melt outcome onto the deterministic action sequence the
  * dispatcher will execute.
  *
- * Mirrors the deriveOrderStatusActions pattern: pure data in, ordered actions
- * out. Locks each branch's behavior to a unit test so future iterations can't
- * silently reintroduce marker-drop / change-recovery / preimage bugs in this
- * surface.
+ * Mirrors the deriveOrderStatusActions pattern: pure data in, ordered
+ * actions out, every branch pinned by a unit test.
  */
 export function actionsForMeltOutcome(outcome: MeltOutcome): MeltAction[] {
   switch (outcome.kind) {

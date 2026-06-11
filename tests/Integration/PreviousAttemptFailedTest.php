@@ -25,7 +25,7 @@ use WP_REST_Response;
  * subtle drift where a banner persists across a successful payment, or
  * vanishes too early before the customer can re-attempt.
  *
- * Also pins the 3f39289 claim-melt-quote PENDING-marker fix as a side
+ * Also pins the claim-melt-quote PENDING-marker behaviour as a side
  * effect — that path is symmetric with the UNPAID timestamp stamp.
  */
 final class PreviousAttemptFailedTest extends IntegrationTestCase {
@@ -314,13 +314,13 @@ final class PreviousAttemptFailedTest extends IntegrationTestCase {
 		$this->assertNull( $body['last_attempt'] );
 	}
 
-	// === ConfirmMeltQuoteController::claim_melt_quote (3f39289 fix) ===
+	// === ConfirmMeltQuoteController::claim_melt_quote ===
 
 	/**
-	 * 3f39289: claim_melt_quote writes the pending-melt marker when the
-	 * mint probe returns PENDING. Without this, the LN-leg's in-flight
-	 * gap leaves no server-side trace for MeltReconciler to pick up if the
-	 * customer closes the tab. NUT: does NOT stamp the failed-attempt
+	 * claim_melt_quote writes the pending-melt marker when the mint
+	 * probe returns PENDING. Without this, the LN-leg's in-flight gap
+	 * leaves no server-side trace for MeltReconciler to pick up if the
+	 * customer closes the tab. Note: does NOT stamp the failed-attempt
 	 * timestamp — that's only for confirmed UNPAID.
 	 */
 	public function test_claim_melt_quote_pending_writes_marker(): void {
@@ -354,7 +354,7 @@ final class PreviousAttemptFailedTest extends IntegrationTestCase {
 	}
 
 	/**
-	 * 3f39289 symmetric path: claim_melt_quote stamps the timestamp on a
+	 * Symmetric path: claim_melt_quote stamps the timestamp on a
 	 * positive UNPAID from the mint probe. Does NOT write the pending
 	 * marker (the proofs were never consumed, no reconciliation needed).
 	 */

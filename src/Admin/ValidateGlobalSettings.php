@@ -167,11 +167,10 @@ final class ValidateGlobalSettings {
 		// and melt, or a return on a different device / after a cleared
 		// browser, where no local proof snapshot survives. The receipt page
 		// re-derives the per-order wallet seed and asks the mint to restore
-		// the blinded signatures it already issued (verified live: this is
-		// what rescues an otherwise lost Lightning-leg payment). Without
-		// NUT-09 that path silently can't work, so a mid-flight failure can
-		// cost the customer their funds. Unlike NUT-04/05 this is a
-		// settings nut advertised as {"supported": true}, not a methods list.
+		// the blinded signatures it already issued. Without NUT-09 that
+		// path silently can't work, so a mid-flight failure can cost the
+		// customer their funds. Unlike NUT-04/05 this is a settings nut
+		// advertised as {"supported": true}, not a methods list.
 		if ( ! self::nut_supported_flag( $body['nuts']['9'] ?? null ) ) {
 			return __( 'Mint does not advertise NUT-09 (payment recovery) — required so a customer can recover a stranded payment from another device or after clearing their browser. Please choose a mint that supports NUT-09.', 'cashu-for-woocommerce' );
 		}

@@ -232,10 +232,8 @@ final class ConfirmMeltQuoteController {
 		$pending_at = absint( $order->get_meta( '_cashu_melt_pending_at', true ) );
 		if ( $pending_at > 0 && ( time() - $pending_at ) > self::PENDING_MARKER_MAX_AGE ) {
 			Logger::error( 'pending melt marker aged out for order ' . $order->get_id() . ', quote ' . $pending_quote_id );
-			// Match MeltReconciler's age-out so the admin gets the same
-			// recovery hint whichever path wins the race past the TTL.
-			// Without this note, a browser-poll that hits the age-out first
-			// would silently drop the marker and leave no audit trail.
+			// Same recovery-hint note as MeltReconciler's age-out, so the
+			// admin sees it whichever path wins the race past the TTL.
 			$order->add_order_note(
 				sprintf(
 					/* translators: %s: melt quote id */
@@ -462,8 +460,8 @@ final class ConfirmMeltQuoteController {
 				$order->update_meta_data( '_cashu_last_payment_attempt_at', time() );
 				$order->save();
 			}
-			// PENDING (and empty/unknown): keep the pre-staged marker so
-			// MeltReconciler picks it up; nothing more to do here.
+			// PENDING: keep the pre-staged marker so MeltReconciler picks
+			// it up; nothing more to do here.
 			return rest_ensure_response(
 				array(
 					'ok'    => true,

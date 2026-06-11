@@ -92,7 +92,7 @@ final class PayControllerPreStageMarkerTest extends IntegrationTestCase {
 				return $wp_error;
 			} );
 
-		// The reconciliation probe (Task 2) will also be called; for this test
+		// The reconciliation probe will also be called; for this test
 		// we stub it to return empty so we land in the keep-marker-return-502 branch.
 		Functions\when( 'wp_remote_get' )->justReturn( $wp_error );
 

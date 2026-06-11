@@ -16,8 +16,8 @@ use WP_REST_Response;
  * Covers ConfirmMeltQuoteController::claim_melt_quote — the lightning-leg
  * one-shot finalizer the browser hits after wallet.meltProofsBolt11().
  *
- * Pins the M1+L1 second-pass fix from 61c9936: when the mint-supplied
- * preimage cross-check fails, the order is still marked PAID (the mint's
+ * Pins: when the mint-supplied preimage cross-check fails, the order is
+ * still marked PAID (the mint's
  * PAID state is authoritative) but the bad preimage is dropped from the
  * stored audit trail rather than recorded as if it were valid.
  *

@@ -52,7 +52,6 @@ class CashuGateway extends \WC_Payment_Gateway {
 	private $change_rendered = false;
 
 	public function __construct() {
-		// Init gateway
 		$this->id = 'cashu_default';
 		// Merchant-facing icon (WC admin Payments overview reads $this->icon
 		// directly). Customer-facing icon is swapped in get_icon() below.
@@ -502,7 +501,6 @@ class CashuGateway extends \WC_Payment_Gateway {
 			return $order_total_sats;
 		}
 
-		// Convert order total to sats
 		$total = (float) $order->get_total();
 		$quote = CashuHelper::fiatToSats( $total, $order->get_currency() );
 
@@ -512,7 +510,6 @@ class CashuGateway extends \WC_Payment_Gateway {
 			throw new \RuntimeException( 'Could not get price quote in bitcoin.' );
 		}
 
-		// Set order meta
 		$order->update_meta_data( '_cashu_spot_total', $order_total_sats );
 		$order->update_meta_data( '_cashu_spot_time', $quote['quoted_at'] );
 		$order->update_meta_data( '_cashu_spot_btc', $quote['btc_price'] );

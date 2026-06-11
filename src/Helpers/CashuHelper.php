@@ -56,7 +56,7 @@ final class CashuHelper {
 			throw new \RuntimeException( 'Invalid BTC price (non positive).' );
 		}
 
-		// Return amount in sats, rounded up, min zero
+		// Rounded up so the merchant never under-invoices by a sat.
 		$sats = (int) ceil( ( $amount / $btc_price ) * 100000000 );
 		$sats = max( 0, $sats );
 

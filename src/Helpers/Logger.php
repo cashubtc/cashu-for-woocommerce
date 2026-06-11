@@ -7,7 +7,6 @@ namespace Cashu\WC\Helpers;
 class Logger {
 	public static function debug( $message, $force = false ): void {
 		if ( get_option( 'cashu_debug' ) === 'yes' || $force ) {
-			// Convert message to string
 			if ( ! is_string( $message ) ) {
 				$message = wc_print_r( $message, true );
 			}
@@ -19,7 +18,6 @@ class Logger {
 	}
 
 	public static function error( $message ): void {
-		// Convert message to string
 		if ( ! is_string( $message ) ) {
 			$message = wc_print_r( $message, true );
 		}

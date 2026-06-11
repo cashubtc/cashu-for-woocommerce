@@ -98,7 +98,7 @@ class GlobalSettings extends \WC_Settings_Page {
 			// checkboxes whose IDs share the `cashu_paths[<key>]` shape so PHP
 			// POSTs them as an array; WC's save_fields() fires the sanitize filter
 			// per sub-key, then assembles them into one `cashu_paths` option write.
-			// Cross-key validation (Task 5) hooks `pre_update_option_cashu_paths`,
+			// Cross-key validation hooks `pre_update_option_cashu_paths`,
 			// which fires once with the assembled array. `checkboxgroup` start/end
 			// visually groups them under one "Show payment paths" label.
 			'path_unified'      => array(

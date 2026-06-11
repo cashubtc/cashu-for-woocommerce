@@ -25,8 +25,8 @@ use WP_REST_Response;
  * The customer's proofs are at the mint, the mint has paid the invoice,
  * but the order is marked EXPIRED. Customer support nightmare.
  *
- * Post-fix (61c9936's resolve_pending_melt branch lives BEFORE the spot
- * expiry check), the poll:
+ * Because resolve_pending_melt runs BEFORE the spot-expiry check, the
+ * poll:
  *   1. is_paid() -> false
  *   2. check_confirm_rate_limit -> ok
  *   3. resolve_pending_melt sees the marker, queries the mint, sees PAID,

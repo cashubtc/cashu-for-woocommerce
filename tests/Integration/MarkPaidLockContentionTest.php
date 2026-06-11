@@ -13,7 +13,7 @@ use WP_REST_Request;
 use WP_REST_Response;
 
 /**
- * Covers the H5 fix from 61c9936: mark_paid returns false when it can't
+ * Covers mark_paid under lock contention: it returns false when it can't
  * take the pay-scope lock within budget, and callers surface PENDING to
  * the browser rather than fake-PAID + redirect.
  *

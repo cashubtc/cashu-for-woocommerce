@@ -15,10 +15,6 @@ final class CashuWCPlugin {
 
 	private static ?self $instance = null;
 
-	public function __construct() {
-		// Intentionally empty, no side effects.
-	}
-
 	/**
 	 * Singleton instance
 	 */
