@@ -33,6 +33,7 @@
     "lint:check": "vendor/bin/phpcs",
     "lint:fix": "sh -c 'vendor/bin/phpcbf; ec=$?; [ $ec -le 1 ]'",
     "test": "vendor/bin/phpunit",
+    "test:coverage": "vendor/bin/phpunit --coverage-clover coverage/php/clover.xml",
     "test:unit": "vendor/bin/phpunit --testsuite=unit",
     "test:integration": "vendor/bin/phpunit --testsuite=integration"
   },

@@ -22,3 +22,6 @@ PRD.md
 /test-results/
 /playwright-report/
 /tests/e2e/artifacts/
+
+# Coverage output (vitest / phpunit, uploaded to Codecov in CI)
+/coverage/

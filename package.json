@@ -46,6 +46,7 @@
     "lint:css": "stylelint \"assets/**/*.css\" --fix",
     "lint:ts:check": "tsc --noEmit",
     "test:ts": "vitest run",
+    "test:ts:coverage": "vitest run --coverage",
     "test:ts:watch": "vitest",
     "lint:check": "npm run lint:php:check && npm run lint:css:check && npm run lint:ts:check",
     "lint": "npm run lint:php && npm run lint:css",

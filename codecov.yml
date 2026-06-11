@@ -1,0 +1,20 @@
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 1%
+    patch:
+      default:
+        target: auto
+        threshold: 1%
+
+ignore:
+  - 'coverage/**'
+  - 'tests/**'
+  - 'scripts/**'
+  - 'assets/**'
+  - 'vendor/**'
+  - 'node_modules/**'
+  - 'uninstall.php'
+  - '*.config.*'
