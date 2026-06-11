@@ -194,6 +194,21 @@ class CashuHelper {
 		return $btc_price;
 	}
 
+	/**
+	 * Truncate a payment preimage for display in order notes: first/last 8
+	 * hex chars. The preimage is proof-of-payment — anyone who reads it can
+	 * replay a settlement claim — and order notes are visible to every shop
+	 * manager and to notes-export plugins. The full value stays in the
+	 * `_cashu_payment_preimage` order meta for forensic use.
+	 */
+	public static function redactPreimage( ?string $preimage ): string {
+		$preimage = (string) $preimage;
+		if ( strlen( $preimage ) <= 16 ) {
+			return $preimage;
+		}
+		return substr( $preimage, 0, 8 ) . '…' . substr( $preimage, -8 );
+	}
+
 	public static function getConfig(): array {
 		$ln_address   = get_option( 'cashu_lightning_address' );
 		$trusted_mint = get_option( 'cashu_trusted_mint' );

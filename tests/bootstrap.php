@@ -120,6 +120,7 @@ if (!class_exists('WP_REST_Request')) {
 		private string $body = '';
 		public function set_params(array $params): void { $this->params = $params; }
 		public function get_param(string $key) { return $this->params[$key] ?? null; }
+		public function get_url_params(): array { return $this->params; }
 		public function set_body(string $body): void { $this->body = $body; }
 		public function get_body(): string { return $this->body; }
 	}

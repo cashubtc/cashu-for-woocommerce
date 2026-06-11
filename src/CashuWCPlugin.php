@@ -49,6 +49,11 @@ final class CashuWCPlugin {
 		// Order display extras.
 		add_filter( 'woocommerce_get_order_item_totals', array( $this, 'addCashuOrderItemTotals' ), 20, 2 );
 
+		// Veto WooCommerce's hold-stock auto-cancel while a melt is mid-flight
+		// at the mint. Proofs may already be committed and the LN payment
+		// routing; cancelling here would race the settlement.
+		add_filter( 'woocommerce_cancel_unpaid_order', array( self::class, 'preventCancelDuringSettlement' ), 10, 2 );
+
 		// Settings page.
 		add_filter( 'woocommerce_get_settings_pages', array( $this, 'registerSettingsPage' ) );
 
@@ -135,6 +140,30 @@ final class CashuWCPlugin {
 		}
 		delete_option( 'cashu_enabled' );
 		update_option( 'cashu_settings_migrated', 'yes' );
+	}
+
+	/**
+	 * `woocommerce_cancel_unpaid_order` filter. WC's hold-stock sweep
+	 * cancels unpaid pending orders after `woocommerce_hold_stock_minutes`.
+	 * A cashu order with a pending-melt marker has proofs possibly committed
+	 * at the mint and an LN payment possibly routing — auto-cancelling it
+	 * races the settlement (the reconciler would then have to revive the
+	 * cancelled order after the fact). Leave those orders alone; the marker
+	 * ages out after 24h and the order becomes cancellable again.
+	 *
+	 * Public static so it can be unit-tested without booting the singleton.
+	 */
+	public static function preventCancelDuringSettlement( $should_cancel, $order ) {
+		if ( ! $should_cancel || ! $order instanceof \WC_Order ) {
+			return $should_cancel;
+		}
+		if ( 'cashu_default' !== $order->get_payment_method() ) {
+			return $should_cancel;
+		}
+		if ( '' !== (string) $order->get_meta( '_cashu_melt_pending_quote_id', true ) ) {
+			return false;
+		}
+		return $should_cancel;
 	}
 
 	public function registerSettingsPage( array $pages ): array {

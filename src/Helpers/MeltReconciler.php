@@ -41,9 +41,15 @@ final class MeltReconciler {
 		// Bounded cron sweep (20/tick) over a sparse marker meta written only by
 		// PayController when a melt is left in flight. No alternative lookup
 		// path exists; query is intentional and rate-limited per-order.
+		// Cancelled/failed are included so a melt that settles AFTER
+		// WooCommerce's hold-stock auto-cancel (or a hasty manual cancel)
+		// still gets finalised — the customer's funds moved; the order must
+		// reflect that. payment_complete accepts cancelled/failed, and the
+		// SettlementGuard sentinel in finalise_paid_locked stops this from
+		// re-completing an order that was already paid once.
 		$orders = wc_get_orders(
 			array(
-				'status'         => array( 'pending', 'on-hold' ),
+				'status'         => array( 'pending', 'on-hold', 'cancelled', 'failed' ),
 				'payment_method' => 'cashu_default',
 				'limit'          => self::MAX_PER_RUN,
 				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key
@@ -179,6 +185,18 @@ final class MeltReconciler {
 			return;
 		}
 
+		// Replay guard: a PAID state on the single-use melt quote can only
+		// re-prove a settlement that already completed this order once.
+		// Don't revive an order the admin has since cancelled/failed; drop
+		// the markers so the cron stops re-probing it.
+		if ( SettlementGuard::should_block( $fresh ) ) {
+			SettlementGuard::note_blocked( $fresh, $quote_id );
+			$fresh->delete_meta_data( '_cashu_melt_pending_quote_id' );
+			$fresh->delete_meta_data( '_cashu_melt_pending_at' );
+			$fresh->save();
+			return;
+		}
+
 		$raw_preimage      = isset( $mint_response['payment_preimage'] ) && is_string( $mint_response['payment_preimage'] )
 			? $mint_response['payment_preimage']
 			: '';
@@ -196,6 +214,7 @@ final class MeltReconciler {
 		$fresh->delete_meta_data( '_cashu_melt_pending_quote_id' );
 		$fresh->delete_meta_data( '_cashu_melt_pending_at' );
 		$fresh->delete_meta_data( '_cashu_last_payment_attempt_at' );
+		SettlementGuard::mark_paid_once( $fresh );
 		$fresh->payment_complete( $quote_id );
 
 		$lightning_address = (string) $fresh->get_meta( '_cashu_invoice_ln_address', true );
@@ -208,13 +227,13 @@ final class MeltReconciler {
 
 		$fresh->add_order_note(
 			sprintf(
-				/* translators: %1$s: BTC Symbol, %2$s: amount, %3$s: Lightning Address, %4$s: Melt Quote ID, %5$s: Payment preimage */
+				/* translators: %1$s: BTC Symbol, %2$s: amount, %3$s: Lightning Address, %4$s: Melt Quote ID, %5$s: Payment preimage (truncated) */
 				__( "Cashu payment reconciled from mint: %1\$s%2\$s\nSent to: %3\$s\nMelt quote: %4\$s\nPayment preimage: %5\$s", 'cashu-for-woocommerce' ),
 				CASHU_WC_BIP177_SYMBOL,
 				$paid_amount,
 				$lightning_address,
 				$quote_id,
-				$verified_preimage
+				CashuHelper::redactPreimage( $verified_preimage )
 			)
 		);
 	}
