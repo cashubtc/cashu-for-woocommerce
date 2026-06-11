@@ -153,6 +153,7 @@ final class MintClient {
 	 * Request a NUT-04 mint quote: the BOLT11 the customer pays to mint
 	 * proofs at the mint.
 	 *
+	 * @throws AmountLimitException when the mint rejects the amount as out of range.
 	 * @throws \RuntimeException on transport or mint error.
 	 */
 	public static function request_mint_quote( string $mint_url, int $amount_sats ): array {
@@ -175,7 +176,7 @@ final class MintClient {
 
 		$code = (int) wp_remote_retrieve_response_code( $res );
 		if ( $code < 200 || $code >= 300 ) {
-			throw new \RuntimeException( 'Mint quote request failed, HTTP ' . esc_html( (string) $code ) );
+			self::throw_quote_error( 'Mint quote request failed', $code, (string) wp_remote_retrieve_body( $res ) );
 		}
 
 		$body = (string) wp_remote_retrieve_body( $res );
@@ -191,6 +192,7 @@ final class MintClient {
 	 * Request a NUT-05 melt quote against a BOLT11 invoice: the quote the
 	 * customer's proofs are later melted against to pay the merchant.
 	 *
+	 * @throws AmountLimitException when the mint rejects the amount as out of range.
 	 * @throws \RuntimeException on transport or mint error.
 	 */
 	public static function request_melt_quote( string $mint_url, string $bolt11 ): array {
@@ -215,7 +217,7 @@ final class MintClient {
 
 		$code = (int) wp_remote_retrieve_response_code( $res );
 		if ( $code < 200 || $code >= 300 ) {
-			throw new \RuntimeException( 'Mint quote request failed, HTTP ' . esc_html( (string) $code ) );
+			self::throw_quote_error( 'Mint quote request failed', $code, (string) wp_remote_retrieve_body( $res ) );
 		}
 
 		$body = (string) wp_remote_retrieve_body( $res );
@@ -225,6 +227,49 @@ final class MintClient {
 		}
 
 		return $json;
+	}
+
+	/**
+	 * Raise a quote failure carrying the mint's error body — without it the
+	 * log can't distinguish "mint down" from "mint refused this amount".
+	 * Limit rejections (error code 11006, "amount outside of limit range")
+	 * get the typed exception so the checkout shows an accurate message
+	 * instead of "reload to try again".
+	 *
+	 * @throws AmountLimitException|\RuntimeException always.
+	 */
+	private static function throw_quote_error( string $prefix, int $code, string $body ): void {
+		$detail = sanitize_text_field( substr( $body, 0, 200 ) );
+		if ( self::is_limit_error_body( $body ) ) {
+			throw new AmountLimitException( 'Mint amount outside limits, HTTP ' . esc_html( (string) $code ) . ': ' . esc_html( $detail ) );
+		}
+		throw new \RuntimeException( esc_html( $prefix ) . ', HTTP ' . esc_html( (string) $code ) . ': ' . esc_html( $detail ) );
+	}
+
+	/**
+	 * Does a mint error body describe an amount-outside-limits rejection?
+	 * Canonical signal is error code 11006 from the cashu error-code
+	 * registry; the detail-string match catches mints that send a
+	 * human-readable error without the code.
+	 */
+	public static function is_limit_error_body( string $body ): bool {
+		$json = json_decode( $body, true );
+		if ( ! is_array( $json ) ) {
+			return false;
+		}
+		if ( 11006 === (int) ( $json['code'] ?? 0 ) ) {
+			return true;
+		}
+		$detail = strtolower( (string) ( $json['detail'] ?? ( $json['error'] ?? '' ) ) );
+		if ( '' === $detail || false === strpos( $detail, 'amount' ) ) {
+			return false;
+		}
+		foreach ( array( 'limit', 'exceed', 'at least', 'at most', 'minimum', 'maximum', 'too low', 'too high' ) as $needle ) {
+			if ( false !== strpos( $detail, $needle ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**

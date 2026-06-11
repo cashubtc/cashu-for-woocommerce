@@ -57,6 +57,22 @@ class LightningAddress {
 
 		$amount_msat = $amount_sats * 1000;
 
+		// LUD-06 sendable bounds: reject here rather than letting the
+		// callback fail opaquely. Only positive numeric bounds constrain —
+		// 0 / absent / junk must not be read as "max 0".
+		$min_msat = is_numeric( $meta_body['minSendable'] ?? null ) ? (int) $meta_body['minSendable'] : 0;
+		$max_msat = is_numeric( $meta_body['maxSendable'] ?? null ) ? (int) $meta_body['maxSendable'] : 0;
+		if ( ( $min_msat > 0 && $amount_msat < $min_msat ) || ( $max_msat > 0 && $amount_msat > $max_msat ) ) {
+			throw new AmountLimitException(
+				sprintf(
+					'Lightning address amount outside limits: %d sat is not within %d-%d msat sendable bounds.',
+					esc_html( (string) $amount_sats ),
+					esc_html( (string) $min_msat ),
+					esc_html( (string) $max_msat )
+				)
+			);
+		}
+
 		$query_args = array(
 			'amount' => $amount_msat,
 		);
@@ -95,7 +111,11 @@ class LightningAddress {
 		$inv_body = json_decode( wp_remote_retrieve_body( $inv_response ), true );
 
 		if ( 200 !== $inv_code || empty( $inv_body['pr'] ) ) {
-			throw new \RuntimeException( 'Invalid invoice response.' );
+			// LUD-06 error responses carry a human-readable `reason`; keep it
+			// for the log so "amount too small" is distinguishable from a
+			// provider outage.
+			$reason = is_array( $inv_body ) ? sanitize_text_field( (string) ( $inv_body['reason'] ?? '' ) ) : '';
+			throw new \RuntimeException( '' !== $reason ? 'Invalid invoice response: ' . esc_html( $reason ) : 'Invalid invoice response.' );
 		}
 
 		return $inv_body['pr'];

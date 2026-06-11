@@ -45,6 +45,11 @@ register_activation_hook(
 		if ( ! wp_next_scheduled( \Cashu\WC\Helpers\MeltReconciler::HOOK ) ) {
 			wp_schedule_event( time() + MINUTE_IN_SECONDS, 'hourly', \Cashu\WC\Helpers\MeltReconciler::HOOK );
 		}
+		// Offset from the reconciler so the two hourly jobs don't habitually
+		// share a wp-cron request (a fatal in one tick would take out both).
+		if ( ! wp_next_scheduled( \Cashu\WC\Helpers\MintLimits::HOOK ) ) {
+			wp_schedule_event( time() + 5 * MINUTE_IN_SECONDS, 'hourly', \Cashu\WC\Helpers\MintLimits::HOOK );
+		}
 	}
 );
 
@@ -56,6 +61,7 @@ register_deactivation_hook(
 			wp_unschedule_event( $timestamp, \Cashu\WC\Helpers\MeltReconciler::HOOK );
 		}
 		wp_clear_scheduled_hook( \Cashu\WC\Helpers\MeltReconciler::HOOK );
+		wp_clear_scheduled_hook( \Cashu\WC\Helpers\MintLimits::HOOK );
 	}
 );
 

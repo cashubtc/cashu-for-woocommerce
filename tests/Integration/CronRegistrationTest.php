@@ -8,15 +8,16 @@ use Brain\Monkey\Actions;
 use Brain\Monkey\Functions;
 use Cashu\WC\CashuWCPlugin;
 use Cashu\WC\Helpers\MeltReconciler;
+use Cashu\WC\Helpers\MintLimits;
 use Cashu\WC\Tests\IntegrationTestCase;
 
 /**
- * Verifies the cron hook + reschedule guard are registered when the
+ * Verifies the cron hooks + reschedule guards are registered when the
  * plugin bootstraps.
  */
 final class CronRegistrationTest extends IntegrationTestCase {
 
-	public function test_reconciler_hook_is_wired_to_class(): void {
+	public function test_cron_hooks_are_wired_to_classes(): void {
 		Functions\when( 'add_filter' )->justReturn( true );
 		Functions\when( 'wp_next_scheduled' )->justReturn( false );
 		Functions\when( 'wp_schedule_event' )->justReturn( true );
@@ -29,6 +30,10 @@ final class CronRegistrationTest extends IntegrationTestCase {
 		Actions\expectAdded( MeltReconciler::HOOK )
 			->once()
 			->with( array( MeltReconciler::class, 'reconcile_pending' ) );
+
+		Actions\expectAdded( MintLimits::HOOK )
+			->once()
+			->with( array( MintLimits::class, 'refresh' ) );
 
 		CashuWCPlugin::instance()->run();
 

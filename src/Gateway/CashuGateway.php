@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace Cashu\WC\Gateway;
 
 use Automattic\WooCommerce\Enums\OrderStatus;
+use Cashu\WC\Helpers\AmountLimitException;
 use Cashu\WC\Helpers\Bolt11;
 use Cashu\WC\Helpers\CashuHelper;
 use Cashu\WC\Helpers\CashuPaths;
 use Cashu\WC\Helpers\Logger;
 use Cashu\WC\Helpers\LightningAddress;
 use Cashu\WC\Helpers\MintClient;
+use Cashu\WC\Helpers\MintLimits;
 use Cashu\WC\Helpers\OrderLock;
 use Cashu\WC\Helpers\PayController;
 use WC_Order;
@@ -322,6 +324,13 @@ class CashuGateway extends \WC_Payment_Gateway {
 				$this->setup_cashu_payment( $order );
 			} catch ( \Throwable $e ) {
 				Logger::error( 'Could not setup Cashu payment: ' . $e->getMessage() );
+				if ( $e instanceof AmountLimitException ) {
+					// The mint / LNURL service just rejected this amount, so
+					// the cached limits snapshot is demonstrably behind —
+					// refresh it now so is_available() hides the gateway for
+					// subsequent out-of-range carts.
+					MintLimits::refresh( true );
+				}
 				wc_add_notice( $this->classify_setup_error( $e ), 'error' );
 				return array( 'result' => 'failure' );
 			}
@@ -464,6 +473,12 @@ class CashuGateway extends \WC_Payment_Gateway {
 	 */
 	private function classify_setup_error( \Throwable $e ): string {
 		$msg = $e->getMessage();
+
+		// Checked before the string sniffs: limit messages mention
+		// "lightning address" / "mint" too and would misclassify below.
+		if ( $e instanceof AmountLimitException ) {
+			return __( 'This order total is outside the amounts the store can currently accept over Lightning. Please contact the store if you believe this is an error.', 'cashu-for-woocommerce' );
+		}
 
 		if ( false !== stripos( $msg, 'lightning address' )
 			|| false !== stripos( $msg, 'LNURL' )
@@ -1062,6 +1077,31 @@ class CashuGateway extends \WC_Payment_Gateway {
 		}
 
 		// This Gateway enabled (Settings > Payments)
-		return 'yes' === $this->enabled;
+		if ( 'yes' !== $this->enabled ) {
+			return false;
+		}
+
+		// Hide the option when the cart total falls outside the mint's /
+		// LNURL's advertised bolt11 amount limits — better than letting the
+		// customer pick it and fail at quote time. Fail open on any
+		// uncertainty (no cart, no rate, stale snapshot): only fresh limits
+		// data that clearly excludes the amount may hide the gateway.
+		if ( ! is_admin() && function_exists( 'WC' ) && null !== WC()->cart ) {
+			try {
+				$total = (float) WC()->cart->get_total( 'edit' );
+				if ( $total > 0 ) {
+					$quote = CashuHelper::fiatToSats( $total, get_woocommerce_currency() );
+					$sats  = absint( $quote['sats'] ?? 0 );
+					if ( $sats > 0 && ! MintLimits::allows( $sats ) ) {
+						return false;
+					}
+				}
+			} catch ( \Throwable $e ) {
+				// Rate lookup failed — can't judge the amount; show the gateway.
+				Logger::debug( 'is_available limit check skipped: ' . $e->getMessage() );
+			}
+		}
+
+		return true;
 	}
 }
