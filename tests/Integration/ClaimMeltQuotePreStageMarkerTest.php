@@ -140,6 +140,49 @@ final class ClaimMeltQuotePreStageMarkerTest extends IntegrationTestCase {
 		$this->assertNotSame( '', $order->get_meta( '_cashu_last_payment_attempt_at' ) );
 	}
 
+	public function test_bad_preimage_stages_marker_before_rejecting(): void {
+		// A wallet reaching /claim-melt-quote has just melted at the mint.
+		// If the preimage it reports is corrupt, the 400 must still leave a
+		// pending marker behind — the proofs may be committed at the mint,
+		// and without the marker MeltReconciler has nothing to sweep.
+		$this->stubBaseline();
+		$this->setUpFakeWpdb();
+
+		$order = $this->mockOrder(
+			42,
+			array(
+				'_cashu_melt_quote_id' => 'q_badpre',
+				'_cashu_melt_mint'     => 'https://m.example',
+				// sha256(hex2bin('deadbeef')) — does not match '00' below.
+				'_cashu_payment_hash'  => '5f78c33274e43fa9de5659265c1d917e25c03722dcb0b8d27db8d5feaa813953',
+			)
+		);
+		$order->shouldReceive( 'is_paid' )->andReturn( false );
+		$order->shouldReceive( 'payment_complete' )->never();
+
+		Functions\when( 'wc_get_order' )->justReturn( $order );
+		// Still no mint fallback on a bad preimage — that's the
+		// amplification vector the reject exists to close.
+		Functions\expect( 'wp_remote_get' )->never();
+
+		$req = $this->request( 42, 'k' );
+		$req->set_params(
+			array(
+				'order_id'  => 42,
+				'order_key' => 'k',
+				'preimage'  => '00',
+			)
+		);
+
+		$controller = new ConfirmMeltQuoteController();
+		$response   = $controller->claim_melt_quote( $req );
+
+		$this->assertInstanceOf( WP_Error::class, $response );
+		$this->assertSame( 'cashu_bad_preimage', $response->get_error_code() );
+		$this->assertSame( 'q_badpre', $order->get_meta( '_cashu_melt_pending_quote_id' ) );
+		$this->assertNotSame( '', $order->get_meta( '_cashu_melt_pending_at' ) );
+	}
+
 	public function test_marker_survives_on_pending_state(): void {
 		// Mint reports PENDING — proofs committed, LN still routing. The
 		// pre-staged marker must remain (the pre-stage already wrote it,
