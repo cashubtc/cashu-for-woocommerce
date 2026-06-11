@@ -8,7 +8,7 @@
 - `CHANGELOG.md` is fully generated — never hand-edit it; regeneration rebuilds the whole file from commit history and discards manual edits. A non-conventional squash subject simply won't appear (which is why PR titles must be conventional), and a release whose commits were all unconventional is omitted entirely.
 - `main` is protected: land the changes via a release PR titled `chore(release): X.Y.Z`.
 - Create an annotated tag `vX.Y.Z` and push tags.
-- Publish a GitHub release for the tag (non‑prerelease) — for the body, paste the relevant section of `CHANGELOG.md` (GitHub's "Generate release notes" button only walks PR merges and produces nothing useful for direct-to-main history). Publishing fires `.github/workflows/release-zip.yml`, which builds and uploads `cashu-for-woocommerce.zip`.
+- Publish a GitHub release for the tag (non‑prerelease) with auto-generated notes: `gh release create vX.Y.Z --title vX.Y.Z --generate-notes`. Every change reaches `main` as a PR merge now, so GitHub's auto-generator produces a complete list. Publishing fires `.github/workflows/release-zip.yml`, which builds and uploads `cashu-for-woocommerce.zip` (it never touches the release body).
 - The same release event also triggers `.github/workflows/wporg-deploy.yml`, which pushes the same build to the WordPress.org plugin directory (see "Publishing to WordPress.org" below for one-time setup).
 
 ## Publishing to WordPress.org
@@ -61,10 +61,4 @@ Entry links: PR-merged commits (subject ending `(#N)`) render the PR link only; 
 
 `npm run changelog` (no extra args) regenerates `CHANGELOG.md` with the unreleased section showing what's queued for the next release — handy for previewing before tagging.
 
-**GitHub release body:** paste the relevant section of `CHANGELOG.md`. GitHub's "Generate release notes" button only walks PR merges, which is empty for direct-to-main history. Extract a single version section with:
-
-```bash
-awk '/^## \[vX\.Y\.Z\]/{p=1; print; next} /^## \[/{if (p) exit} p' CHANGELOG.md
-```
-
-…or skip the awk dance and use `gh release create vX.Y.Z --notes-file <(awk ... CHANGELOG.md)`. Once PR-based contributions become the norm, GitHub's auto-generator becomes the easier path.
+**GitHub release body:** use GitHub's auto-generated notes (`gh release create vX.Y.Z --generate-notes`). All changes land as PR merges now that `main` is protected, so the auto-generator walks them completely — no need to paste from `CHANGELOG.md`. The release workflows only attach the zip / deploy to wp.org; they never modify the release body.
