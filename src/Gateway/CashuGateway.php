@@ -54,6 +54,26 @@ class CashuGateway extends \WC_Payment_Gateway {
 	 */
 	protected $ln_address = '';
 
+	/**
+	 * Once-per-request render guards. A checkout page that carries two
+	 * checkout renderers — e.g. the legacy [woocommerce_checkout]
+	 * shortcode left in alongside the checkout block after a migration —
+	 * runs the order-pay/thank-you templates twice, firing our render
+	 * hooks twice on one request (seen live during testing). A second
+	 * render is never valid (duplicate element ids; the JS binds the
+	 * first root only), so dedupe defensively. The duplicate fire hits
+	 * the same gateway instance, so instance flags suffice — and they
+	 * reset naturally per request / per test.
+	 *
+	 * @var bool
+	 */
+	private $receipt_rendered = false;
+
+	/**
+	 * @var bool
+	 */
+	private $change_rendered = false;
+
 	public function __construct() {
 		// Init gateway
 		$this->id = 'cashu_default';
@@ -1069,6 +1089,14 @@ class CashuGateway extends \WC_Payment_Gateway {
 	}
 
 	public function receipt_page( $order_id ) {
+		// Render once per request — see $receipt_rendered. The JS only ever
+		// binds the first #cashu-pay-root, so a second render would be dead
+		// markup with a duplicate element id.
+		if ( $this->receipt_rendered ) {
+			return;
+		}
+		$this->receipt_rendered = true;
+
 		$order = wc_get_order( $order_id );
 		if ( ! $order ) {
 			echo '<p>' . esc_html__( 'Order not found.', 'cashu-for-woocommerce' ) . '</p>';
@@ -1276,6 +1304,14 @@ class CashuGateway extends \WC_Payment_Gateway {
 	 * Renders the change
 	 */
 	public function render_change_section() {
+		// Same once-per-request guard as receipt_page — this renders via
+		// both the thank-you hook and woocommerce_after_my_account, and a
+		// double-firing template must not emit two #cashu-change-root ids.
+		if ( $this->change_rendered ) {
+			return;
+		}
+		$this->change_rendered = true;
+
 		wp_enqueue_style( 'cashu-public' );
 		wp_enqueue_script( 'cashu-thanks' );
 

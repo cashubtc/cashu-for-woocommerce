@@ -128,6 +128,34 @@ final class ReceiptPageTabsTest extends IntegrationTestCase {
 		$this->assertStringContainsString( 'data-default-tab="unified"', $output );
 	}
 
+	public function test_second_receipt_render_in_same_request_is_suppressed(): void {
+		// A misconfigured checkout page (legacy shortcode left in alongside
+		// the checkout block) runs the order-pay template twice in one
+		// request, firing woocommerce_receipt_* twice. The second render
+		// must be a no-op or the page carries two #cashu-pay-root ids and
+		// a duplicate payment box.
+		$paths = array(
+			'unified'   => true,
+			'cashu'     => true,
+			'lightning' => true,
+		);
+		$this->stubEnvironment( $paths, 'unified' );
+
+		$gw          = new CashuGateway();
+		$gw->enabled = 'yes';
+
+		ob_start();
+		$gw->receipt_page( 123 );
+		$first = (string) ob_get_clean();
+
+		ob_start();
+		$gw->receipt_page( 123 );
+		$second = (string) ob_get_clean();
+
+		$this->assertStringContainsString( 'cashu-pay-root', $first );
+		$this->assertSame( '', $second );
+	}
+
 	public function test_omits_tab_strip_when_only_one_path_enabled(): void {
 		$paths = array( 'unified' => false, 'cashu' => true, 'lightning' => false );
 		$this->stubEnvironment( $paths, 'cashu' );
