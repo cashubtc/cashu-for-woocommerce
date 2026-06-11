@@ -11,7 +11,7 @@ require_once $autoload;
 
 // 2. Define plugin constants (so your classes don't explode)
 if (!defined('CASHU_WC_VERSION')) {
-	define('CASHU_WC_VERSION', '0.3.1');
+	define('CASHU_WC_VERSION', '0.3.2');
 }
 if (!defined('CASHU_WC_PATH')) {
 	define('CASHU_WC_PATH', dirname(__DIR__));

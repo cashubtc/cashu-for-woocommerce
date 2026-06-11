@@ -25,7 +25,7 @@ If a deploy fails partway, or you need to re-push a tag without cutting a new Gi
 **Gotchas to watch for:**
 
 - The workflow refuses to deploy unless the tag, `package.json` version, plugin header version, **and** `Stable tag:` in `readme.txt` all agree. Forgetting to bump `Stable tag` is the classic wp.org footgun — the install page would still show the old version even after /trunk/ updates.
-- wp.org plugin page graphics (banner, icon, screenshots) live in a `.wordpress-org/` directory at repo root, which doesn't exist yet. When you want to add them, follow [10up's asset spec](https://github.com/10up/action-wordpress-plugin-deploy#wordpressorg-assets) — the workflow silently skips assets when `.wordpress-org/` is absent.
+- wp.org plugin page graphics (banner, icon, screenshots) live in the `.wordpress-org/` directory at repo root, following [10up's asset spec](https://github.com/10up/action-wordpress-plugin-deploy#wordpressorg-assets). The deploy syncs it to SVN `/assets/` destructively — it must always hold the complete set, and asset changes only reach wp.org when a release tag containing them is deployed.
 
 ## Project specifics
 
