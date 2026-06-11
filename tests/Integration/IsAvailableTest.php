@@ -31,6 +31,19 @@ final class IsAvailableTest extends IntegrationTestCase {
 		Functions\when( '_x' )->returnArg( 1 );
 		Functions\when( 'add_action' )->justReturn( true );
 		Functions\when( 'add_filter' )->justReturn( true );
+		// The cart-total limits check is exercised by IsAvailableLimitsTest;
+		// here there's no cart, so is_available() must skip it (fail open).
+		// WC() needs an explicit stub: another test in the process may have
+		// defined the function already, and Brain\Monkey then requires every
+		// test that hits it to declare behaviour.
+		Functions\when( 'is_admin' )->justReturn( false );
+		Functions\when( 'WC' )->alias(
+			static function (): \stdClass {
+				$wc       = new \stdClass();
+				$wc->cart = null;
+				return $wc;
+			}
+		);
 	}
 
 	private function gateway( string $enabled = 'yes' ): CashuGateway {

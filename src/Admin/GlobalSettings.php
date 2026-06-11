@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Cashu\WC\Admin;
 
 use Cashu\WC\Helpers\Logger;
+use Cashu\WC\Helpers\MintClient;
+use Cashu\WC\Helpers\MintLimits;
 
 class GlobalSettings extends \WC_Settings_Page {
 
@@ -67,6 +69,7 @@ class GlobalSettings extends \WC_Settings_Page {
 					'Where melted payments are sent, either a lightning address or LNURL.',
 					'cashu-for-woocommerce'
 				),
+				'desc'        => $this->lnurl_limits_desc(),
 				'default'     => '',
 			),
 			'trusted_mint'      => array(
@@ -78,6 +81,7 @@ class GlobalSettings extends \WC_Settings_Page {
 					'A mint you trust to act as your intermediary.',
 					'cashu-for-woocommerce'
 				),
+				'desc'        => $this->mint_limits_desc(),
 				'default'     => 'https://mint.minibits.cash/Bitcoin',
 			),
 			'section_end_basic' => array(
@@ -167,5 +171,61 @@ class GlobalSettings extends \WC_Settings_Page {
 				'type' => 'sectionend',
 			),
 		);
+	}
+
+	/**
+	 * Last-known bolt11 amount limits for the configured mint, shown under
+	 * the Trusted Mint field. Empty (so WC renders nothing) until a save or
+	 * cron tick has snapshotted them, or when the snapshot belongs to a
+	 * different mint than the one currently saved.
+	 */
+	private function mint_limits_desc(): string {
+		$block = MintLimits::snapshot()['mint'] ?? null;
+		if ( ! is_array( $block ) ) {
+			return '';
+		}
+		$current = MintClient::normalize_url( trim( (string) get_option( 'cashu_trusted_mint', '' ) ) );
+		if ( '' === $current || MintClient::normalize_url( (string) ( $block['url'] ?? '' ) ) !== $current ) {
+			return '';
+		}
+		return sprintf(
+			/* translators: 1: customer pay-in limits (e.g. "100–10,000 sat"), 2: merchant pay-out limits, 3: human-readable age (e.g. "5 mins") */
+			__( 'Advertised Lightning limits — customer pay-in: %1$s; pay-out: %2$s (checked %3$s ago).', 'cashu-for-woocommerce' ),
+			MintLimits::format_range( $this->limit_int( $block, 'mint_min' ), $this->limit_int( $block, 'mint_max' ) ),
+			MintLimits::format_range( $this->limit_int( $block, 'melt_min' ), $this->limit_int( $block, 'melt_max' ) ),
+			human_time_diff( absint( $block['fetched_at'] ?? 0 ), time() )
+		);
+	}
+
+	/**
+	 * Last-known LUD-06 sendable bounds for the configured Lightning
+	 * address, shown under its field. Same visibility rules as
+	 * mint_limits_desc().
+	 */
+	private function lnurl_limits_desc(): string {
+		$block = MintLimits::snapshot()['lnurl'] ?? null;
+		if ( ! is_array( $block ) ) {
+			return '';
+		}
+		$current = strtolower( trim( (string) get_option( 'cashu_lightning_address', '' ) ) );
+		if ( '' === $current || (string) ( $block['address'] ?? '' ) !== $current ) {
+			return '';
+		}
+		return sprintf(
+			/* translators: 1: send-amount limits (e.g. "1–500,000 sat"), 2: human-readable age (e.g. "5 mins") */
+			__( 'Accepts %1$s (checked %2$s ago).', 'cashu-for-woocommerce' ),
+			MintLimits::format_range( $this->limit_int( $block, 'min' ), $this->limit_int( $block, 'max' ) ),
+			human_time_diff( absint( $block['fetched_at'] ?? 0 ), time() )
+		);
+	}
+
+	/** Positive ints only; anything else reads as "no limit". */
+	private function limit_int( array $block, string $key ): ?int {
+		$value = $block[ $key ] ?? null;
+		if ( ! is_numeric( $value ) ) {
+			return null;
+		}
+		$int = (int) $value;
+		return $int > 0 ? $int : null;
 	}
 }

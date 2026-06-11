@@ -4,11 +4,24 @@ declare(strict_types=1);
 namespace Cashu\WC\Admin;
 
 use Cashu\WC\Helpers\CashuPaths;
+use Cashu\WC\Helpers\MintLimits;
 use WC_Admin_Settings;
 
 final class ValidateGlobalSettings {
 
 	private static bool $hooked = false;
+
+	/**
+	 * Once-per-request dedupe for the "Lightning address is narrower"
+	 * note: when both the mint and the address change in one save, both
+	 * probes succeed and would otherwise queue it twice.
+	 */
+	private static bool $lnurl_narrower_flagged = false;
+
+	/** Test seam: clears the per-request notice dedupe between cases. */
+	public static function reset_limits_notice(): void {
+		self::$lnurl_narrower_flagged = false;
+	}
 
 	public static function init(): void {
 		if ( self::$hooked ) {
@@ -175,6 +188,21 @@ final class ValidateGlobalSettings {
 			return __( 'Mint does not advertise NUT-09 (payment recovery) — required so a customer can recover a stranded payment from another device or after clearing their browser. Please choose a mint that supports NUT-09.', 'cashu-for-woocommerce' );
 		}
 
+		// Snapshot the advertised bolt11 amount limits while we hold the
+		// body (the hourly cron keeps them fresh from here), and set the
+		// merchant's expectations up front — a high-ticket store should
+		// learn about a 10k-sat melt cap now, not from a customer.
+		$limits = MintLimits::store_mint_limits( $mint_url, $body );
+		WC_Admin_Settings::add_message(
+			sprintf(
+				/* translators: 1: customer pay-in limits (e.g. "100–10,000 sat"), 2: merchant pay-out limits */
+				__( 'Mint Lightning limits — customer pay-in: %1$s; pay-out to your Lightning address: %2$s. Checkout hides Cashu for order totals outside these ranges.', 'cashu-for-woocommerce' ),
+				MintLimits::format_range( $limits['mint_min'], $limits['mint_max'] ),
+				MintLimits::format_range( $limits['melt_min'], $limits['melt_max'] )
+			)
+		);
+		self::maybe_flag_lnurl_narrower();
+
 		return null;
 	}
 
@@ -309,7 +337,68 @@ final class ValidateGlobalSettings {
 			return __( 'Lightning address provider returned invalid send-amount bounds.', 'cashu-for-woocommerce' );
 		}
 
+		$limits = MintLimits::store_lnurl_limits( $address, $body );
+		WC_Admin_Settings::add_message(
+			sprintf(
+				/* translators: %s: send-amount limits (e.g. "1–500,000 sat") */
+				__( 'Lightning address accepts %s. Checkout hides Cashu for order totals outside this range.', 'cashu-for-woocommerce' ),
+				MintLimits::format_range( $limits['min'], $limits['max'] )
+			)
+		);
+		self::maybe_flag_lnurl_narrower();
+
 		return null;
+	}
+
+	/**
+	 * Warn when the Lightning address's sendable range is the binding
+	 * constraint, i.e. narrower than the mint's melt range on either end —
+	 * that's the surprising cap (merchants expect the mint to be the
+	 * limiter, not their wallet provider). Reads the raw snapshot, not the
+	 * gated accessors: during a settings save the options aren't written
+	 * yet, so source-matching against them would always fail.
+	 */
+	private static function maybe_flag_lnurl_narrower(): void {
+		if ( self::$lnurl_narrower_flagged ) {
+			return;
+		}
+
+		$snapshot = MintLimits::snapshot();
+		$mint     = is_array( $snapshot['mint'] ?? null ) ? $snapshot['mint'] : null;
+		$lnurl    = is_array( $snapshot['lnurl'] ?? null ) ? $snapshot['lnurl'] : null;
+		if ( null === $mint || null === $lnurl ) {
+			return;
+		}
+
+		$melt_min  = self::int_or_null( $mint['melt_min'] ?? null );
+		$melt_max  = self::int_or_null( $mint['melt_max'] ?? null );
+		$lnurl_min = self::int_or_null( $lnurl['min'] ?? null );
+		$lnurl_max = self::int_or_null( $lnurl['max'] ?? null );
+
+		$min_binds = null !== $lnurl_min && $lnurl_min > ( $melt_min ?? 1 );
+		$max_binds = null !== $lnurl_max && ( null === $melt_max || $lnurl_max < $melt_max );
+		if ( ! $min_binds && ! $max_binds ) {
+			return;
+		}
+
+		self::$lnurl_narrower_flagged = true;
+		WC_Admin_Settings::add_message(
+			sprintf(
+				/* translators: 1: Lightning address limits, 2: mint pay-out limits */
+				__( 'Note: your Lightning address (%1$s) is narrower than the mint\'s pay-out range (%2$s) — the Lightning address is the effective limit at checkout.', 'cashu-for-woocommerce' ),
+				MintLimits::format_range( $lnurl_min, $lnurl_max ),
+				MintLimits::format_range( $melt_min, $melt_max )
+			)
+		);
+	}
+
+	/** Positive ints only; anything else reads as "no limit". */
+	private static function int_or_null( $value ): ?int {
+		if ( ! is_numeric( $value ) ) {
+			return null;
+		}
+		$int = (int) $value;
+		return $int > 0 ? $int : null;
 	}
 
 	/**

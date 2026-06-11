@@ -29,6 +29,16 @@ final class ValidateGlobalSettingsTest extends IntegrationTestCase {
 				return $this->optionStore[ $key ] ?? $default;
 			}
 		);
+		Functions\when( 'update_option' )->alias(
+			function ( string $key, $value ) {
+				$this->optionStore[ $key ] = $value;
+				return true;
+			}
+		);
+		Functions\when( 'number_format_i18n' )->alias(
+			static fn ( $n ) => number_format( (float) $n )
+		);
+		ValidateGlobalSettings::reset_limits_notice();
 
 		// Minimal URL plumbing stubs used by sanitize_trusted_mint. Real WP
 		// versions are more sophisticated; we only need enough for these
@@ -535,5 +545,76 @@ final class ValidateGlobalSettingsTest extends IntegrationTestCase {
 
 		$this->assertSame( '', $result );
 		$this->assertCount( 0, WC_Admin_Settings::$errors );
+	}
+
+	// ── limits snapshot + merchant messaging at save time ────────────────
+
+	public function test_successful_mint_probe_stores_limits_and_announces_them(): void {
+		Functions\expect( 'wp_remote_get' )->once()->andReturn(
+			$this->mintInfoResponse( $this->validNut06Body() )
+		);
+
+		ValidateGlobalSettings::sanitize_trusted_mint( 'https://mint.example/' );
+
+		$snapshot = $this->optionStore[ \Cashu\WC\Helpers\MintLimits::OPTION ] ?? array();
+		$this->assertSame( 1, $snapshot['mint']['mint_min'] ?? null );
+		$this->assertSame( 10000, $snapshot['mint']['mint_max'] ?? null );
+		$this->assertSame( 100, $snapshot['mint']['melt_min'] ?? null );
+		$this->assertSame( 10000, $snapshot['mint']['melt_max'] ?? null );
+
+		$this->assertCount( 1, WC_Admin_Settings::$messages );
+		$this->assertStringContainsString( 'Mint Lightning limits', WC_Admin_Settings::$messages[0] );
+		$this->assertStringContainsString( '100–10,000 sat', WC_Admin_Settings::$messages[0] );
+	}
+
+	public function test_successful_lnurl_probe_stores_limits_and_announces_them(): void {
+		Functions\when( 'is_email' )->alias( static fn ( $v ) => $v );
+		Functions\expect( 'wp_remote_get' )->once()->andReturn(
+			$this->lnurlpResponse( $this->validLnurlpBody() ) // 1,000–100,000,000 msat = 1–100,000 sat
+		);
+
+		ValidateGlobalSettings::sanitize_lightning_address( 'me@example.com' );
+
+		$snapshot = $this->optionStore[ \Cashu\WC\Helpers\MintLimits::OPTION ] ?? array();
+		$this->assertSame( 1, $snapshot['lnurl']['min'] ?? null );
+		$this->assertSame( 100000, $snapshot['lnurl']['max'] ?? null );
+
+		$this->assertCount( 1, WC_Admin_Settings::$messages );
+		$this->assertStringContainsString( 'Lightning address accepts 1–100,000 sat', WC_Admin_Settings::$messages[0] );
+	}
+
+	public function test_lnurl_probe_flags_address_narrower_than_melt_range(): void {
+		// Mint can melt up to 10,000,000 sat, but the address caps at
+		// 100,000 — the address is the real checkout limit; say so.
+		$this->optionStore[ \Cashu\WC\Helpers\MintLimits::OPTION ] = array(
+			'mint' => array(
+				'url'        => 'https://mint.example',
+				'mint_min'   => null,
+				'mint_max'   => null,
+				'melt_min'   => 1,
+				'melt_max'   => 10000000,
+				'fetched_at' => time(),
+			),
+		);
+		Functions\when( 'is_email' )->alias( static fn ( $v ) => $v );
+		Functions\expect( 'wp_remote_get' )->once()->andReturn(
+			$this->lnurlpResponse( $this->validLnurlpBody() )
+		);
+
+		ValidateGlobalSettings::sanitize_lightning_address( 'me@example.com' );
+
+		$this->assertCount( 2, WC_Admin_Settings::$messages );
+		$this->assertStringContainsString( 'narrower than the mint', WC_Admin_Settings::$messages[1] );
+	}
+
+	public function test_failed_mint_probe_does_not_touch_limits_snapshot(): void {
+		Functions\expect( 'wp_remote_get' )->once()->andReturn(
+			new \WP_Error( 'http_request_failed', 'connect timeout' )
+		);
+
+		ValidateGlobalSettings::sanitize_trusted_mint( 'https://mint.example/' );
+
+		$this->assertArrayNotHasKey( \Cashu\WC\Helpers\MintLimits::OPTION, $this->optionStore );
+		$this->assertCount( 0, WC_Admin_Settings::$messages );
 	}
 }
