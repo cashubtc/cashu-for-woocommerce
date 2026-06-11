@@ -175,7 +175,7 @@ final class ConfirmMeltQuoteController {
 
 		$spot_time   = absint( $order->get_meta( '_cashu_spot_time', true ) );
 		$spot_expiry = $spot_time + CashuGateway::QUOTE_EXPIRY_SECS;
-		if ( $spot_expiry > 0 && time() >= $spot_expiry ) {
+		if ( time() >= $spot_expiry ) {
 			return rest_ensure_response(
 				array(
 					'ok'     => true,

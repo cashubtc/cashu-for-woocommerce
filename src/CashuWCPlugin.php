@@ -33,8 +33,6 @@ final class CashuWCPlugin {
 	 * Register all hooks, this is the only place that adds actions and filters.
 	 */
 	public function run(): void {
-		$this->includes();
-
 		// One-time settings migration. Cheap (one get_option) on every load
 		// after first run; runs at most once per install.
 		self::maybeMigrateSettings();
@@ -98,13 +96,6 @@ final class CashuWCPlugin {
 			add_action( 'admin_init', array( $this, 'registerAdminNotices' ) );
 			\Cashu\WC\Admin\ValidateGlobalSettings::init();
 			\Cashu\WC\Admin\OrderMetaBox::register();
-		}
-	}
-
-	private function includes(): void {
-		// Make sure WP internal functions are available.
-		if ( ! function_exists( 'is_plugin_active' ) ) {
-			include_once ABSPATH . 'wp-admin/includes/plugin.php';
 		}
 	}
 
@@ -274,12 +265,14 @@ final class CashuWCPlugin {
 			);
 		}
 
+		if ( ! function_exists( 'is_plugin_active' ) ) {
+			include_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
 		if ( ! is_plugin_active( 'woocommerce/woocommerce.php' ) ) {
 			Notice::addNotice(
 				'error',
 				__( 'WooCommerce does not appear to be installed. Make sure you do before you activate Cashu Payment Gateway.', 'cashu-for-woocommerce' )
 			);
-
 		}
 
 		if ( ! function_exists( 'curl_init' ) ) {
@@ -385,11 +378,9 @@ final class CashuWCPlugin {
 			return $totals;
 		}
 
-		$symbol = defined( 'CASHU_WC_BIP177_SYMBOL' ) ? CASHU_WC_BIP177_SYMBOL : '';
-
 		$totals['cashu_expected_amount'] = array(
 			'label' => __( 'Cashu Amount', 'cashu-for-woocommerce' ),
-			'value' => esc_html( $symbol . number_format_i18n( $sats ) ),
+			'value' => esc_html( CASHU_WC_BIP177_SYMBOL . number_format_i18n( $sats ) ),
 		);
 
 		return $totals;

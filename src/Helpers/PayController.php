@@ -129,10 +129,12 @@ final class PayController {
 			return new WP_Error( 'cashu_rate_limited', 'Too many attempts.', array( 'status' => 429 ) );
 		}
 
-		// Spot quote still valid?
+		// Spot quote still valid? Missing spot meta means setup never
+		// completed, which reads as already-expired — correct, since an
+		// order without a quote must not accept payment.
 		$spot_time   = absint( $order->get_meta( '_cashu_spot_time', true ) );
 		$spot_expiry = $spot_time + CashuGateway::QUOTE_EXPIRY_SECS;
-		if ( $spot_expiry > 0 && time() >= $spot_expiry ) {
+		if ( time() >= $spot_expiry ) {
 			return new WP_Error( 'cashu_expired', 'Payment window expired.', array( 'status' => 410 ) );
 		}
 
