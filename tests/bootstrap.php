@@ -16,6 +16,9 @@ if (!defined('CASHU_WC_VERSION')) {
 if (!defined('CASHU_WC_PATH')) {
 	define('CASHU_WC_PATH', dirname(__DIR__));
 }
+if (!defined('CASHU_WC_FILE')) {
+	define('CASHU_WC_FILE', dirname(__DIR__) . '/cashu-for-woocommerce.php');
+}
 if (!defined('CASHU_WC_URL')) {
 	define('CASHU_WC_URL', 'file://' . dirname(__DIR__));
 }
@@ -205,6 +208,24 @@ if (!class_exists('WC_Settings_Page')) {
 		public $label = '';
 		public function __construct() {}
 	}
+}
+
+// 11c. Skeleton FeaturesUtil + Blocks AbstractPaymentMethodType so the
+//      plugin bootstrap's WooCommerce feature/compat declarations can run
+//      under tests. FeaturesUtil records calls for assertion; reset
+//      $declared in setUp when asserting on it.
+if (!class_exists('Automattic\WooCommerce\Utilities\FeaturesUtil')) {
+	class CashuTestFeaturesUtil {
+		public static array $declared = array();
+		public static function declare_compatibility(string $feature, string $file, bool $enabled = false): void {
+			self::$declared[] = array($feature, $file, $enabled);
+		}
+	}
+	class_alias('CashuTestFeaturesUtil', 'Automattic\WooCommerce\Utilities\FeaturesUtil');
+}
+if (!class_exists('Automattic\WooCommerce\Blocks\Payments\Integrations\AbstractPaymentMethodType')) {
+	class CashuTestAbstractPaymentMethodType {}
+	class_alias('CashuTestAbstractPaymentMethodType', 'Automattic\WooCommerce\Blocks\Payments\Integrations\AbstractPaymentMethodType');
 }
 
 // 12. Skeleton WC_Admin_Settings. The plugin's ValidateGlobalSettings calls
