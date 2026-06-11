@@ -472,16 +472,6 @@ final class ConfirmMeltQuoteController {
 			);
 		}
 
-		// Cross-check the mint's reported preimage against the stored payment_hash
-		// before storing it. The settlement is still trustable — the mint has
-		// reported PAID via its authoritative state endpoint — but a recorded
-		// preimage that doesn't actually hash to the invoice's payment_hash
-		// is misleading audit data.
-		if ( '' !== $mint_preimage && '' !== $payment_hash && ! Bolt11::preimageMatches( $mint_preimage, $payment_hash ) ) {
-			Logger::error( 'claim_melt_quote: mint preimage does not match invoice hash for order ' . $order->get_id() );
-			$mint_preimage = '';
-		}
-
 		if ( ! $this->mark_paid( $order, $quote_id, $mint_preimage, $reported_amount ) ) {
 			return rest_ensure_response(
 				array(
@@ -578,19 +568,14 @@ final class ConfirmMeltQuoteController {
 				return false;
 			}
 
-			if ( null !== $preimage && '' !== $preimage ) {
-				$fresh->update_meta_data( '_cashu_payment_preimage', sanitize_text_field( $preimage ) );
-			}
-			// Clear all pending-state markers in one place so every settlement
-			// path (cryptographic-preimage, mint-probed PAID, reconciler) leaves
-			// the order in the same final shape.
-			$fresh->delete_meta_data( '_cashu_melt_pending_quote_id' );
-			$fresh->delete_meta_data( '_cashu_melt_pending_at' );
-			$fresh->delete_meta_data( '_cashu_last_payment_attempt_at' );
-			SettlementGuard::mark_paid_once( $fresh );
-			$fresh->payment_complete( $quote_id );
-
-			$this->add_paid_order_note( $fresh, $quote_id, $preimage, $amount );
+			SettlementGuard::complete(
+				$fresh,
+				$quote_id,
+				(string) $preimage,
+				(string) $amount,
+				/* translators: %1$s: BTC Symbol, %2$s: amount, %3$s: Lightning Address, %4$s: Melt Quote ID, %5$s: Payment preimage (truncated) */
+				__( "Cashu payment: %1\$s%2\$s\nSent to: %3\$s\nMelt quote: %4\$s\nPayment preimage: %5\$s", 'cashu-for-woocommerce' )
+			);
 
 			// Keep the caller's $order reference in sync.
 			$order->read_meta_data( true );
@@ -598,30 +583,6 @@ final class ConfirmMeltQuoteController {
 		} finally {
 			OrderLock::release( $order_id, 'pay', $lock_token );
 		}
-	}
-
-	private function add_paid_order_note( WC_Order $order, string $quote_id, ?string $preimage, ?string $amount ): void {
-		// Prefer the LN address snapshotted at quote creation; fall back
-		// to the current option for legacy orders that pre-date that snapshot.
-		$lightning_address = (string) $order->get_meta( '_cashu_invoice_ln_address', true );
-		if ( '' === $lightning_address ) {
-			$lightning_address = (string) get_option( 'cashu_lightning_address', '' );
-		}
-		$amount_for_note = ( null !== $amount && '' !== $amount )
-			? $amount
-			: (string) absint( $order->get_meta( '_cashu_melt_total', true ) );
-
-		$order->add_order_note(
-			sprintf(
-				/* translators: %1$s: BTC Symbol, %2$s: amount, %3$s: Lightning Address, %4$s: Melt Quote ID, %5$s: Payment preimage (truncated) */
-				__( "Cashu payment: %1\$s%2\$s\nSent to: %3\$s\nMelt quote: %4\$s\nPayment preimage: %5\$s", 'cashu-for-woocommerce' ),
-				CASHU_WC_BIP177_SYMBOL,
-				$amount_for_note,
-				$lightning_address,
-				$quote_id,
-				CashuHelper::redactPreimage( $preimage )
-			)
-		);
 	}
 
 	/**
