@@ -162,7 +162,36 @@ final class ValidateGlobalSettings {
 			}
 		}
 
+		// NUT-09 (restore signatures) is the customer's only recovery route
+		// when proofs are minted but stranded — a tab that died between mint
+		// and melt, or a return on a different device / after a cleared
+		// browser, where no local proof snapshot survives. The receipt page
+		// re-derives the per-order wallet seed and asks the mint to restore
+		// the blinded signatures it already issued (verified live: this is
+		// what rescues an otherwise lost Lightning-leg payment). Without
+		// NUT-09 that path silently can't work, so a mid-flight failure can
+		// cost the customer their funds. Unlike NUT-04/05 this is a
+		// settings nut advertised as {"supported": true}, not a methods list.
+		if ( ! self::nut_supported_flag( $body['nuts']['9'] ?? null ) ) {
+			return __( 'Mint does not advertise NUT-09 (payment recovery) — required so a customer can recover a stranded payment from another device or after clearing their browser. Please choose a mint that supports NUT-09.', 'cashu-for-woocommerce' );
+		}
+
 		return null;
+	}
+
+	/**
+	 * True if a settings-style NUT entry is advertised as supported. The
+	 * canonical shape is `{"supported": true}`; some mints shorthand the
+	 * whole entry to a bare `true`. Anything else (missing, false, malformed)
+	 * is treated as unsupported.
+	 *
+	 * @param mixed $nut The decoded `nuts[<key>]` value.
+	 */
+	private static function nut_supported_flag( $nut ): bool {
+		if ( true === $nut ) {
+			return true;
+		}
+		return is_array( $nut ) && ! empty( $nut['supported'] );
 	}
 
 	private static function methods_include_bolt11_sat( array $methods ): bool {

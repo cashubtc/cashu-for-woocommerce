@@ -378,13 +378,17 @@ final class ConfirmMeltQuoteController {
 		$preimage     = trim( (string) $request->get_param( 'preimage' ) );
 		$payment_hash = (string) $order->get_meta( '_cashu_payment_hash', true );
 
-		// If the client supplied a preimage, we MUST verify it cryptographically
-		// before doing anything else. A correct preimage marks the order paid
-		// with zero mint traffic. An incorrect preimage is treated as malicious
-		// or buggy — reject outright; do not silently fall back to a mint hit
-		// (that's the amplification vector).
-		if ( '' !== $preimage ) {
-			if ( '' !== $payment_hash && $this->preimage_matches( $preimage, $payment_hash ) ) {
+		// If the client supplied a preimage AND we hold the invoice's
+		// payment_hash, we MUST verify it cryptographically before doing
+		// anything else. A correct preimage marks the order paid with zero
+		// mint traffic. An incorrect preimage is treated as malicious or
+		// buggy — reject; do not silently fall back to a mint hit (that's
+		// the amplification vector). When the order carries no stored
+		// payment_hash (Bolt11 parse failed at setup — rare), we can't
+		// verify anything, so fall through to the single mint probe below
+		// rather than 400-ing a possibly legitimate settlement forever.
+		if ( '' !== $preimage && '' !== $payment_hash ) {
+			if ( $this->preimage_matches( $preimage, $payment_hash ) ) {
 				if ( ! $this->mark_paid( $order, $quote_id, $preimage, null ) ) {
 					// Lock contention — settlement is in flight elsewhere. Tell
 					// the browser to keep polling rather than claiming PAID on
@@ -404,6 +408,16 @@ final class ConfirmMeltQuoteController {
 					)
 				);
 			}
+			// Stage the pending marker before rejecting. A wallet reaching
+			// this endpoint has just called meltProofsBolt11 — its proofs
+			// may already be committed at the mint even though the preimage
+			// it reported is bogus (wire corruption, buggy wallet). Without
+			// the marker, MeltReconciler would have nothing to follow and a
+			// real settlement behind a bad preimage would strand. Mirrors
+			// the no-preimage path's pre-stage below.
+			$order->update_meta_data( '_cashu_melt_pending_quote_id', $quote_id );
+			$order->update_meta_data( '_cashu_melt_pending_at', time() );
+			$order->save();
 			return new WP_Error( 'cashu_bad_preimage', 'Preimage does not match invoice payment hash.', array( 'status' => 400 ) );
 		}
 
@@ -588,6 +602,16 @@ final class ConfirmMeltQuoteController {
 				return true;
 			}
 
+			// Replay guard: never re-complete an order the admin has since
+			// cancelled/failed/refunded. The melt quote is single-use, so a
+			// matching preimage or PAID mint state here only re-proves the
+			// ORIGINAL settlement — no new funds moved. See SettlementGuard.
+			if ( SettlementGuard::should_block( $fresh ) ) {
+				SettlementGuard::note_blocked( $fresh, $quote_id );
+				$fresh->save();
+				return false;
+			}
+
 			if ( null !== $preimage && '' !== $preimage ) {
 				$fresh->update_meta_data( '_cashu_payment_preimage', sanitize_text_field( $preimage ) );
 			}
@@ -597,6 +621,7 @@ final class ConfirmMeltQuoteController {
 			$fresh->delete_meta_data( '_cashu_melt_pending_quote_id' );
 			$fresh->delete_meta_data( '_cashu_melt_pending_at' );
 			$fresh->delete_meta_data( '_cashu_last_payment_attempt_at' );
+			SettlementGuard::mark_paid_once( $fresh );
 			$fresh->payment_complete( $quote_id );
 
 			$this->add_paid_order_note( $fresh, $quote_id, $preimage, $amount );
@@ -622,13 +647,13 @@ final class ConfirmMeltQuoteController {
 
 		$order->add_order_note(
 			sprintf(
-				/* translators: %1$s: BTC Symbol, %2$s: amount, %3$s: Lightning Address, %4$s: Melt Quote ID, %5$s: Payment preimage */
+				/* translators: %1$s: BTC Symbol, %2$s: amount, %3$s: Lightning Address, %4$s: Melt Quote ID, %5$s: Payment preimage (truncated) */
 				__( "Cashu payment: %1\$s%2\$s\nSent to: %3\$s\nMelt quote: %4\$s\nPayment preimage: %5\$s", 'cashu-for-woocommerce' ),
 				CASHU_WC_BIP177_SYMBOL,
 				$amount_for_note,
 				$lightning_address,
 				$quote_id,
-				(string) ( $preimage ?? '' )
+				CashuHelper::redactPreimage( $preimage )
 			)
 		);
 	}

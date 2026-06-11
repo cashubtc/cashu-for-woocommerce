@@ -7,6 +7,10 @@ namespace Cashu\WC\Admin;
 class Notice {
 	/**
 	 * Adds notice to the admin UI.
+	 *
+	 * $message may contain limited HTML (links, buttons — the settings and
+	 * review notices rely on this); it is sanitized with wp_kses_post on
+	 * output. Never pass unsanitized user input as $message.
 	 */
 	public static function addNotice( string $level, string $message, bool $dismissible = false, ?string $customClass = null ): void {
 		add_action(

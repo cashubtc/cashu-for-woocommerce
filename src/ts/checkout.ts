@@ -386,17 +386,20 @@ jQuery(function ($) {
         // Slow path: NUT-09 restore via the deterministic seed. The mint
         // returns any signatures it has against blinded outputs we'd have
         // derived for this seed × keyset, which we unblind into Proofs.
+        // Compare against the QUOTE's amount, not expectedAmount — after a
+        // spot re-quote the two can diverge, and the proofs the mint issued
+        // can only ever sum to the quote's amount.
         setStatus(t('recovering_proofs'));
-        const restored = await tryRestore(wallet, data.expectedAmount);
+        const restored = await tryRestore(wallet, data.mintQuote.amount);
         if (
           restored.length > 0 &&
-          sumProofs(restored).toNumber() >= data.expectedAmount
+          sumProofs(restored).toNumber() >= data.mintQuote.amount
         ) {
           // Persist immediately so a subsequent reload uses the fast path.
           saveStrandedProofs(
             data.mintQuote.id,
             data.trustedMint,
-            data.expectedAmount,
+            data.mintQuote.amount,
             restored,
           );
           void run(() => handleMintQuotePaid(restored));
@@ -490,8 +493,16 @@ jQuery(function ($) {
         // the quote is already ISSUED.
         mintedProofs = knownProofs;
       } else {
+        // Mint the QUOTE's amount, not expectedAmount. They're identical in
+        // the normal flow, but diverge when a paid mint quote is kept across
+        // a spot re-quote (customer paid, melt didn't finish, price moved):
+        // the mint only ever signs outputs summing to the quote's amount, so
+        // requesting expectedAmount would be rejected and strand the
+        // customer's already-paid quote. Minting the quote amount succeeds;
+        // if it then can't cover the new melt total, the melt-failure path
+        // surfaces a recovery token instead of locking the funds.
         mintedProofs = await wallet.mintProofsBolt11(
-          data.expectedAmount,
+          data.mintQuote.amount,
           data.mintQuote.id,
         );
         // Persist synchronously before any further await so a refresh
@@ -500,7 +511,7 @@ jQuery(function ($) {
         saveStrandedProofs(
           data.mintQuote.id,
           data.trustedMint,
-          data.expectedAmount,
+          data.mintQuote.amount,
           mintedProofs,
         );
       }

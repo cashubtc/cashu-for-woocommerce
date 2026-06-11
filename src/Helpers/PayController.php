@@ -81,8 +81,13 @@ final class PayController {
 	}
 
 	public function pay( WP_REST_Request $request ): WP_REST_Response|WP_Error {
-		$order_id  = (int) $request->get_param( 'order_id' );
-		$order_key = sanitize_text_field( (string) $request->get_param( 'order_key' ) );
+		// Pin the order reference to the URL captures. get_param() lets a
+		// same-named key in the JSON body shadow the route values (body wins
+		// in WP's parameter order), which can't cross orders — auth binds to
+		// the order_key — but would make logs disagree with the route hit.
+		$url_params = $request->get_url_params();
+		$order_id   = (int) ( $url_params['order_id'] ?? $request->get_param( 'order_id' ) );
+		$order_key  = sanitize_text_field( (string) ( $url_params['order_key'] ?? $request->get_param( 'order_key' ) ) );
 
 		if ( $order_id <= 0 || '' === $order_key ) {
 			return new WP_Error( 'cashu_bad_request', 'Bad order reference.', array( 'status' => 400 ) );
@@ -370,6 +375,26 @@ final class PayController {
 	 * @param array $mint_response Mint's reply (decoded). Must carry state=PAID.
 	 */
 	private function finalise_paid( \WC_Order $order, string $quote_id, array $mint_response, string $expected_id, int $expected_amount ): \WP_REST_Response {
+		// Replay guard: the melt quote is single-use, so a PAID mint state
+		// here can only re-prove a settlement that already completed this
+		// order once. If the admin has since cancelled/failed it, refuse to
+		// re-complete (see SettlementGuard). Still return ok + change so a
+		// retrying wallet gets its change proofs back.
+		if ( SettlementGuard::should_block( $order ) ) {
+			SettlementGuard::note_blocked( $order, $quote_id );
+			$order->delete_meta_data( '_cashu_melt_pending_quote_id' );
+			$order->delete_meta_data( '_cashu_melt_pending_at' );
+			$order->save();
+			$change = isset( $mint_response['change'] ) && is_array( $mint_response['change'] ) ? $mint_response['change'] : array();
+			return rest_ensure_response(
+				array(
+					'status' => 'ok',
+					'id'     => $expected_id,
+					'change' => $change,
+				)
+			);
+		}
+
 		// Persist preimage + change. Verify the mint-supplied preimage
 		// against the stored payment_hash before storing it — a misbehaving
 		// or compromised mint could otherwise poison the audit trail. A
@@ -394,6 +419,7 @@ final class PayController {
 		$order->delete_meta_data( '_cashu_melt_pending_at' );
 		$order->delete_meta_data( '_cashu_last_payment_attempt_at' );
 
+		SettlementGuard::mark_paid_once( $order );
 		$order->payment_complete( $quote_id );
 
 		// Prefer the LN address snapshotted at quote creation; fall back
@@ -408,13 +434,13 @@ final class PayController {
 
 		$order->add_order_note(
 			sprintf(
-				/* translators: %1$s: BTC Symbol, %2$s: amount, %3$s: Lightning Address, %4$s: Melt Quote ID, %5$s: Payment preimage */
+				/* translators: %1$s: BTC Symbol, %2$s: amount, %3$s: Lightning Address, %4$s: Melt Quote ID, %5$s: Payment preimage (truncated) */
 				__( "Cashu payment (NUT-18): %1\$s%2\$s\nSent to: %3\$s\nMelt quote: %4\$s\nPayment preimage: %5\$s", 'cashu-for-woocommerce' ),
 				CASHU_WC_BIP177_SYMBOL,
 				$paid_amount,
 				$lightning_address,
 				$quote_id,
-				$verified_preimage
+				CashuHelper::redactPreimage( $verified_preimage )
 			)
 		);
 

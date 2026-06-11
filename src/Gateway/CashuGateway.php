@@ -54,6 +54,26 @@ class CashuGateway extends \WC_Payment_Gateway {
 	 */
 	protected $ln_address = '';
 
+	/**
+	 * Once-per-request render guards. A checkout page that carries two
+	 * checkout renderers — e.g. the legacy [woocommerce_checkout]
+	 * shortcode left in alongside the checkout block after a migration —
+	 * runs the order-pay/thank-you templates twice, firing our render
+	 * hooks twice on one request (seen live during testing). A second
+	 * render is never valid (duplicate element ids; the JS binds the
+	 * first root only), so dedupe defensively. The duplicate fire hits
+	 * the same gateway instance, so instance flags suffice — and they
+	 * reset naturally per request / per test.
+	 *
+	 * @var bool
+	 */
+	private $receipt_rendered = false;
+
+	/**
+	 * @var bool
+	 */
+	private $change_rendered = false;
+
 	public function __construct() {
 		// Init gateway
 		$this->id = 'cashu_default';
@@ -386,55 +406,76 @@ class CashuGateway extends \WC_Payment_Gateway {
 				return;
 			}
 
-			/**
-			 * Filter the order status for cashu payment (Default: 'pending').
-			 *
-			 * @param string $status The default status.
-			 * @param object $order  The order object.
-			 */
-			$process_payment_status = apply_filters(
-				'cashu_wc_process_payment_order_status',
-				OrderStatus::PENDING,
-				$fresh
-			);
-
-			// Re-check is_paid from a fresh DB read immediately before
-			// update_status. A concurrent payment_complete (cashu leg
-			// PayController, LN leg mark_paid, or MeltReconciler) can flip
-			// the order to a paid status between the is_paid() check above
-			// and this point — update_status('pending') would silently
-			// un-pay the order and fire WC's processing→pending transition.
-			$latest = wc_get_order( $order_id );
-			if ( $latest && $latest->is_paid() ) {
+			// Also take the 'pay' scope for the status write + quote
+			// mutations, so setup serialises against PayController /
+			// mark_paid / MeltReconciler. Without it, a settlement landing
+			// between our re-check and update_status would be regressed to
+			// 'pending', and quote rotation (archive_melt_quote) could race
+			// an in-flight melt's pending marker. Lock ordering is always
+			// setup → pay (no path acquires them in reverse), so this can't
+			// deadlock. TTL matches PayController's melt window.
+			$pay_token = OrderLock::acquire( $order_id, 'pay', 120 );
+			if ( null === $pay_token ) {
+				// A settlement is mid-flight; mutating status or quotes
+				// under it is exactly the race this lock closes. Bail and
+				// let the caller re-render from current meta.
+				Logger::debug( 'setup_cashu_payment skipping: pay lock held for order ' . $order_id );
+				$order->read_meta_data( true );
 				return;
 			}
 
-			// Set order status.
-			$fresh->update_status(
-				$process_payment_status,
-				_x( 'Awaiting Cashu payment', 'Cashu payment method', 'cashu-for-woocommerce' )
-			);
+			try {
+				/**
+				 * Filter the order status for cashu payment (Default: 'pending').
+				 *
+				 * @param string $status The default status.
+				 * @param object $order  The order object.
+				 */
+				$process_payment_status = apply_filters(
+					'cashu_wc_process_payment_order_status',
+					OrderStatus::PENDING,
+					$fresh
+				);
 
-			// Determine invoice amount in sats (merchant receives this).
-			$order_total_sats = $this->get_total_sats( $fresh );
+				// Re-check is_paid from a fresh DB read immediately before
+				// update_status. A payment_complete that finished JUST before
+				// we took the pay lock (cashu leg PayController, LN leg
+				// mark_paid, or MeltReconciler) would otherwise be silently
+				// un-paid by update_status('pending').
+				$latest = wc_get_order( $order_id );
+				if ( $latest && $latest->is_paid() ) {
+					return;
+				}
 
-			// Create or reuse melt quote (vendor payment side), store fee reserve,
-			// set the headline _cashu_melt_total = amount + fee_reserve + input buffer.
-			$this->ensure_melt_quote_for_order( $fresh, $order_total_sats );
+				// Set order status.
+				$fresh->update_status(
+					$process_payment_status,
+					_x( 'Awaiting Cashu payment', 'Cashu payment method', 'cashu-for-woocommerce' )
+				);
 
-			// Create or reuse mint quote (customer payment side). The customer pays
-			// this BOLT11 via LN; the quote_id is what the browser uses to claim
-			// proofs from the mint. Locking this server-side means a page reload
-			// or browser switch can never lose the quote_id and orphan the
-			// customer's payment.
-			$melt_total = absint( $fresh->get_meta( '_cashu_melt_total', true ) );
-			$this->ensure_mint_quote_for_order( $fresh, $melt_total );
+				// Determine invoice amount in sats (merchant receives this).
+				$order_total_sats = $this->get_total_sats( $fresh );
 
-			$fresh->save();
+				// Create or reuse melt quote (vendor payment side), store fee reserve,
+				// set the headline _cashu_melt_total = amount + fee_reserve + input buffer.
+				$this->ensure_melt_quote_for_order( $fresh, $order_total_sats );
 
-			// Mirror writes back onto the caller's $order so they don't
-			// have to re-read from DB themselves.
-			$order->read_meta_data( true );
+				// Create or reuse mint quote (customer payment side). The customer pays
+				// this BOLT11 via LN; the quote_id is what the browser uses to claim
+				// proofs from the mint. Locking this server-side means a page reload
+				// or browser switch can never lose the quote_id and orphan the
+				// customer's payment.
+				$melt_total = absint( $fresh->get_meta( '_cashu_melt_total', true ) );
+				$this->ensure_mint_quote_for_order( $fresh, $melt_total );
+
+				$fresh->save();
+
+				// Mirror writes back onto the caller's $order so they don't
+				// have to re-read from DB themselves.
+				$order->read_meta_data( true );
+			} finally {
+				OrderLock::release( $order_id, 'pay', $pay_token );
+			}
 		} finally {
 			OrderLock::release( $order_id, 'setup', $lock_token );
 		}
@@ -557,6 +598,17 @@ class CashuGateway extends \WC_Payment_Gateway {
 			throw new \RuntimeException( 'Cashu gateway is not configured.' );
 		}
 
+		// Never touch the melt quote while a melt is mid-flight at the mint.
+		// The pending marker means proofs may already be committed against
+		// the current quote — rotating here (including the changed-mint
+		// branch below, which archives WITHOUT consulting the issuing mint)
+		// would drop the marker and orphan a settling payment. The marker
+		// lifecycle belongs to resolve_pending_melt / MeltReconciler, which
+		// clear it on a positive UNPAID or after the 24h age-out.
+		if ( '' !== (string) $order->get_meta( '_cashu_melt_pending_quote_id', true ) ) {
+			return;
+		}
+
 		// Use existing melt quote?
 		$quote_id     = (string) $order->get_meta( '_cashu_melt_quote_id', true );
 		$quote_expiry = absint( $order->get_meta( '_cashu_melt_quote_expiry', true ) );
@@ -629,6 +681,17 @@ class CashuGateway extends \WC_Payment_Gateway {
 
 		if ( '' === $quote_id || $amount <= 0 || $expiry <= 0 || 'sat' !== $unit ) {
 			throw new \RuntimeException( 'Invalid melt quote response from mint.' );
+		}
+
+		// The mint decodes the BOLT11 we handed it, so its quoted amount is
+		// the invoice's real amount. It MUST equal what we asked the LNURL
+		// service to invoice (LUD-06 requires exact-amount invoices) — a
+		// mismatch means the Lightning address provider returned a wrong-
+		// amount invoice, and proceeding would let the order settle for the
+		// wrong number of sats.
+		if ( $amount !== $order_total_sats ) {
+			Logger::error( 'Lightning invoice amount mismatch for order ' . $order->get_id() . ': requested ' . $order_total_sats . ' sat, invoice is for ' . $amount . ' sat.' );
+			throw new \RuntimeException( 'Lightning invoice amount mismatch.' );
 		}
 
 		// Persist the quote context for confirm step later.
@@ -989,7 +1052,7 @@ class CashuGateway extends \WC_Payment_Gateway {
 
 	private function request_melt_quote_bolt11( string $bolt11 ): array {
 		// Setup request
-		$endpoint = $this->trusted_mint . '/v1/melt/quote/bolt11';
+		$endpoint = rtrim( $this->trusted_mint, '/' ) . '/v1/melt/quote/bolt11';
 		$args     = array(
 			'timeout' => 10,
 			'headers' => array(
@@ -1026,6 +1089,14 @@ class CashuGateway extends \WC_Payment_Gateway {
 	}
 
 	public function receipt_page( $order_id ) {
+		// Render once per request — see $receipt_rendered. The JS only ever
+		// binds the first #cashu-pay-root, so a second render would be dead
+		// markup with a duplicate element id.
+		if ( $this->receipt_rendered ) {
+			return;
+		}
+		$this->receipt_rendered = true;
+
 		$order = wc_get_order( $order_id );
 		if ( ! $order ) {
 			echo '<p>' . esc_html__( 'Order not found.', 'cashu-for-woocommerce' ) . '</p>';
@@ -1233,6 +1304,14 @@ class CashuGateway extends \WC_Payment_Gateway {
 	 * Renders the change
 	 */
 	public function render_change_section() {
+		// Same once-per-request guard as receipt_page — this renders via
+		// both the thank-you hook and woocommerce_after_my_account, and a
+		// double-firing template must not emit two #cashu-change-root ids.
+		if ( $this->change_rendered ) {
+			return;
+		}
+		$this->change_rendered = true;
+
 		wp_enqueue_style( 'cashu-public' );
 		wp_enqueue_script( 'cashu-thanks' );
 

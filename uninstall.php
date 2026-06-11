@@ -56,6 +56,8 @@ function cashu_wc_uninstall_cleanup() {
 		'cashu_melt_state_',          // Pending melt state cache.
 		'cashu_wc_claim_attempts_',   // /claim rate-limit counter.
 		'cashu_wc_confirm_attempts_', // /confirm rate-limit counter.
+		'cashu_wc_pay_attempts_',     // /pay rate-limit counter.
+		'cashu_wc_recon_',            // MeltReconciler per-order throttle.
 	);
 	foreach ( $transient_prefixes as $prefix ) {
 		$like_value = $wpdb->esc_like( '_transient_' . $prefix ) . '%';
