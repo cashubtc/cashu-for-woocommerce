@@ -197,7 +197,6 @@ final class CashuWCPlugin {
 		add_action(
 			'woocommerce_blocks_payment_method_type_registration',
 			static function ( \Automattic\WooCommerce\Blocks\Payments\PaymentMethodRegistry $registry ): void {
-				// Keep only the correct class here (see notes below).
 				$registry->register( new \Cashu\WC\Blocks\CashuGatewayBlocks() );
 			}
 		);
@@ -264,12 +263,12 @@ final class CashuWCPlugin {
 	}
 
 	private function dependenciesNotification(): void {
-		if ( version_compare( PHP_VERSION, '7.4', '<' ) ) {
+		if ( version_compare( PHP_VERSION, '8.3', '<' ) ) {
 			Notice::addNotice(
 				'error',
 				sprintf(
 					/* translators: 1: PHP Version string. */
-					__( 'Your PHP version is %s but Cashu Payment plugin requires version 7.4+.', 'cashu-for-woocommerce' ),
+					__( 'Your PHP version is %s but Cashu Payment plugin requires version 8.3+.', 'cashu-for-woocommerce' ),
 					PHP_VERSION
 				)
 			);

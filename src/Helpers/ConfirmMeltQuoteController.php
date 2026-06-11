@@ -20,8 +20,9 @@ use WP_REST_Server;
  *      PayController, lightning-leg orders flip via the claim endpoint below.
  *      Does not hit the mint in the steady state. Exception: if the cashu-leg
  *      melt is in PENDING-at-mint state (PayController stashed the quote id),
- *      one cached state check per poll resolves it — bounded at ~6 mint hits
- *      per pending minute per order, zero once resolved.
+ *      one cached state check per poll resolves it — bounded at one mint hit
+ *      per CashuGateway::MELT_STATE_FRESH_TTL window per order, zero once
+ *      resolved.
  *
  *  POST /claim-melt-quote
  *      Lightning-leg one-shot finalizer. Called by the browser once after
@@ -50,8 +51,9 @@ final class ConfirmMeltQuoteController {
 
 	/**
 	 * Per-order rate limit on the polling endpoint. Mint amplification is
-	 * already bounded by the 10s transient cache on pending-melt lookups,
-	 * but each request still hits the WP REST stack + DB. The 5s legitimate
+	 * already bounded by the mint-state transient cache on pending-melt
+	 * lookups (CashuGateway::MELT_STATE_FRESH_TTL), but each request still
+	 * hits the WP REST stack + DB. The 5s legitimate
 	 * poll cadence over a 15-minute payment window is ~180 polls. 720/hour
 	 * (= 12/min) leaves generous headroom for tab visibility cycles and
 	 * absorbs the WS-fallback poll bursts without ever pinching a real user.
@@ -202,8 +204,9 @@ final class ConfirmMeltQuoteController {
 
 	/**
 	 * If the order carries a pending-melt marker, check the mint for the
-	 * current state of that quote (cached for 10s per quote_id so concurrent
-	 * browser polls share the cost). Returns:
+	 * current state of that quote (cached per quote_id for
+	 * CashuGateway::MELT_STATE_FRESH_TTL so concurrent browser polls share
+	 * the cost). Returns:
 	 *
 	 *   - PAID response with redirect + marks the order paid, if mint settled
 	 *   - PENDING response (state remains pending, marker preserved) — also
@@ -213,8 +216,8 @@ final class ConfirmMeltQuoteController {
 	 *     the marker was missing/aged/has no mint URL, so the caller falls
 	 *     through to the regular UNPAID/EXPIRED branch
 	 *
-	 * Bounded: ~6 mint hits per pending minute per order (at 5s poll + 10s
-	 * cache). Zero hits once the marker is cleared.
+	 * Bounded: at most one mint hit per cache TTL per pending order. Zero
+	 * hits once the marker is cleared.
 	 */
 	private function resolve_pending_melt( WC_Order $order ): WP_REST_Response|WP_Error|null {
 		$pending_quote_id = (string) $order->get_meta( '_cashu_melt_pending_quote_id', true );
@@ -223,9 +226,9 @@ final class ConfirmMeltQuoteController {
 		}
 
 		// Stale-marker TTL. A genuinely stuck LN payment will sit in PENDING
-		// indefinitely otherwise, and every browser hit pays the 10s-cached
-		// mint check (~6 hits/pending minute/order). Past the TTL, drop the
-		// marker so the order falls back to UNPAID/EXPIRED.
+		// indefinitely otherwise, paying a cached mint check per TTL window
+		// forever. Past the marker age limit, drop it so the order falls
+		// back to UNPAID/EXPIRED.
 		$pending_at = absint( $order->get_meta( '_cashu_melt_pending_at', true ) );
 		if ( $pending_at > 0 && ( time() - $pending_at ) > self::PENDING_MARKER_MAX_AGE ) {
 			Logger::error( 'pending melt marker aged out for order ' . $order->get_id() . ', quote ' . $pending_quote_id );
@@ -331,8 +334,8 @@ final class ConfirmMeltQuoteController {
 		// keep trying. Surface as PENDING to the polling browser so it shows
 		// "settling at mint" rather than dropping the customer back to the
 		// cart on a network blip. Don't delete the cache_key transient — we
-		// WANT the cached value to expire naturally (10s TTL) so the next
-		// probe re-fetches.
+		// WANT the cached value to expire naturally so the next probe
+		// re-fetches.
 		return rest_ensure_response(
 			array(
 				'ok'    => true,
@@ -436,9 +439,9 @@ final class ConfirmMeltQuoteController {
 		// the customer closes the tab before we reach a state-specific
 		// branch, this marker is the only durable signal MeltReconciler
 		// can follow to finalise the order. Mirrors PayController's
-		// pre-stage pattern (commit 0691181). Idempotent — refreshes the
-		// timestamp on every claim attempt; the UNPAID branch below
-		// clears it when the mint positively says proofs are unconsumed.
+		// pre-stage pattern. Idempotent — refreshes the timestamp on every
+		// claim attempt; the UNPAID branch below clears it when the mint
+		// positively says proofs are unconsumed.
 		$order->update_meta_data( '_cashu_melt_pending_quote_id', $quote_id );
 		$order->update_meta_data( '_cashu_melt_pending_at', time() );
 		$order->save();

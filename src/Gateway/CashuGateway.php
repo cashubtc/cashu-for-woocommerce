@@ -27,7 +27,7 @@ class CashuGateway extends \WC_Payment_Gateway {
 	 * triggers a probe every 10 s, which several mints rate-limit).
 	 *
 	 * Shared with `cashu_melt_state_*` consumers in
-	 * ConfirmMeltQuoteController and ensure_mint_quote_for_order so tuning
+	 * ConfirmMeltQuoteController and ensure_melt_quote_for_order so tuning
 	 * happens in one place.
 	 */
 	public const MELT_STATE_FRESH_TTL = MINUTE_IN_SECONDS;

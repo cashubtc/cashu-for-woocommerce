@@ -528,9 +528,8 @@ export type MeltAction =
  *
  * Mirrors the deriveOrderStatusActions pattern: pure data in, ordered actions
  * out. Locks each branch's behavior to a unit test so future iterations can't
- * silently reintroduce the marker-drop / change-recovery / preimage bugs that
- * have already been fixed once in this surface (b0d70bd, 1afcd86, 631ca70,
- * 35fc051, 3f39289).
+ * silently reintroduce marker-drop / change-recovery / preimage bugs in this
+ * surface.
  */
 export function actionsForMeltOutcome(outcome: MeltOutcome): MeltAction[] {
   switch (outcome.kind) {

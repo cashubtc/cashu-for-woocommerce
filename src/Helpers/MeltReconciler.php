@@ -8,10 +8,11 @@ use Cashu\WC\Gateway\CashuGateway;
 use WC_Order;
 
 /**
- * Cron-driven sweep that finalises orders left in pending-melt state by
- * PayController. Runs hourly via wp_schedule_event; bounded at MAX_PER_RUN
- * orders per tick and per-order throttled via transient so a stuck mint
- * can't be hammered by repeated cron ticks.
+ * Cron-driven sweep that finalises orders left carrying a pending-melt
+ * marker (staged by PayController and the claim endpoint). Runs hourly via
+ * wp_schedule_event; bounded at MAX_PER_RUN orders per tick and per-order
+ * throttled via transient so a stuck mint can't be hammered by repeated
+ * cron ticks.
  *
  * The customer-side polling endpoint handles the foreground case (active
  * tab, fast settlement); this is the long-tail consumer for orders where
@@ -38,8 +39,8 @@ final class MeltReconciler {
 		// Order by oldest _cashu_melt_pending_at first so a backlog larger
 		// than MAX_PER_RUN can't starve older orders — each tick takes the
 		// 20 oldest, the next tick takes the next batch, etc.
-		// Bounded cron sweep (20/tick) over a sparse marker meta written only by
-		// PayController when a melt is left in flight. No alternative lookup
+		// Bounded cron sweep (20/tick) over a sparse marker meta written only
+		// when a melt is left in flight at the mint. No alternative lookup
 		// path exists; query is intentional and rate-limited per-order.
 		// Cancelled/failed are included so a melt that settles AFTER
 		// WooCommerce's hold-stock auto-cancel (or a hasty manual cancel)

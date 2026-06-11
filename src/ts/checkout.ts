@@ -251,7 +251,7 @@ jQuery(function ($) {
     // Type 0 = auto-pick smallest QR version; 'Q' = ~25% error correction
     // (needed so the centre-icon overlay doesn't break scanning). addData()
     // auto-detects Alphanumeric mode for [A-Z0-9 $%*+\-./:] payloads — which
-    // is why we uppercase the BIP-321 / LIGHTNING URIs above. Scalable SVG
+    // is why renderQr uppercases the BIP-321 / LIGHTNING URIs. Scalable SVG
     // renders crisp at any container size.
     const qr = qrcode(0, 'Q');
     qr.addData(text);
