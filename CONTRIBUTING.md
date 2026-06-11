@@ -331,11 +331,13 @@ A typical workflow for a small change might look like this
    npm run wp-env:seed-store   # optional, to get demo products
    ```
 
-5. Commit your changes with a clear message
+5. Commit your changes using [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, `refactor:`, `chore:`, `test:`, `ci:`, `build:`)
 
-6. Push your branch and open a pull request
+6. Push your branch and open a pull request — **give the PR a Conventional Commit title too**
 
 Please keep pull requests focused on a single change where possible, for example a bug fix, a new feature, or a documentation update. This makes review much easier.
+
+The PR title matters beyond style: PRs are **squash-merged**, so the PR title becomes the commit subject on `main`, and the release changelog is generated from those subjects (`npm run changelog`, git-cliff) by their Conventional Commit prefix. A PR titled, say, `Settlement hardening: …` lands as an uncategorised commit that the generator drops, forcing the changelog to be written by hand — whereas `fix: harden checkout settlement against fund-loss edges` slots straight into the next release's "Bug Fixes". Use `feat:` / `fix:` for anything user-facing; `chore:` / `docs:` / `test:` / `ci:` / `build:` are intentionally filtered out of the changelog.
 
 ## Reporting issues
 

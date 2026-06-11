@@ -49,6 +49,7 @@ If a deploy fails partway, or you need to re-push a tag without cutting a new Gi
 - Use Conventional Commits (eg: `feat: ...`, `fix: ...`, `chore: ...`, `docs: ...`, `refactor: ...`, `test: ...`, `ci: ...`, `build: ...`).
 - Keep subjects concise and lowercase; include scope only when helpful (eg: `feat(checkout): ...`).
 - Extended commit messages are good, but keep them terse: a sparse "what changed" summary with minimal framing is ideal. 3-4 sentences max overall.
+- **PR titles MUST be Conventional Commits too.** PRs are squash-merged, so the PR title becomes the single commit subject on `main` — and `npm run changelog` (git-cliff) groups the changelog by that prefix. A non-conventional PR title (eg "Settlement hardening: …") lands as an uncategorised commit that git-cliff silently drops, so the release changelog has to be hand-written. Title the PR `fix: …` / `feat: …` etc. and the changelog generates itself.
 
 ## Changelog vs release notes
 
