@@ -4,13 +4,13 @@
 
 ### Bug Fixes
 
-- bare version for SVN tag; chip icon for wp.org plugin page ([#12](https://github.com/cashubtc/cashu-for-woocommerce/pull/12)) ([0c8cc76](https://github.com/cashubtc/cashu-for-woocommerce/commit/0c8cc76f5e1f4a3cac3ebf4f9e7211201d830a1f))
-- verify mint-reported preimages on every settlement path before recording ([#11](https://github.com/cashubtc/cashu-for-woocommerce/pull/11)) ([89fd293](https://github.com/cashubtc/cashu-for-woocommerce/commit/89fd293ba9db47519a34a57c629ea018e9b18b29))
-- lift the 100-site cap on multisite uninstall cleanup ([#11](https://github.com/cashubtc/cashu-for-woocommerce/pull/11)) ([89fd293](https://github.com/cashubtc/cashu-for-woocommerce/commit/89fd293ba9db47519a34a57c629ea018e9b18b29))
+- bare version for SVN tag; chip icon for wp.org plugin page ([#12](https://github.com/cashubtc/cashu-for-woocommerce/pull/12))
+- verify mint-reported preimages on every settlement path before recording ([#11](https://github.com/cashubtc/cashu-for-woocommerce/pull/11))
+- lift the 100-site cap on multisite uninstall cleanup ([#11](https://github.com/cashubtc/cashu-for-woocommerce/pull/11))
 
 ### Refactoring
 
-- extract a stateless MintClient from the gateway, share one settlement finaliser, and remove dead code ([#11](https://github.com/cashubtc/cashu-for-woocommerce/pull/11)) ([89fd293](https://github.com/cashubtc/cashu-for-woocommerce/commit/89fd293ba9db47519a34a57c629ea018e9b18b29))
+- extract a stateless MintClient from the gateway, share one settlement finaliser, and remove dead code ([#11](https://github.com/cashubtc/cashu-for-woocommerce/pull/11))
 
 ## [v0.3.1](https://github.com/cashubtc/cashu-for-woocommerce/compare/v0.3.0...v0.3.1) (2026-06-11)
 
