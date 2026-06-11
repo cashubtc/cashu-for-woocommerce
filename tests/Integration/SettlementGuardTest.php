@@ -14,7 +14,7 @@ use WP_REST_Request;
 use WP_REST_Response;
 
 /**
- * Pins the cancelled-order revive fix (PLAN.md MEDIUM): a customer whose
+ * Pins the cancelled-order revive guard: a customer whose
  * order was paid once and later cancelled by the admin must NOT be able to
  * flip it back to processing by replaying their preimage (claim endpoint)
  * or by the cron re-probing the mint's PAID quote state (MeltReconciler).

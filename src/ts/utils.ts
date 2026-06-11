@@ -34,9 +34,8 @@ export async function copyTextToClipboard(text: string) {
  * Activates the confetti bomb effect
  */
 export function doConfettiBomb() {
-  // Do the confetti bomb
-  var duration = 0.25 * 1000; //secs
-  var end = Date.now() + duration;
+  const duration = 0.25 * 1000;
+  const end = Date.now() + duration;
 
   (function frame() {
     // launch a few confetti from the left edge
@@ -67,30 +66,11 @@ export function doConfettiBomb() {
 }
 
 /**
- * Returns apromise to create a delay
- * @param delay time in ms
+ * Returns a promise that resolves after `ms` milliseconds.
  * @example await delay(1000); // waits 1 second
  */
 export const delay = (ms: number): Promise<void> =>
   new Promise<void>((res) => setTimeout(res, ms));
-
-/**
- * Debounces a function for delay milliseconds to prevent excessive calls.
- *
- * @param func - Function to debounce.
- * @param delay - Delay in milliseconds.
- * @returns Debounced function with the same parameters as `func`.
- */
-export const debounce = <T extends (...args: any[]) => void>(
-  func: T,
-  delay: number,
-): ((...args: Parameters<T>) => void) => {
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  return (...args: Parameters<T>) => {
-    clearTimeout(timeoutId);
-    timeoutId = setTimeout(() => func(...args), delay);
-  };
-};
 
 export function getErrorMessage(
   error: unknown,

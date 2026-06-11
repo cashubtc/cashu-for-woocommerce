@@ -6,10 +6,9 @@
 // a [5s, 15s, 30s] backoff. Whichever lands first flips `state.finalised`
 // and fires the redirect; the other short-circuits.
 //
-// The dispatchers are extracted from checkout.ts with full dependency
-// injection so they can be unit-tested under vi.spyOn(global, 'fetch')
-// without jQuery / wp-env / window.location. The caller (checkout.ts init)
-// constructs `DispatcherDeps` once and reuses it for every poll tick.
+// Fully dependency-injected so they can be unit-tested without jQuery,
+// wp-env, or window.location. The caller (checkout.ts init) constructs
+// `DispatcherDeps` once and reuses it for every poll tick.
 
 import type { MeltQuoteState } from '@cashu/cashu-ts';
 import { composeRestUrl, deriveOrderStatusActions } from './helpers';

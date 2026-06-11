@@ -7,9 +7,10 @@ namespace Cashu\WC\Helpers;
 use WC_Order;
 
 /**
- * One-way "paid once" sentinel shared by the three settlement finalizers
+ * Shared settlement surface for the three finalizers
  * (PayController::finalise_paid, ConfirmMeltQuoteController::mark_paid,
- * MeltReconciler::finalise_paid_locked).
+ * MeltReconciler::finalise_paid_locked): the one-way "paid once" sentinel
+ * that blocks replays, and complete(), the canonical completion sequence.
  *
  * WC core's payment_complete() accepts orders in `cancelled` and `failed`
  * status (OrderStatus::PAYMENT_COMPLETE_STATUSES). Without this sentinel a
@@ -55,6 +56,68 @@ final class SettlementGuard {
 			return false;
 		}
 		return '' !== (string) $order->get_meta( self::PAID_ONCE_META, true );
+	}
+
+	/**
+	 * Complete a paid order in the canonical shape shared by every
+	 * settlement path. Caller MUST hold the pay-scope OrderLock and have
+	 * already passed should_block().
+	 *
+	 * The preimage is verified against the order's stored payment_hash
+	 * before being recorded. A mismatch isn't fatal — the mint has
+	 * settled either way — but a recorded preimage that doesn't hash to
+	 * the invoice's payment_hash is misleading audit data, so it's
+	 * dropped and logged instead.
+	 *
+	 * @param WC_Order $order         Order to complete (fresh read under the lock).
+	 * @param string   $quote_id      Melt quote id; becomes the WC transaction id.
+	 * @param string   $preimage      Mint- or client-reported preimage; '' when none.
+	 * @param string   $amount        Amount in sats for the order note; '' falls
+	 *                                back to the order's _cashu_melt_total.
+	 * @param string   $note_template Translated note template with the five
+	 *                                standard placeholders (symbol, amount,
+	 *                                LN address, quote id, redacted preimage).
+	 */
+	public static function complete( WC_Order $order, string $quote_id, string $preimage, string $amount, string $note_template ): void {
+		$stored_hash       = (string) $order->get_meta( '_cashu_payment_hash', true );
+		$verified_preimage = '';
+		if ( '' !== $preimage ) {
+			if ( '' === $stored_hash || Bolt11::preimageMatches( $preimage, $stored_hash ) ) {
+				$verified_preimage = $preimage;
+				$order->update_meta_data( '_cashu_payment_preimage', sanitize_text_field( $preimage ) );
+			} else {
+				Logger::error( 'Settlement preimage does not match invoice hash for order ' . $order->get_id() );
+			}
+		}
+
+		// Clear all pending-state markers in one place so every settlement
+		// path leaves the order in the same final shape.
+		$order->delete_meta_data( '_cashu_melt_pending_quote_id' );
+		$order->delete_meta_data( '_cashu_melt_pending_at' );
+		$order->delete_meta_data( '_cashu_last_payment_attempt_at' );
+		self::mark_paid_once( $order );
+		$order->payment_complete( $quote_id );
+
+		// Prefer the LN address snapshotted at quote creation; fall back
+		// to the current option for legacy orders that pre-date that snapshot.
+		$lightning_address = (string) $order->get_meta( '_cashu_invoice_ln_address', true );
+		if ( '' === $lightning_address ) {
+			$lightning_address = (string) get_option( 'cashu_lightning_address', '' );
+		}
+		$amount_for_note = '' !== $amount
+			? $amount
+			: (string) absint( $order->get_meta( '_cashu_melt_total', true ) );
+
+		$order->add_order_note(
+			sprintf(
+				$note_template,
+				CASHU_WC_BIP177_SYMBOL,
+				$amount_for_note,
+				$lightning_address,
+				$quote_id,
+				CashuHelper::redactPreimage( $verified_preimage )
+			)
+		);
 	}
 
 	/**

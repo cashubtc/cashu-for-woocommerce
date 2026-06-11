@@ -66,9 +66,6 @@ const ac = new AbortController();
 window.addEventListener('pagehide', () => ac.abort(), { once: true });
 window.addEventListener('beforeunload', () => ac.abort(), { once: true });
 
-// tryRestore (NUT-09) and the wallet cache (createWalletGetter) live in
-// `./wallet` so they can be unit-tested with a stub cashu-ts Wallet,
-// without touching the real mint over HTTP.
 const getWalletCached = createWalletGetter();
 
 function t(key: string, ...args: any[]): string {
@@ -81,10 +78,6 @@ function t(key: string, ...args: any[]): string {
     return raw;
   }
 }
-
-// LocalStorage helpers, stranded-proof persistence, change-payload
-// load/save, and the wallet-seed derivation now live in `./helpers` so they
-// can be unit-tested without spinning up the jQuery scope or wp-env.
 
 // ------------------------------
 // Bootstrap checkout
@@ -165,8 +158,7 @@ jQuery(function ($) {
 
   // Best-effort clean up legacy localStorage from earlier versions of the
   // plugin (cashu_wc_mq, cashu_wc_recovery) plus the previous order's
-  // change snapshot — change is deliberately ephemeral, see project memory.
-  // deleteJson already swallows so no try wrapper.
+  // change snapshot — change is deliberately ephemeral.
   deleteJson('cashu_wc_mq');
   deleteJson('cashu_wc_recovery');
   deleteJson(CHANGE_PAYLOAD_KEY);
@@ -251,7 +243,7 @@ jQuery(function ($) {
     // Type 0 = auto-pick smallest QR version; 'Q' = ~25% error correction
     // (needed so the centre-icon overlay doesn't break scanning). addData()
     // auto-detects Alphanumeric mode for [A-Z0-9 $%*+\-./:] payloads — which
-    // is why we uppercase the BIP-321 / LIGHTNING URIs above. Scalable SVG
+    // is why renderQr uppercases the BIP-321 / LIGHTNING URIs. Scalable SVG
     // renders crisp at any container size.
     const qr = qrcode(0, 'Q');
     qr.addData(text);
@@ -330,9 +322,6 @@ jQuery(function ($) {
       proofs: changeProofs,
       unit: 'sat',
     });
-    // saveProofs is only ever called with the trusted mint's wallet, so the
-    // "change from token" path (mint mismatch) cannot fire — that path
-    // existed when the PR-only refactor still had a token-input flow.
     rememberChangeItem({
       mint: wallet.mint.mintUrl,
       token: tokenStr,
@@ -548,10 +537,7 @@ jQuery(function ($) {
   // attempt → post-throw probe) and pins the result to one of six discrete
   // outcomes. All the awaits live here; the projection to an action sequence
   // (actionsForMeltOutcome) is pure logic in helpers.ts and exhaustively
-  // unit-tested in melt-actions.test.ts. This split is what keeps regressions
-  // like the marker-drop / change-recovery / preimage-fallback fixes from
-  // sneaking back in — a future iteration changing the dispatch order has to
-  // change the projection function, which has to update its tests.
+  // unit-tested in melt-actions.test.ts.
   async function classifyMeltOutcome(
     proofs: Proof[],
     trustedWallet: Wallet,
@@ -611,9 +597,9 @@ jQuery(function ($) {
   }
 
   // Action executor: closure-coupled to the wallet handle, setStatus, t, and
-  // claimMeltPaid so the action list itself stays pure data. `void`-fires the
-  // background saves (saveProofs, claimMeltPaid) to match the prior behavior
-  // — they post to localStorage / our REST without blocking the next action.
+  // claimMeltPaid so the action list itself stays pure data. The background
+  // saves (saveProofs, claimMeltPaid) are `void`-fired — they post to
+  // localStorage / our REST without blocking the next action.
   async function dispatchMeltAction(a: MeltAction, trustedWallet: Wallet): Promise<void> {
     switch (a.type) {
       case 'clearStranded':

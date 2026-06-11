@@ -21,8 +21,6 @@ namespace Cashu\WC\Helpers;
  * checks before deleting. A caller that no longer holds the lock (TTL
  * expired, another process refreshed it) cannot accidentally release
  * someone else's critical section. Pass the token through to release().
- * The legacy unconditional `release($id, $scope)` form is still
- * accepted for back-compat and admin tooling that doesn't hold a token.
  */
 final class OrderLock {
 
@@ -95,28 +93,13 @@ final class OrderLock {
 	}
 
 	/**
-	 * Release a lock we hold. With $token, the DELETE is conditional on
-	 * the stored value still matching ours — protects against releasing
-	 * a lock another process refreshed after our TTL expired. Without
-	 * $token, the DELETE is unconditional (back-compat for admin tooling
-	 * and pre-token callers; new code should always pass the token).
+	 * Release a lock we hold. The DELETE is conditional on the stored
+	 * value still matching our token — protects against releasing a lock
+	 * another process refreshed after our TTL expired.
 	 */
-	public static function release( int $order_id, string $scope, ?string $token = null ): void {
+	public static function release( int $order_id, string $scope, string $token ): void {
 		global $wpdb;
 		$key = self::key( $order_id, $scope );
-
-		if ( null === $token ) {
-			// Direct delete: the lock row must not survive in any object cache
-			// after release, or the next acquire() would falsely see it held.
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-			$wpdb->query(
-				$wpdb->prepare(
-					"DELETE FROM {$wpdb->options} WHERE option_name = %s",
-					$key
-				)
-			);
-			return;
-		}
 
 		// Conditional delete: only remove our row if the stored token still
 		// matches ours. esc_like keeps the hex token literal in the LIKE.

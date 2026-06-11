@@ -15,10 +15,6 @@ final class CashuWCPlugin {
 
 	private static ?self $instance = null;
 
-	public function __construct() {
-		// Intentionally empty, no side effects.
-	}
-
 	/**
 	 * Singleton instance
 	 */
@@ -33,8 +29,6 @@ final class CashuWCPlugin {
 	 * Register all hooks, this is the only place that adds actions and filters.
 	 */
 	public function run(): void {
-		$this->includes();
-
 		// One-time settings migration. Cheap (one get_option) on every load
 		// after first run; runs at most once per install.
 		self::maybeMigrateSettings();
@@ -98,13 +92,6 @@ final class CashuWCPlugin {
 			add_action( 'admin_init', array( $this, 'registerAdminNotices' ) );
 			\Cashu\WC\Admin\ValidateGlobalSettings::init();
 			\Cashu\WC\Admin\OrderMetaBox::register();
-		}
-	}
-
-	private function includes(): void {
-		// Make sure WP internal functions are available.
-		if ( ! function_exists( 'is_plugin_active' ) ) {
-			include_once ABSPATH . 'wp-admin/includes/plugin.php';
 		}
 	}
 
@@ -197,7 +184,6 @@ final class CashuWCPlugin {
 		add_action(
 			'woocommerce_blocks_payment_method_type_registration',
 			static function ( \Automattic\WooCommerce\Blocks\Payments\PaymentMethodRegistry $registry ): void {
-				// Keep only the correct class here (see notes below).
 				$registry->register( new \Cashu\WC\Blocks\CashuGatewayBlocks() );
 			}
 		);
@@ -264,23 +250,25 @@ final class CashuWCPlugin {
 	}
 
 	private function dependenciesNotification(): void {
-		if ( version_compare( PHP_VERSION, '7.4', '<' ) ) {
+		if ( version_compare( PHP_VERSION, '8.3', '<' ) ) {
 			Notice::addNotice(
 				'error',
 				sprintf(
 					/* translators: 1: PHP Version string. */
-					__( 'Your PHP version is %s but Cashu Payment plugin requires version 7.4+.', 'cashu-for-woocommerce' ),
+					__( 'Your PHP version is %s but Cashu Payment plugin requires version 8.3+.', 'cashu-for-woocommerce' ),
 					PHP_VERSION
 				)
 			);
 		}
 
+		if ( ! function_exists( 'is_plugin_active' ) ) {
+			include_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
 		if ( ! is_plugin_active( 'woocommerce/woocommerce.php' ) ) {
 			Notice::addNotice(
 				'error',
 				__( 'WooCommerce does not appear to be installed. Make sure you do before you activate Cashu Payment Gateway.', 'cashu-for-woocommerce' )
 			);
-
 		}
 
 		if ( ! function_exists( 'curl_init' ) ) {
@@ -386,11 +374,9 @@ final class CashuWCPlugin {
 			return $totals;
 		}
 
-		$symbol = defined( 'CASHU_WC_BIP177_SYMBOL' ) ? CASHU_WC_BIP177_SYMBOL : '';
-
 		$totals['cashu_expected_amount'] = array(
 			'label' => __( 'Cashu Amount', 'cashu-for-woocommerce' ),
-			'value' => esc_html( $symbol . number_format_i18n( $sats ) ),
+			'value' => esc_html( CASHU_WC_BIP177_SYMBOL . number_format_i18n( $sats ) ),
 		);
 
 		return $totals;

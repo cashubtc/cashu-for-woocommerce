@@ -16,8 +16,8 @@ use WP_REST_Response;
  * resolve_pending_melt branch — the cashu-leg poll that lets a mint settle
  * an in-flight LN payment after PayController stashed the pending marker.
  *
- * H2 from 61c9936: a stuck pending marker would otherwise burn ~6 mint hits
- * per pending minute per order indefinitely. The 24h PENDING_MARKER_MAX_AGE
+ * A stuck pending marker would otherwise pay a cached mint probe per TTL
+ * window indefinitely. The 24h PENDING_MARKER_MAX_AGE
  * TTL drops the marker and falls through to UNPAID/EXPIRED.
  */
 final class ResolvePendingMeltTest extends IntegrationTestCase {
@@ -111,7 +111,7 @@ final class ResolvePendingMeltTest extends IntegrationTestCase {
 
 		Functions\when( 'wc_get_order' )->justReturn( $order );
 
-		// CashuGateway::fetch_melt_quote_state_safely talks to the mint via
+		// MintClient::melt_quote_state talks to the mint via
 		// wp_remote_get. Returning PENDING keeps the order in pending state
 		// without triggering the mark_paid flow.
 		Functions\expect( 'wp_remote_get' )

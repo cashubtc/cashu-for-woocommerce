@@ -13,7 +13,7 @@ use WP_REST_Response;
 
 /**
  * Covers the pre-stage pending-marker behaviour in PayController::pay():
- * the marker is written before request_melt_bolt11 runs and only cleared
+ * the marker is written before the mint melt runs and only cleared
  * on a confirmed-PAID outcome. Mid-flight throws and unknown states leave
  * the marker in place so confirm_melt_quote / MeltReconciler can pick up.
  */
@@ -92,7 +92,7 @@ final class PayControllerPreStageMarkerTest extends IntegrationTestCase {
 				return $wp_error;
 			} );
 
-		// The reconciliation probe (Task 2) will also be called; for this test
+		// The reconciliation probe will also be called; for this test
 		// we stub it to return empty so we land in the keep-marker-return-502 branch.
 		Functions\when( 'wp_remote_get' )->justReturn( $wp_error );
 

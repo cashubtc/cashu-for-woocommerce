@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 namespace Cashu\WC\Helpers;
 
-use Cashu\WC\Gateway\CashuGateway;
 use WC_Order;
 
 /**
- * Cron-driven sweep that finalises orders left in pending-melt state by
- * PayController. Runs hourly via wp_schedule_event; bounded at MAX_PER_RUN
- * orders per tick and per-order throttled via transient so a stuck mint
- * can't be hammered by repeated cron ticks.
+ * Cron-driven sweep that finalises orders left carrying a pending-melt
+ * marker (staged by PayController and the claim endpoint). Runs hourly via
+ * wp_schedule_event; bounded at MAX_PER_RUN orders per tick and per-order
+ * throttled via transient so a stuck mint can't be hammered by repeated
+ * cron ticks.
  *
  * The customer-side polling endpoint handles the foreground case (active
  * tab, fast settlement); this is the long-tail consumer for orders where
@@ -38,8 +38,8 @@ final class MeltReconciler {
 		// Order by oldest _cashu_melt_pending_at first so a backlog larger
 		// than MAX_PER_RUN can't starve older orders — each tick takes the
 		// 20 oldest, the next tick takes the next batch, etc.
-		// Bounded cron sweep (20/tick) over a sparse marker meta written only by
-		// PayController when a melt is left in flight. No alternative lookup
+		// Bounded cron sweep (20/tick) over a sparse marker meta written only
+		// when a melt is left in flight at the mint. No alternative lookup
 		// path exists; query is intentional and rate-limited per-order.
 		// Cancelled/failed are included so a melt that settles AFTER
 		// WooCommerce's hold-stock auto-cancel (or a hasty manual cancel)
@@ -154,8 +154,7 @@ final class MeltReconciler {
 			}
 			set_transient( $throttle_key, '1', self::PER_ORDER_THROTTLE_SECS );
 
-			$gateway    = new CashuGateway();
-			$state_info = $gateway->fetch_melt_quote_state_safely( $quote_id, $mint_url );
+			$state_info = MintClient::melt_quote_state( $mint_url, $quote_id );
 			$state      = isset( $state_info['state'] ) ? (string) $state_info['state'] : '';
 
 			if ( 'PAID' === $state ) {
@@ -197,44 +196,15 @@ final class MeltReconciler {
 			return;
 		}
 
-		$raw_preimage      = isset( $mint_response['payment_preimage'] ) && is_string( $mint_response['payment_preimage'] )
-			? $mint_response['payment_preimage']
-			: '';
-		$stored_hash       = (string) $fresh->get_meta( '_cashu_payment_hash', true );
-		$verified_preimage = '';
-		if ( '' !== $raw_preimage ) {
-			if ( '' === $stored_hash || Bolt11::preimageMatches( $raw_preimage, $stored_hash ) ) {
-				$verified_preimage = $raw_preimage;
-				$fresh->update_meta_data( '_cashu_payment_preimage', sanitize_text_field( $raw_preimage ) );
-			} else {
-				Logger::error( 'MeltReconciler: mint preimage does not match invoice hash for order ' . $fresh->get_id() );
-			}
-		}
-
-		$fresh->delete_meta_data( '_cashu_melt_pending_quote_id' );
-		$fresh->delete_meta_data( '_cashu_melt_pending_at' );
-		$fresh->delete_meta_data( '_cashu_last_payment_attempt_at' );
-		SettlementGuard::mark_paid_once( $fresh );
-		$fresh->payment_complete( $quote_id );
-
-		$lightning_address = (string) $fresh->get_meta( '_cashu_invoice_ln_address', true );
-		if ( '' === $lightning_address ) {
-			$lightning_address = (string) get_option( 'cashu_lightning_address', '' );
-		}
-		$paid_amount = isset( $mint_response['amount'] )
-			? (string) $mint_response['amount']
-			: (string) absint( $fresh->get_meta( '_cashu_melt_total', true ) );
-
-		$fresh->add_order_note(
-			sprintf(
-				/* translators: %1$s: BTC Symbol, %2$s: amount, %3$s: Lightning Address, %4$s: Melt Quote ID, %5$s: Payment preimage (truncated) */
-				__( "Cashu payment reconciled from mint: %1\$s%2\$s\nSent to: %3\$s\nMelt quote: %4\$s\nPayment preimage: %5\$s", 'cashu-for-woocommerce' ),
-				CASHU_WC_BIP177_SYMBOL,
-				$paid_amount,
-				$lightning_address,
-				$quote_id,
-				CashuHelper::redactPreimage( $verified_preimage )
-			)
+		SettlementGuard::complete(
+			$fresh,
+			$quote_id,
+			( isset( $mint_response['payment_preimage'] ) && is_string( $mint_response['payment_preimage'] ) )
+				? $mint_response['payment_preimage']
+				: '',
+			isset( $mint_response['amount'] ) ? (string) $mint_response['amount'] : '',
+			/* translators: %1$s: BTC Symbol, %2$s: amount, %3$s: Lightning Address, %4$s: Melt Quote ID, %5$s: Payment preimage (truncated) */
+			__( "Cashu payment reconciled from mint: %1\$s%2\$s\nSent to: %3\$s\nMelt quote: %4\$s\nPayment preimage: %5\$s", 'cashu-for-woocommerce' )
 		);
 	}
 }

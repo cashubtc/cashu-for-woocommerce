@@ -129,10 +129,12 @@ final class PayController {
 			return new WP_Error( 'cashu_rate_limited', 'Too many attempts.', array( 'status' => 429 ) );
 		}
 
-		// Spot quote still valid?
+		// Spot quote still valid? Missing spot meta means setup never
+		// completed, which reads as already-expired — correct, since an
+		// order without a quote must not accept payment.
 		$spot_time   = absint( $order->get_meta( '_cashu_spot_time', true ) );
 		$spot_expiry = $spot_time + CashuGateway::QUOTE_EXPIRY_SECS;
-		if ( $spot_expiry > 0 && time() >= $spot_expiry ) {
+		if ( time() >= $spot_expiry ) {
 			return new WP_Error( 'cashu_expired', 'Payment window expired.', array( 'status' => 410 ) );
 		}
 
@@ -269,43 +271,17 @@ final class PayController {
 			// not the current gateway setting — an admin-side mint change between
 			// quote creation and settlement must not redirect the melt to a host
 			// that doesn't know the quote.
-			$gateway = new CashuGateway();
 			try {
-				$mint_response = $gateway->request_melt_bolt11( $quote_id, $proofs, $trusted_mint );
+				$mint_response = MintClient::melt( $trusted_mint, $quote_id, $proofs );
 			} catch ( \Throwable $e ) {
 				Logger::debug( 'Cashu melt failed for order ' . $order->get_id() . ', quote ' . $quote_id . ': ' . $e->getMessage() . ' — probing mint state' );
-				$probed       = $gateway->fetch_melt_quote_state_safely( $quote_id, $trusted_mint );
-				$probed_state = isset( $probed['state'] ) ? (string) $probed['state'] : '';
-
-				if ( 'PAID' === $probed_state ) {
-					return $this->finalise_paid( $order, $quote_id, $probed, $expected_id, $expected_amount );
-				}
-				if ( 'PENDING' === $probed_state ) {
-					// Marker already set by pre-stage. Refresh timestamp.
-					$order->update_meta_data( '_cashu_melt_pending_at', time() );
-					$order->save();
-					return rest_ensure_response(
-						array(
-							'status' => 'pending',
-							'id'     => $expected_id,
-						)
-					);
-				}
-				if ( 'UNPAID' === $probed_state ) {
-					// Mint never consumed the proofs — they're still spendable. Drop
-					// the marker so future polls don't waste a mint hit on a dead quote.
-					// Stamp the last-attempt timestamp so a returning customer's
-					// receipt page can surface "previous attempt didn't reach the
-					// mint" rather than silently reverting to "Waiting for payment".
-					$order->delete_meta_data( '_cashu_melt_pending_quote_id' );
-					$order->delete_meta_data( '_cashu_melt_pending_at' );
-					$order->update_meta_data( '_cashu_last_payment_attempt_at', time() );
-					$order->save();
-					return new WP_Error( 'cashu_mint_error', 'Mint melt failed.', array( 'status' => 502 ) );
-				}
-				// Unknown / probe also failed — KEEP the marker so confirm_melt_quote
-				// and MeltReconciler can keep trying.
-				return new WP_Error( 'cashu_mint_error', 'Mint melt failed.', array( 'status' => 502 ) );
+				return $this->resolve_unsettled_melt(
+					$order,
+					$quote_id,
+					$trusted_mint,
+					$expected_id,
+					new WP_Error( 'cashu_mint_error', 'Mint melt failed.', array( 'status' => 502 ) )
+				);
 			}
 
 			$state = isset( $mint_response['state'] )
@@ -336,35 +312,56 @@ final class PayController {
 				// body can carry sensitive fields (e.g. a partial preimage on
 				// some mint impls). The state + quote_id is enough to trace.
 				Logger::debug( 'Mint returned non-PAID state "' . $state . '" for order ' . $order->get_id() . ', quote ' . $quote_id . ' — probing mint state' );
-				$probed       = $gateway->fetch_melt_quote_state_safely( $quote_id, $trusted_mint );
-				$probed_state = isset( $probed['state'] ) ? (string) $probed['state'] : '';
-
-				if ( 'PAID' === $probed_state ) {
-					return $this->finalise_paid( $order, $quote_id, $probed, $expected_id, $expected_amount );
-				}
-				if ( 'PENDING' === $probed_state ) {
-					$order->update_meta_data( '_cashu_melt_pending_at', time() );
-					$order->save();
-					return rest_ensure_response(
-						array(
-							'status' => 'pending',
-							'id'     => $expected_id,
-						)
-					);
-				}
-				if ( 'UNPAID' === $probed_state ) {
-					$order->delete_meta_data( '_cashu_melt_pending_quote_id' );
-					$order->delete_meta_data( '_cashu_melt_pending_at' );
-					$order->update_meta_data( '_cashu_last_payment_attempt_at', time() );
-					$order->save();
-				}
-				return new WP_Error( 'cashu_unpaid', 'Mint did not settle the invoice.', array( 'status' => 502 ) );
+				return $this->resolve_unsettled_melt(
+					$order,
+					$quote_id,
+					$trusted_mint,
+					$expected_id,
+					new WP_Error( 'cashu_unpaid', 'Mint did not settle the invoice.', array( 'status' => 502 ) )
+				);
 			}
 
-			return $this->finalise_paid( $order, $quote_id, $mint_response, $expected_id, $expected_amount );
+			return $this->finalise_paid( $order, $quote_id, $mint_response, $expected_id );
 		} finally {
 			OrderLock::release( $order_id, 'pay', $lock_token );
 		}
+	}
+
+	/**
+	 * The melt call threw or returned non-PAID: ask the mint for the quote's
+	 * authoritative state and resolve the order accordingly. PAID finalises;
+	 * PENDING keeps the pre-staged marker (timestamp refreshed) and tells the
+	 * wallet the payment is in flight; UNPAID drops the marker (the proofs
+	 * were never consumed, they're back with the wallet) and stamps the
+	 * last-attempt time so the receipt page can say "previous attempt didn't
+	 * reach the mint"; unknown keeps the marker so confirm_melt_quote and
+	 * MeltReconciler can keep trying. Returns $failure for the UNPAID and
+	 * unknown branches.
+	 */
+	private function resolve_unsettled_melt( \WC_Order $order, string $quote_id, string $mint_url, string $expected_id, WP_Error $failure ): WP_REST_Response|WP_Error {
+		$probed       = MintClient::melt_quote_state( $mint_url, $quote_id );
+		$probed_state = isset( $probed['state'] ) ? (string) $probed['state'] : '';
+
+		if ( 'PAID' === $probed_state ) {
+			return $this->finalise_paid( $order, $quote_id, $probed, $expected_id );
+		}
+		if ( 'PENDING' === $probed_state ) {
+			$order->update_meta_data( '_cashu_melt_pending_at', time() );
+			$order->save();
+			return rest_ensure_response(
+				array(
+					'status' => 'pending',
+					'id'     => $expected_id,
+				)
+			);
+		}
+		if ( 'UNPAID' === $probed_state ) {
+			$order->delete_meta_data( '_cashu_melt_pending_quote_id' );
+			$order->delete_meta_data( '_cashu_melt_pending_at' );
+			$order->update_meta_data( '_cashu_last_payment_attempt_at', time() );
+			$order->save();
+		}
+		return $failure;
 	}
 
 	/**
@@ -374,7 +371,7 @@ final class PayController {
 	 *
 	 * @param array $mint_response Mint's reply (decoded). Must carry state=PAID.
 	 */
-	private function finalise_paid( \WC_Order $order, string $quote_id, array $mint_response, string $expected_id, int $expected_amount ): \WP_REST_Response {
+	private function finalise_paid( \WC_Order $order, string $quote_id, array $mint_response, string $expected_id ): \WP_REST_Response {
 		// Replay guard: the melt quote is single-use, so a PAID mint state
 		// here can only re-prove a settlement that already completed this
 		// order once. If the admin has since cancelled/failed it, refuse to
@@ -395,53 +392,17 @@ final class PayController {
 			);
 		}
 
-		// Persist preimage + change. Verify the mint-supplied preimage
-		// against the stored payment_hash before storing it — a misbehaving
-		// or compromised mint could otherwise poison the audit trail. A
-		// mismatch isn't fatal (the proofs ARE consumed at the mint, so
-		// the merchant is paid) but the recorded preimage should not lie.
-		$raw_preimage      = isset( $mint_response['payment_preimage'] ) && is_string( $mint_response['payment_preimage'] )
-			? $mint_response['payment_preimage']
-			: '';
-		$stored_hash       = (string) $order->get_meta( '_cashu_payment_hash', true );
-		$verified_preimage = '';
-		if ( '' !== $raw_preimage ) {
-			if ( '' === $stored_hash || Bolt11::preimageMatches( $raw_preimage, $stored_hash ) ) {
-				$verified_preimage = $raw_preimage;
-				$order->update_meta_data( '_cashu_payment_preimage', sanitize_text_field( $raw_preimage ) );
-			} else {
-				Logger::error( 'PayController: mint preimage does not match invoice hash for order ' . $order->get_id() );
-			}
-		}
 		$change = isset( $mint_response['change'] ) && is_array( $mint_response['change'] ) ? $mint_response['change'] : array();
 
-		$order->delete_meta_data( '_cashu_melt_pending_quote_id' );
-		$order->delete_meta_data( '_cashu_melt_pending_at' );
-		$order->delete_meta_data( '_cashu_last_payment_attempt_at' );
-
-		SettlementGuard::mark_paid_once( $order );
-		$order->payment_complete( $quote_id );
-
-		// Prefer the LN address snapshotted at quote creation; fall back
-		// to the current option for legacy orders that pre-date that snapshot.
-		$lightning_address = (string) $order->get_meta( '_cashu_invoice_ln_address', true );
-		if ( '' === $lightning_address ) {
-			$lightning_address = (string) get_option( 'cashu_lightning_address', '' );
-		}
-		$paid_amount = isset( $mint_response['amount'] )
-			? (string) $mint_response['amount']
-			: (string) $expected_amount;
-
-		$order->add_order_note(
-			sprintf(
-				/* translators: %1$s: BTC Symbol, %2$s: amount, %3$s: Lightning Address, %4$s: Melt Quote ID, %5$s: Payment preimage (truncated) */
-				__( "Cashu payment (NUT-18): %1\$s%2\$s\nSent to: %3\$s\nMelt quote: %4\$s\nPayment preimage: %5\$s", 'cashu-for-woocommerce' ),
-				CASHU_WC_BIP177_SYMBOL,
-				$paid_amount,
-				$lightning_address,
-				$quote_id,
-				CashuHelper::redactPreimage( $verified_preimage )
-			)
+		SettlementGuard::complete(
+			$order,
+			$quote_id,
+			( isset( $mint_response['payment_preimage'] ) && is_string( $mint_response['payment_preimage'] ) )
+				? $mint_response['payment_preimage']
+				: '',
+			isset( $mint_response['amount'] ) ? (string) $mint_response['amount'] : '',
+			/* translators: %1$s: BTC Symbol, %2$s: amount, %3$s: Lightning Address, %4$s: Melt Quote ID, %5$s: Payment preimage (truncated) */
+			__( "Cashu payment (NUT-18): %1\$s%2\$s\nSent to: %3\$s\nMelt quote: %4\$s\nPayment preimage: %5\$s", 'cashu-for-woocommerce' )
 		);
 
 		return rest_ensure_response(
@@ -463,14 +424,12 @@ final class PayController {
 	}
 
 	/**
-	 * Compare two mint URLs in a way that matches the client-side
-	 * sameMint() (URL.origin + pathname-without-trailing-slash). Delegates
-	 * to the shared normaliser on CashuGateway so the wallet→server
+	 * Compare two mint URLs via the shared normaliser so the wallet→server
 	 * boundary and internal admin-mint comparisons agree on what
 	 * "same mint" means.
 	 */
 	private function same_mint( string $a, string $b ): bool {
-		return CashuGateway::normalize_mint_url( $a ) === CashuGateway::normalize_mint_url( $b );
+		return MintClient::normalize_url( $a ) === MintClient::normalize_url( $b );
 	}
 
 	private function check_rate_limit( int $order_id ): bool {

@@ -5,32 +5,10 @@ declare(strict_types=1);
 namespace Cashu\WC\Helpers;
 
 /**
- * Helper for basic Cashu-related utilities.
- *
- * Right now we only use this for fiat→sats conversion when creating
- * Lightning invoices server-side.
+ * Static Cashu-related utilities: fiat→sats conversion, preimage
+ * redaction for order notes, and the configured-settings snapshot.
  */
-class CashuHelper {
-	/**
-	 * Stored Lightning address (for future use / convenience).
-	 */
-	private string $lightningAddress;
-
-	/**
-	 * Whether modal checkout is enabled (for future use).
-	 */
-	private bool $modal;
-
-	public function __construct( ?string $lightningAddress = null ) {
-		$this->lightningAddress =
-		trim( $lightningAddress ) ?? (string) get_option( 'cashu_lightning_address', '' );
-		$this->modal            = 'yes' === get_option( 'cashu_modal_checkout', 'yes' );
-	}
-
-	public function isConfigured(): bool {
-		return '' !== $this->lightningAddress;
-	}
-
+final class CashuHelper {
 	/**
 	 * Convert a fiat amount to sats and return a full quote bundle (price + timestamp + source).
 	 *
@@ -78,7 +56,7 @@ class CashuHelper {
 			throw new \RuntimeException( 'Invalid BTC price (non positive).' );
 		}
 
-		// Return amount in sats, rounded up, min zero
+		// Rounded up so the merchant never under-invoices by a sat.
 		$sats = (int) ceil( ( $amount / $btc_price ) * 100000000 );
 		$sats = max( 0, $sats );
 

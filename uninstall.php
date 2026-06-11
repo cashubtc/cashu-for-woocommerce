@@ -97,7 +97,14 @@ function cashu_wc_uninstall_cleanup() {
 }
 
 if ( is_multisite() ) {
-	$cashu_wc_site_ids = get_sites( array( 'fields' => 'ids' ) );
+	// number => 0 lifts get_sites()'s default 100-site cap so large
+	// networks are fully cleaned.
+	$cashu_wc_site_ids = get_sites(
+		array(
+			'fields' => 'ids',
+			'number' => 0,
+		)
+	);
 	foreach ( $cashu_wc_site_ids as $cashu_wc_site_id ) {
 		switch_to_blog( (int) $cashu_wc_site_id );
 		cashu_wc_uninstall_cleanup();
