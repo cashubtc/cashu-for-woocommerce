@@ -10,6 +10,11 @@ coverage:
         threshold: 1%
 
 ignore:
+  # Browser checkout entry point: DOM orchestration exercised by the live
+  # Playwright e2e suite (tests/e2e), which blocks on a human paying a real
+  # invoice and so can't run in CI. The unit-testable logic it drives lives
+  # in helpers.ts / dispatchers.ts / wallet.ts / utils.ts, which ARE measured.
+  - 'src/ts/checkout.ts'
   - 'coverage/**'
   - 'tests/**'
   - 'scripts/**'
