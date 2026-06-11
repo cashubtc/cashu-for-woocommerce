@@ -63,7 +63,8 @@ final class ValidateGlobalSettingsTest extends IntegrationTestCase {
 
 	/**
 	 * Build a valid NUT-06 /v1/info response body advertising bolt11/sat on
-	 * both NUT-04 and NUT-05. Pass overrides to mutate specific entries.
+	 * both NUT-04 and NUT-05, plus NUT-09 (restore) support. Pass overrides
+	 * to mutate specific entries.
 	 */
 	private function validNut06Body( array $overrides = array() ): array {
 		$base = array(
@@ -90,6 +91,9 @@ final class ValidateGlobalSettingsTest extends IntegrationTestCase {
 						),
 					),
 					'disabled' => false,
+				),
+				'9' => array(
+					'supported' => true,
 				),
 			),
 		);
@@ -326,6 +330,42 @@ final class ValidateGlobalSettingsTest extends IntegrationTestCase {
 
 		$this->assertNull( $result );
 		$this->assertStringContainsString( 'NUT-04', WC_Admin_Settings::$errors[0] );
+	}
+
+	public function test_sanitize_trusted_mint_rejects_when_nut09_missing(): void {
+		$body = $this->validNut06Body();
+		unset( $body['nuts']['9'] );
+		Functions\expect( 'wp_remote_get' )->once()->andReturn( $this->mintInfoResponse( $body ) );
+
+		$result = ValidateGlobalSettings::sanitize_trusted_mint( 'https://mint.example/' );
+
+		$this->assertNull( $result );
+		$this->assertStringContainsString( 'NUT-09', WC_Admin_Settings::$errors[0] );
+		$this->assertStringContainsString( 'recovery', WC_Admin_Settings::$errors[0] );
+	}
+
+	public function test_sanitize_trusted_mint_rejects_when_nut09_unsupported(): void {
+		$body                          = $this->validNut06Body();
+		$body['nuts']['9']['supported'] = false;
+		Functions\expect( 'wp_remote_get' )->once()->andReturn( $this->mintInfoResponse( $body ) );
+
+		$result = ValidateGlobalSettings::sanitize_trusted_mint( 'https://mint.example/' );
+
+		$this->assertNull( $result );
+		$this->assertStringContainsString( 'NUT-09', WC_Admin_Settings::$errors[0] );
+	}
+
+	public function test_sanitize_trusted_mint_accepts_nut09_bare_true_shorthand(): void {
+		// Some mints advertise settings nuts as a bare `true` rather than the
+		// canonical {"supported": true}. Both must be accepted.
+		$body              = $this->validNut06Body();
+		$body['nuts']['9'] = true;
+		Functions\expect( 'wp_remote_get' )->once()->andReturn( $this->mintInfoResponse( $body ) );
+
+		$result = ValidateGlobalSettings::sanitize_trusted_mint( 'https://mint.example/' );
+
+		$this->assertSame( 'https://mint.example', $result );
+		$this->assertCount( 0, WC_Admin_Settings::$errors );
 	}
 
 	public function test_sanitize_trusted_mint_rejects_http_url_before_probing(): void {
