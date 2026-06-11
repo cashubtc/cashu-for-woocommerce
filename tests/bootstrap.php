@@ -195,6 +195,18 @@ if (!function_exists('wc_print_r')) {
 //      namespace and the rest of this bootstrap declares root-namespace shims.
 require_once __DIR__ . '/Stubs/order-status.php';
 
+// 11b. Skeleton WC_Settings_Page so Admin\GlobalSettings can be loaded under
+//      tests. The real class wires WC settings-tab hooks in its constructor;
+//      tests only exercise get_settings_for_default_section() and the
+//      limits-description helpers, so a bare property bag suffices.
+if (!class_exists('WC_Settings_Page')) {
+	class WC_Settings_Page {
+		public $id = '';
+		public $label = '';
+		public function __construct() {}
+	}
+}
+
 // 12. Skeleton WC_Admin_Settings. The plugin's ValidateGlobalSettings calls
 //     ::add_error() / ::add_message() to surface validation feedback on the
 //     settings screen. Tests capture into static arrays and reset() between

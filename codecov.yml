@@ -15,6 +15,13 @@ ignore:
   # invoice and so can't run in CI. The unit-testable logic it drives lives
   # in helpers.ts / dispatchers.ts / wallet.ts / utils.ts, which ARE measured.
   - 'src/ts/checkout.ts'
+  # Pure admin-screen HTML rendering / WP registration shims with no logic
+  # of their own — verified by eye in wp-env, not unit-testable in any way
+  # that asserts more than "the echo ran". GlobalSettings.php is NOT ignored:
+  # it carries the limits-description logic and is unit tested.
+  - 'src/Admin/OrderMetaBox.php'
+  - 'src/Admin/Notice.php'
+  - 'src/Blocks/**'
   - 'coverage/**'
   - 'tests/**'
   - 'scripts/**'
