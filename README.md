@@ -1,10 +1,10 @@
 # Cashu for WooCommerce
 
-![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/cashubtc/cashu-for-woocommerce/pr-build.yml)
-![GitHub issues](https://img.shields.io/github/issues/cashubtc/cashu-for-woocommerce)
-![WordPress Plugin Version](https://img.shields.io/wordpress/plugin/v/cashu-for-woocommerce)
-![WordPress Plugin: Tested WP Version](https://img.shields.io/wordpress/plugin/wp-version/cashu-for-woocommerce)
-![WordPress Plugin Downloads](https://img.shields.io/wordpress/plugin/dt/cashu-for-woocommerce)
+[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/cashubtc/cashu-for-woocommerce/pr-build.yml)](https://github.com/cashubtc/cashu-for-woocommerce/actions/workflows/pr-build.yml)
+[![GitHub issues](https://img.shields.io/github/issues/cashubtc/cashu-for-woocommerce)](https://github.com/cashubtc/cashu-for-woocommerce/issues)
+[![WordPress Plugin Version](https://img.shields.io/wordpress/plugin/v/cashu-for-woocommerce)](https://wordpress.org/plugins/cashu-for-woocommerce/)
+[![WordPress Plugin: Tested WP Version](https://img.shields.io/wordpress/plugin/wp-version/cashu-for-woocommerce)](https://wordpress.org/plugins/cashu-for-woocommerce/)
+[![WordPress Plugin Downloads](https://img.shields.io/wordpress/plugin/dt/cashu-for-woocommerce)](https://wordpress.org/plugins/cashu-for-woocommerce/advanced/)
 [![codecov](https://codecov.io/gh/cashubtc/cashu-for-woocommerce/graph/badge.svg)](https://codecov.io/gh/cashubtc/cashu-for-woocommerce)
 
 A secure Cashu payment gateway for your WooCommerce store.
