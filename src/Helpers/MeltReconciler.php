@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Cashu\WC\Helpers;
 
-use Cashu\WC\Gateway\CashuGateway;
 use WC_Order;
 
 /**
@@ -155,8 +154,7 @@ final class MeltReconciler {
 			}
 			set_transient( $throttle_key, '1', self::PER_ORDER_THROTTLE_SECS );
 
-			$gateway    = new CashuGateway();
-			$state_info = $gateway->fetch_melt_quote_state_safely( $quote_id, $mint_url );
+			$state_info = MintClient::melt_quote_state( $mint_url, $quote_id );
 			$state      = isset( $state_info['state'] ) ? (string) $state_info['state'] : '';
 
 			if ( 'PAID' === $state ) {

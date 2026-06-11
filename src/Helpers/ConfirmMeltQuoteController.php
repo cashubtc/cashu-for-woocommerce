@@ -21,7 +21,7 @@ use WP_REST_Server;
  *      Does not hit the mint in the steady state. Exception: if the cashu-leg
  *      melt is in PENDING-at-mint state (PayController stashed the quote id),
  *      one cached state check per poll resolves it — bounded at one mint hit
- *      per CashuGateway::MELT_STATE_FRESH_TTL window per order, zero once
+ *      per MintClient::MELT_STATE_FRESH_TTL window per order, zero once
  *      resolved.
  *
  *  POST /claim-melt-quote
@@ -52,7 +52,7 @@ final class ConfirmMeltQuoteController {
 	/**
 	 * Per-order rate limit on the polling endpoint. Mint amplification is
 	 * already bounded by the mint-state transient cache on pending-melt
-	 * lookups (CashuGateway::MELT_STATE_FRESH_TTL), but each request still
+	 * lookups (MintClient::MELT_STATE_FRESH_TTL), but each request still
 	 * hits the WP REST stack + DB. The 5s legitimate
 	 * poll cadence over a 15-minute payment window is ~180 polls. 720/hour
 	 * (= 12/min) leaves generous headroom for tab visibility cycles and
@@ -205,7 +205,7 @@ final class ConfirmMeltQuoteController {
 	/**
 	 * If the order carries a pending-melt marker, check the mint for the
 	 * current state of that quote (cached per quote_id for
-	 * CashuGateway::MELT_STATE_FRESH_TTL so concurrent browser polls share
+	 * MintClient::MELT_STATE_FRESH_TTL so concurrent browser polls share
 	 * the cost). Returns:
 	 *
 	 *   - PAID response with redirect + marks the order paid, if mint settled
@@ -256,19 +256,7 @@ final class ConfirmMeltQuoteController {
 			return null;
 		}
 
-		$cache_key = 'cashu_melt_state_' . md5( $pending_quote_id );
-		$cached    = get_transient( $cache_key );
-		if ( false !== $cached && is_array( $cached ) ) {
-			$mint_response = $cached;
-		} else {
-			$gateway       = new CashuGateway();
-			$mint_response = $gateway->fetch_melt_quote_state_safely( $pending_quote_id, $order_mint );
-			// Empty response = mint unreachable, rate-limited, or other
-			// non-200. Cache longer to avoid hammering a struggling mint;
-			// the marker survives so a later probe still finalises the order.
-			$ttl = empty( $mint_response ) ? CashuGateway::MELT_STATE_EMPTY_TTL : CashuGateway::MELT_STATE_FRESH_TTL;
-			set_transient( $cache_key, $mint_response, $ttl );
-		}
+		$mint_response = MintClient::melt_quote_state_cached( $order_mint, $pending_quote_id );
 
 		$state = isset( $mint_response['state'] ) ? (string) $mint_response['state'] : '';
 
@@ -293,7 +281,7 @@ final class ConfirmMeltQuoteController {
 			$order->delete_meta_data( '_cashu_melt_pending_quote_id' );
 			$order->delete_meta_data( '_cashu_melt_pending_at' );
 			$order->save();
-			delete_transient( $cache_key );
+			MintClient::flush_melt_quote_state( $pending_quote_id );
 
 			return rest_ensure_response(
 				array(
@@ -325,7 +313,7 @@ final class ConfirmMeltQuoteController {
 			$order->delete_meta_data( '_cashu_melt_pending_at' );
 			$order->update_meta_data( '_cashu_last_payment_attempt_at', time() );
 			$order->save();
-			delete_transient( $cache_key );
+			MintClient::flush_melt_quote_state( $pending_quote_id );
 			return null;
 		}
 
@@ -333,9 +321,8 @@ final class ConfirmMeltQuoteController {
 		// recognise. KEEP the marker: PayController and MeltReconciler will
 		// keep trying. Surface as PENDING to the polling browser so it shows
 		// "settling at mint" rather than dropping the customer back to the
-		// cart on a network blip. Don't delete the cache_key transient — we
-		// WANT the cached value to expire naturally so the next probe
-		// re-fetches.
+		// cart on a network blip. Don't flush the cached state — we WANT it
+		// to expire naturally so the next probe re-fetches.
 		return rest_ensure_response(
 			array(
 				'ok'    => true,
@@ -446,31 +433,15 @@ final class ConfirmMeltQuoteController {
 		$order->update_meta_data( '_cashu_melt_pending_at', time() );
 		$order->save();
 
-		$url = rtrim( $order_mint, '/' ) . '/v1/melt/quote/bolt11/' . rawurlencode( $quote_id );
-		$res = wp_remote_get(
-			$url,
-			array(
-				'timeout' => 10,
-				'headers' => array( 'Accept' => 'application/json' ),
-			)
-		);
-		if ( is_wp_error( $res ) ) {
-			Logger::debug( 'Mint quote state request failed: ' . $res->get_error_message() );
+		$data  = MintClient::melt_quote_state( $order_mint, $quote_id );
+		$state = isset( $data['state'] ) ? (string) $data['state'] : '';
+		if ( '' === $state ) {
+			// Mint unreachable / non-200 / malformed body. The pre-staged
+			// marker survives, so MeltReconciler will follow up.
+			Logger::debug( 'Mint quote state unavailable for order ' . $order->get_id() . ', quote ' . $quote_id );
 			return new WP_Error( 'cashu_mint_error', 'Failed to query mint quote state.', array( 'status' => 502 ) );
 		}
-		$code = (int) wp_remote_retrieve_response_code( $res );
-		$body = (string) wp_remote_retrieve_body( $res );
-		if ( 200 !== $code ) {
-			Logger::debug( 'Mint quote state HTTP ' . $code . ' for order ' . $order->get_id() . ', quote ' . $quote_id );
-			return new WP_Error( 'cashu_mint_http', 'Mint returned a non 200 response.', array( 'status' => 502 ) );
-		}
-		$data = json_decode( $body, true );
-		if ( ! is_array( $data ) || empty( $data['state'] ) ) {
-			Logger::debug( 'Mint quote state invalid JSON for order ' . $order->get_id() . ', quote ' . $quote_id );
-			return new WP_Error( 'cashu_mint_json', 'Mint returned invalid JSON.', array( 'status' => 502 ) );
-		}
 
-		$state           = (string) $data['state'];
 		$mint_preimage   = ( isset( $data['payment_preimage'] ) && is_string( $data['payment_preimage'] ) )
 			? $data['payment_preimage']
 			: '';

@@ -111,7 +111,7 @@ final class ResolvePendingMeltTest extends IntegrationTestCase {
 
 		Functions\when( 'wc_get_order' )->justReturn( $order );
 
-		// CashuGateway::fetch_melt_quote_state_safely talks to the mint via
+		// MintClient::melt_quote_state talks to the mint via
 		// wp_remote_get. Returning PENDING keeps the order in pending state
 		// without triggering the mark_paid flow.
 		Functions\expect( 'wp_remote_get' )
