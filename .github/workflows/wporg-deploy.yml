@@ -95,6 +95,13 @@ jobs:
           [ "${TAG_VER}" = "${PLUGIN_VER}" ]   || { echo "::error::Mismatch: tag vs plugin header";   exit 1; }
           [ "${TAG_VER}" = "${README_STABLE}" ] || { echo "::error::Mismatch: tag vs readme.txt Stable tag — wp.org install page would still show the old version"; exit 1; }
 
+          # Bare version (no leading v) for the SVN tag name. wp.org resolves
+          # readme.txt's `Stable tag: X.Y.Z` against /tags/X.Y.Z/ literally —
+          # passing the git tag (vX.Y.Z) to the deploy action creates
+          # /tags/vX.Y.Z/, which Stable tag never matches, so wp.org falls
+          # back to serving /trunk/ and warns the plugin authors.
+          echo "PLUGIN_VERSION=${TAG_VER}" >> "$GITHUB_ENV"
+
       - name: Install build prereqs (zip)
         run: |
           sudo apt-get update
@@ -138,12 +145,12 @@ jobs:
           SVN_USERNAME: ${{ secrets.WPORG_SVN_USERNAME }}
           SVN_PASSWORD: ${{ secrets.WPORG_SVN_PASSWORD }}
           SLUG: cashu-for-woocommerce
-          VERSION: ${{ env.TAG_NAME }}
+          VERSION: ${{ env.PLUGIN_VERSION }}
           BUILD_DIR: ${{ env.STAGE_DIR }}
-          # ASSETS_DIR defaults to .wordpress-org/ — when that dir does
-          # not exist (as today), the action skips the asset push without
-          # failing. Add banner/icon/screenshots there later to populate
-          # the wp.org plugin page graphics.
+          # ASSETS_DIR defaults to .wordpress-org/, which holds the wp.org
+          # plugin-page graphics (icons, banners, screenshots). The action
+          # syncs that dir to SVN /assets/ destructively — anything missing
+          # from it is deleted on wp.org, so it must stay the complete set.
 
       - name: Dry-run summary
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run == true }}
