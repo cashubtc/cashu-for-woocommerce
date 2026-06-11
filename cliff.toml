@@ -14,7 +14,7 @@ body = """
 {%- set parts = subject | split(pat=" (#") -%}
 {%- set pr_candidate = parts | last | replace(from=")", to="") -%}
 {%- if parts | length == 2 and pr_candidate is matching("^[0-9]+$") -%}
-- {{ parts | first }} ([#{{ pr_candidate }}](https://github.com/cashubtc/cashu-for-woocommerce/pull/{{ pr_candidate }})) ([{{ commit.id | truncate(length=7, end="") }}](https://github.com/cashubtc/cashu-for-woocommerce/commit/{{ commit.id }}))
+- {{ parts | first }} ([#{{ pr_candidate }}](https://github.com/cashubtc/cashu-for-woocommerce/pull/{{ pr_candidate }}))
 {% else -%}
 - {{ subject }} ([{{ commit.id | truncate(length=7, end="") }}](https://github.com/cashubtc/cashu-for-woocommerce/commit/{{ commit.id }}))
 {% endif -%}
