@@ -17,3 +17,8 @@ PRD.md
 .phpunit.cache/
 .claude
 .playwright-mcp
+
+# Playwright e2e (live smoke)
+/test-results/
+/playwright-report/
+/tests/e2e/artifacts/

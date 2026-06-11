@@ -14,6 +14,7 @@
     "qrcode-generator": "^2.0.4"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@prettier/plugin-php": "^0.25.0",
     "@types/jquery": "^4.0.0",
     "@vitest/coverage-v8": "^4.1.8",
@@ -60,6 +61,7 @@
     "wp-env:destroy": "wp-env destroy",
     "wp-env:reset": "wp-env reset && npm run wp-env:seed-store",
     "wp-env:tunnel": "bash scripts/tunnel.sh",
-    "wp-env:tunnel-reset": "bash scripts/tunnel-reset.sh"
+    "wp-env:tunnel-reset": "bash scripts/tunnel-reset.sh",
+    "test:e2e": "playwright test"
   }
 }
