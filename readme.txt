@@ -112,11 +112,9 @@ Cashu is a free and open-source project, supported by donations. If you love thi
 == Changelog ==
 
 = 0.3.1 =
-Fixed: a cancelled or failed order could be silently revived by a repeat payment attempt — settled orders that leave a paid status are no longer auto-completed again.
-Fixed: orders could in rare cases settle for the wrong amount if the Lightning provider returned a mismatched invoice; the amount is now verified before payment.
-Fixed: a paid invoice left mid-settlement (closed tab, dropped connection) could fail to recover on some setups — funds now reliably recover when the page is reopened.
-Fixed: duplicate payment box on checkout pages that mix the block and classic checkout.
-New: the configured mint is now checked for payment-recovery (NUT-09) support on save, so a stranded payment can always be recovered.
+Fixed: hardens checkout against fund loss in rare edge cases.
+Fixed: duplicate payment box on checkout pages that mix block and classic checkout.
+New: mints are now checked for payment-recovery (NUT-09) support when saved.
 Improved: the full payment preimage is no longer written to order notes.
 
 = 0.3.0 =
