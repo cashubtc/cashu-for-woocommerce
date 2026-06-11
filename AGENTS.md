@@ -5,7 +5,8 @@
 - Update versions in `package.json`, `cashu-for-woocommerce.php` (header + `CASHU_WC_VERSION`), `tests/bootstrap.php`, and stable tag/changelog in `readme.txt`.
 - Run `./build.sh` to generate distributable assets.
 - Regenerate `CHANGELOG.md` with the new tag: `npm run changelog -- --tag vX.Y.Z`. The `--tag` flag promotes the `## Unreleased` section to `## [vX.Y.Z](compare-url) (date)`.
-- Commit the changes and push to `main`.
+- `CHANGELOG.md` is fully generated — never hand-edit it; regeneration rebuilds the whole file from commit history and discards manual edits. A non-conventional squash subject simply won't appear (which is why PR titles must be conventional), and a release whose commits were all unconventional is omitted entirely.
+- `main` is protected: land the changes via a release PR titled `chore(release): X.Y.Z`.
 - Create an annotated tag `vX.Y.Z` and push tags.
 - Publish a GitHub release for the tag (non‑prerelease) — for the body, paste the relevant section of `CHANGELOG.md` (GitHub's "Generate release notes" button only walks PR merges and produces nothing useful for direct-to-main history). Publishing fires `.github/workflows/release-zip.yml`, which builds and uploads `cashu-for-woocommerce.zip`.
 - The same release event also triggers `.github/workflows/wporg-deploy.yml`, which pushes the same build to the WordPress.org plugin directory (see "Publishing to WordPress.org" below for one-time setup).
@@ -50,10 +51,13 @@ If a deploy fails partway, or you need to re-push a tag without cutting a new Gi
 - Keep subjects concise and lowercase; include scope only when helpful (eg: `feat(checkout): ...`).
 - Extended commit messages are good, but keep them terse: a sparse "what changed" summary with minimal framing is ideal. 3-4 sentences max overall.
 - **PR titles MUST be Conventional Commits too.** PRs are squash-merged, so the PR title becomes the single commit subject on `main` — and `npm run changelog` (git-cliff) groups the changelog by that prefix. A non-conventional PR title (eg "Settlement hardening: …") lands as an uncategorised commit that git-cliff silently drops, so the release changelog has to be hand-written. Title the PR `fix: …` / `feat: …` etc. and the changelog generates itself.
+- **Check the title again immediately before `gh pr merge --squash`** — the squash subject is permanent on protected `main`; it cannot be retitled after merge.
 
 ## Changelog vs release notes
 
 `CHANGELOG.md` is the canonical curated changelog (features, fixes, performance, refactoring; chores/tests/build/docs filtered). Regenerated at release time with `npm run changelog -- --tag vX.Y.Z`. Lives in the repo so anyone browsing GitHub sees it.
+
+Entry links: PR-merged commits (subject ending `(#N)`) render the PR link only; pre-PR direct-to-main entries keep their commit-hash link, since that's their only reference — so regeneration leaves the historical sections' format unchanged.
 
 `npm run changelog` (no extra args) regenerates `CHANGELOG.md` with the unreleased section showing what's queued for the next release — handy for previewing before tagging.
 

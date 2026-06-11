@@ -5,27 +5,6 @@
 ### Bug Fixes
 
 - bare version for SVN tag; chip icon for wp.org plugin page ([#12](https://github.com/cashubtc/cashu-for-woocommerce/pull/12))
-- verify mint-reported preimages on every settlement path before recording ([#11](https://github.com/cashubtc/cashu-for-woocommerce/pull/11))
-- lift the 100-site cap on multisite uninstall cleanup ([#11](https://github.com/cashubtc/cashu-for-woocommerce/pull/11))
-
-### Refactoring
-
-- extract a stateless MintClient from the gateway, share one settlement finaliser, and remove dead code ([#11](https://github.com/cashubtc/cashu-for-woocommerce/pull/11))
-
-## [v0.3.1](https://github.com/cashubtc/cashu-for-woocommerce/compare/v0.3.0...v0.3.1) (2026-06-11)
-
-### Features
-
-- require NUT-09 (recovery) support when saving a mint ([dfea9a0](https://github.com/cashubtc/cashu-for-woocommerce/commit/dfea9a0a14f5412110dd585f3e18356c974f296d))
-
-### Bug Fixes
-
-- block replay-revival of cancelled/failed orders via a one-way paid-once sentinel ([dfea9a0](https://github.com/cashubtc/cashu-for-woocommerce/commit/dfea9a0a14f5412110dd585f3e18356c974f296d))
-- reject Lightning invoices whose amount does not match the order total ([dfea9a0](https://github.com/cashubtc/cashu-for-woocommerce/commit/dfea9a0a14f5412110dd585f3e18356c974f296d))
-- mint the mint-quote's own amount so a paid quote kept across a re-quote cannot strand customer funds ([dfea9a0](https://github.com/cashubtc/cashu-for-woocommerce/commit/dfea9a0a14f5412110dd585f3e18356c974f296d))
-- close setup/pay lock races and stop quote rotation during an in-flight melt ([dfea9a0](https://github.com/cashubtc/cashu-for-woocommerce/commit/dfea9a0a14f5412110dd585f3e18356c974f296d))
-- render the receipt page and change box once per request ([dfea9a0](https://github.com/cashubtc/cashu-for-woocommerce/commit/dfea9a0a14f5412110dd585f3e18356c974f296d))
-- truncate the payment preimage written to order notes ([dfea9a0](https://github.com/cashubtc/cashu-for-woocommerce/commit/dfea9a0a14f5412110dd585f3e18356c974f296d))
 
 ## [v0.3.0](https://github.com/cashubtc/cashu-for-woocommerce/compare/v0.2.0...v0.3.0) (2026-06-09)
 
