@@ -1,5 +1,20 @@
 # Changelog
 
+## [v0.3.1](https://github.com/cashubtc/cashu-for-woocommerce/compare/v0.3.0...v0.3.1) (2026-06-11)
+
+### Features
+
+- require NUT-09 (recovery) support when saving a mint ([dfea9a0](https://github.com/cashubtc/cashu-for-woocommerce/commit/dfea9a0a14f5412110dd585f3e18356c974f296d))
+
+### Bug Fixes
+
+- block replay-revival of cancelled/failed orders via a one-way paid-once sentinel ([dfea9a0](https://github.com/cashubtc/cashu-for-woocommerce/commit/dfea9a0a14f5412110dd585f3e18356c974f296d))
+- reject Lightning invoices whose amount does not match the order total ([dfea9a0](https://github.com/cashubtc/cashu-for-woocommerce/commit/dfea9a0a14f5412110dd585f3e18356c974f296d))
+- mint the mint-quote's own amount so a paid quote kept across a re-quote cannot strand customer funds ([dfea9a0](https://github.com/cashubtc/cashu-for-woocommerce/commit/dfea9a0a14f5412110dd585f3e18356c974f296d))
+- close setup/pay lock races and stop quote rotation during an in-flight melt ([dfea9a0](https://github.com/cashubtc/cashu-for-woocommerce/commit/dfea9a0a14f5412110dd585f3e18356c974f296d))
+- render the receipt page and change box once per request ([dfea9a0](https://github.com/cashubtc/cashu-for-woocommerce/commit/dfea9a0a14f5412110dd585f3e18356c974f296d))
+- truncate the payment preimage written to order notes ([dfea9a0](https://github.com/cashubtc/cashu-for-woocommerce/commit/dfea9a0a14f5412110dd585f3e18356c974f296d))
+
 ## [v0.3.0](https://github.com/cashubtc/cashu-for-woocommerce/compare/v0.2.0...v0.3.0) (2026-06-09)
 
 ### Bug Fixes
@@ -22,7 +37,7 @@
 - uppercase LIGHTNING QR + raw-invoice copy ([a091940](https://github.com/cashubtc/cashu-for-woocommerce/commit/a0919401e383c170636d126893c8b5b960ebbdb3))
 - show 'Payment confirmed!' before redirect ([e1b6127](https://github.com/cashubtc/cashu-for-woocommerce/commit/e1b61270c9ca5b44edf6e398d5ad500ddcc39e9c))
 - correct path-validation hook plan + drop cashu_enabled from getConfig ([cd4d3d0](https://github.com/cashubtc/cashu-for-woocommerce/commit/cd4d3d05314d330701b1104f71331a3c26f2c614))
-- sanitize_default_path reads $_POST to see in-flight cashu_paths ([1ea1cb0](https://github.com/cashubtc/cashu-for-woocommerce/commit/1ea1cb09a9911b8e1b92057fed3487f69e55d135))
+- sanitize_default_path reads $\_POST to see in-flight cashu_paths ([1ea1cb0](https://github.com/cashubtc/cashu-for-woocommerce/commit/1ea1cb09a9911b8e1b92057fed3487f69e55d135))
 - localize admin UX-assist labels via wp_localize_script ([f31f34f](https://github.com/cashubtc/cashu-for-woocommerce/commit/f31f34f6a1858ffe4069da9711195c521f8cec5e))
 - align array double-arrow in wp_localize_script call ([1880596](https://github.com/cashubtc/cashu-for-woocommerce/commit/18805960342d6a1a3bf2bfca7a009b0c217c4821))
 - use desc (not label) for path checkbox text — WC checkbox renderer ignores label ([e60fa42](https://github.com/cashubtc/cashu-for-woocommerce/commit/e60fa42b12c182493ce6fcc461b5e72ad6e3655b))
@@ -42,7 +57,6 @@
 - add required meta.author field ([32f1900](https://github.com/cashubtc/cashu-for-woocommerce/commit/32f1900d014999eeaefb61f7bf8c2604c8b9aedf))
 - clear WC activation-redirect transient so landingPage actually lands ([c7b296c](https://github.com/cashubtc/cashu-for-woocommerce/commit/c7b296c2ff84c619940e482b21cf31ff1fa8508a))
 - pre-enable Cashu gateway so settings work end-to-end ([beb331f](https://github.com/cashubtc/cashu-for-woocommerce/commit/beb331fc45c2cffe10dd7ba0b4399da597b4fd74))
-
 
 ### Features
 
@@ -73,13 +87,11 @@
 - refresh change-panel copy and add no-wallet onboarding ([1b8c26e](https://github.com/cashubtc/cashu-for-woocommerce/commit/1b8c26e37f0ca992e0fa768c16de8c2c62bd16b7))
 - LNURL probe on lightning_address + retry button on stuck orders ([02f8965](https://github.com/cashubtc/cashu-for-woocommerce/commit/02f8965c364fcce057956782c25a582881504488))
 
-
 ### Performance
 
 - raise mint state cache TTL and back off on rate-limited responses ([c1d6980](https://github.com/cashubtc/cashu-for-woocommerce/commit/c1d698049935943c9d368f45d9dabb50ade090f1))
 - back off pollOrderStatus on consecutive PENDING responses ([e985b7e](https://github.com/cashubtc/cashu-for-woocommerce/commit/e985b7e2a418bd56e5a52ae79eee99d0c470a254))
 - also cache mint state probe on receipt page render ([bc48c30](https://github.com/cashubtc/cashu-for-woocommerce/commit/bc48c30b1e1f60e2347ec9caab032e6fb0822e8c))
-
 
 ### Refactoring
 
@@ -95,11 +107,10 @@
 - drop sameMint and dead change_from_token branch ([058bd91](https://github.com/cashubtc/cashu-for-woocommerce/commit/058bd9181359e57f81bff5f43fbf45f0292198a9))
 - inline seedFingerprint and drop redundant try wrappers ([8f39b41](https://github.com/cashubtc/cashu-for-woocommerce/commit/8f39b413d1d88d65abc69aeab6c71c16d13003b7))
 - drop orphaned const mq from renderQr ([8fc8051](https://github.com/cashubtc/cashu-for-woocommerce/commit/8fc8051b9acbe9b729b88e8ad8be4f434cef8e3c))
-- hoist MELT_STATE_*_TTL constants to CashuGateway ([fba3195](https://github.com/cashubtc/cashu-for-woocommerce/commit/fba319583b587ef36ed402a268852fd3fd46ac58))
+- hoist MELT*STATE*\*\_TTL constants to CashuGateway ([fba3195](https://github.com/cashubtc/cashu-for-woocommerce/commit/fba319583b587ef36ed402a268852fd3fd46ac58))
 - extract checkout dispatchers with fetch-mock test surface ([04b9fde](https://github.com/cashubtc/cashu-for-woocommerce/commit/04b9fde20ebf8c05f7fc118407341cdeaa730a65))
 - classify + project meltTrustedProofsToVendor into action list ([cf40566](https://github.com/cashubtc/cashu-for-woocommerce/commit/cf40566f34da9d3adda062a035087742041829f0))
 - extract readRootData to helpers.ts with adapter shape ([f97bf0d](https://github.com/cashubtc/cashu-for-woocommerce/commit/f97bf0d57ba581815f1fdc95ea66b4776c2de6f9))
 - OrderLock per-acquirer tokens + reconciler force flag ([e992687](https://github.com/cashubtc/cashu-for-woocommerce/commit/e9926875a5f799746b2b93c4d3f86ce555771d75))
 
 ## [v0.1.0](https://github.com/cashubtc/cashu-for-woocommerce/releases/tag/v0.1.0) (2026-01-16)
-

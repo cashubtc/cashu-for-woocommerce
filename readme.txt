@@ -5,7 +5,7 @@ Tags: payments, bitcoin, lightning, checkout, cashu
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 8.3
-Stable tag: 0.3.0
+Stable tag: 0.3.1
 License: MIT
 License URI: https://github.com/cashubtc/cashu-for-woocommerce/blob/main/license.txt
 
@@ -111,6 +111,14 @@ Cashu is a free and open-source project, supported by donations. If you love thi
 
 == Changelog ==
 
+= 0.3.1 =
+Fixed: a cancelled or failed order could be silently revived by a repeat payment attempt — settled orders that leave a paid status are no longer auto-completed again.
+Fixed: orders could in rare cases settle for the wrong amount if the Lightning provider returned a mismatched invoice; the amount is now verified before payment.
+Fixed: a paid invoice left mid-settlement (closed tab, dropped connection) could fail to recover on some setups — funds now reliably recover when the page is reopened.
+Fixed: duplicate payment box on checkout pages that mix the block and classic checkout.
+New: the configured mint is now checked for payment-recovery (NUT-09) support on save, so a stranded payment can always be recovered.
+Improved: the full payment preimage is no longer written to order notes.
+
 = 0.3.0 =
 Changed: plugin now lives in the official cashubtc GitHub organisation.
 Maintenance: removed bundled translations; translate.wordpress.org now handles translations.
@@ -131,6 +139,9 @@ Tweaks total / fee display
 First public release. Test carefully, don't be reckless.
 
 == Upgrade Notice ==
+
+= 0.3.1 =
+Recommended fund-safety update. Note: mints are now checked for recovery (NUT-09) support on save — if your mint lacks it you will be asked to choose another when you next save settings.
 
 = 0.1.0 =
 First public release. Test carefully, don't be reckless.
