@@ -1,5 +1,12 @@
 # Cashu for WooCommerce
 
+![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/cashubtc/cashu-for-woocommerce/pr-build.yml)
+![GitHub issues](https://img.shields.io/github/issues/cashubtc/cashu-for-woocommerce)
+![WordPress Plugin Version](https://img.shields.io/wordpress/plugin/v/cashu-for-woocommerce)
+![WordPress Plugin: Tested WP Version](https://img.shields.io/wordpress/plugin/wp-version/cashu-for-woocommerce)
+![WordPress Plugin Downloads](https://img.shields.io/wordpress/plugin/dt/cashu-for-woocommerce)
+[![codecov](https://codecov.io/gh/cashubtc/cashu-for-woocommerce/graph/badge.svg)](https://codecov.io/gh/cashubtc/cashu-for-woocommerce)
+
 A secure Cashu payment gateway for your WooCommerce store.
 
 This plugin adds a checkout that accepts Lightning or Cashu ecash, paying out to your bitcoin lightning address. Ecash payments are converted (melted) via your trusted Cashu mint in real time.
