@@ -391,7 +391,7 @@ final class ConfirmMeltQuoteController {
 		// verify anything, so fall through to the single mint probe below
 		// rather than 400-ing a possibly legitimate settlement forever.
 		if ( '' !== $preimage && '' !== $payment_hash ) {
-			if ( $this->preimage_matches( $preimage, $payment_hash ) ) {
+			if ( Bolt11::preimageMatches( $preimage, $payment_hash ) ) {
 				if ( ! $this->mark_paid( $order, $quote_id, $preimage, null ) ) {
 					// Lock contention — settlement is in flight elsewhere. Tell
 					// the browser to keep polling rather than claiming PAID on
@@ -546,14 +546,6 @@ final class ConfirmMeltQuoteController {
 		}
 		set_transient( $key, $count + 1, self::CONFIRM_RATE_LIMIT_TTL );
 		return true;
-	}
-
-	/**
-	 * sha256(preimage) == payment_hash. Delegates to Bolt11 so the same
-	 * primitive is used in PayController too.
-	 */
-	private function preimage_matches( string $preimage_hex, string $payment_hash_hex ): bool {
-		return Bolt11::preimageMatches( $preimage_hex, $payment_hash_hex );
 	}
 
 	/**

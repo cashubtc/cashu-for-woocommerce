@@ -74,24 +74,6 @@ export function doConfettiBomb() {
 export const delay = (ms: number): Promise<void> =>
   new Promise<void>((res) => setTimeout(res, ms));
 
-/**
- * Debounces a function for delay milliseconds to prevent excessive calls.
- *
- * @param func - Function to debounce.
- * @param delay - Delay in milliseconds.
- * @returns Debounced function with the same parameters as `func`.
- */
-export const debounce = <T extends (...args: any[]) => void>(
-  func: T,
-  delay: number,
-): ((...args: Parameters<T>) => void) => {
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  return (...args: Parameters<T>) => {
-    clearTimeout(timeoutId);
-    timeoutId = setTimeout(() => func(...args), delay);
-  };
-};
-
 export function getErrorMessage(
   error: unknown,
   defaultMsg: string = 'Unknown error',
