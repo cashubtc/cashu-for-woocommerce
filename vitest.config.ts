@@ -7,5 +7,11 @@ export default defineConfig({
     // Reset localStorage / DOM between tests so cases stay isolated.
     restoreMocks: true,
     clearMocks: true,
+    coverage: {
+      provider: 'v8',
+      include: ['src/ts/**'],
+      reporter: ['text-summary', 'lcov'],
+      reportsDirectory: 'coverage/ts',
+    },
   },
 });
