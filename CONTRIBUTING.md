@@ -8,10 +8,10 @@ This guide explains how to set up the development environment, run the tooling, 
 
 You will need
 
-* Node and npm for the build pipeline
-* PHP and Composer for running unit tests
-* Docker for the wp-env local WordPress environment
-* A local clone of this repository
+- Node and npm for the build pipeline
+- PHP and Composer for running unit tests
+- Docker for the wp-env local WordPress environment
+- A local clone of this repository
 
 Optionally, you can also install wp-env either globally or as a dev dependency, so you can run a disposable WordPress and WooCommerce site for testing the gateway.
 
@@ -28,6 +28,7 @@ This installs all the development dependencies, including Prettier, Vite and PHP
 The rest of this file gives details on all the developer tools, but here's a TL;DR:
 
 **TL;DR:**
+
 ```bash
 # Spin up a WordPress server and WooCommerce store with plugin installed
 npm run wp-env:start
@@ -63,10 +64,10 @@ npm run wp-env:start
 
 This uses your `.wp-env.json` to
 
-* Download and configure WordPress
-* Install WooCommerce and Email Log from the official plugin zips
-* Mount this repository as a plugin and activate it
-* Load the `one-theme` theme in the development environment
+- Download and configure WordPress
+- Install WooCommerce and Email Log from the official plugin zips
+- Mount this repository as a plugin and activate it
+- Load the `one-theme` theme in the development environment
 
 When it finishes you should see something similar to
 
@@ -76,9 +77,9 @@ WordPress development site started at http://localhost:8888
 
 Log in to the development site at
 
-* URL, [http://localhost:8888/wp-admin](http://localhost:8888/wp-admin)
-* User, `admin`
-* Password, `password`
+- URL, [http://localhost:8888/wp-admin](http://localhost:8888/wp-admin)
+- User, `admin`
+- Password, `password`
 
 The Cashu For WooCommerce plugin and WooCommerce should already be active.
 
@@ -94,13 +95,13 @@ npm run wp-env:seed-store
 
 This will
 
-* Install and activate the WordPress importer inside the wp-env container
-* Import the `sample_products.xml` file that ships with WooCommerce into the development site
+- Install and activate the WordPress importer inside the wp-env container
+- Import the `sample_products.xml` file that ships with WooCommerce into the development site
 
 After that, you will usually need to activate the Cashu for WooCommerce plugin and set it up:
 
-* Go to WooCommerce, Settings, Payments
-* Enable the Cashu ecash plugin
+- Go to WooCommerce, Settings, Payments
+- Enable the Cashu ecash plugin
 
 You should now have a working dummy store where you can place test orders through the Cashu gateway straight away.
 
@@ -136,8 +137,8 @@ WordPress Admin > WooCommerce > Status > Logs
 
 The Lightning leg of checkout works fine on `http://localhost:8888` because it is exercised entirely from the same browser. The cashu-wallet leg is different — a real mobile (or web) cashu wallet has to POST the proofs back to the plugin's `/cashu-wc/v1/pay/...` endpoint, and:
 
-* Mobile wallets cannot reach `localhost` on your dev machine.
-* Most cashu wallets refuse non-HTTPS targets for proofs (proofs are bearer assets).
+- Mobile wallets cannot reach `localhost` on your dev machine.
+- Most cashu wallets refuse non-HTTPS targets for proofs (proofs are bearer assets).
 
 The simplest fix during development is a Cloudflare quick tunnel: it exposes the wp-env site at an `https://<random>.trycloudflare.com` URL that real wallets will accept, no account or signup required.
 
@@ -156,10 +157,10 @@ npm run wp-env:tunnel
 
 The script will
 
-* Start a quick tunnel forwarding to `http://localhost:8888`
-* Parse the assigned `https://*.trycloudflare.com` URL out of cloudflared's log
-* Point `WP_SITEURL` and `WP_HOME` at the tunnel URL (see "wp-env constants" below)
-* Print the public URL and block in the foreground
+- Start a quick tunnel forwarding to `http://localhost:8888`
+- Parse the assigned `https://*.trycloudflare.com` URL out of cloudflared's log
+- Point `WP_SITEURL` and `WP_HOME` at the tunnel URL (see "wp-env constants" below)
+- Print the public URL and block in the foreground
 
 Tear down with **Ctrl-C** in the same terminal — a trap handler kills cloudflared and reverts `WP_SITEURL` / `WP_HOME` back to `http://localhost:8888` so the local site keeps working after.
 
@@ -177,9 +178,44 @@ wp-env hardcodes `WP_SITEURL` and `WP_HOME` as PHP constants in `wp-config.php`.
 
 #### Tips while tunneling
 
-* Load the dev browser at the tunnel URL too, not `localhost:8888`. The page itself still loads either way, but the polling `fetch()` and other `rest_url()`-derived calls go to whatever `WP_SITEURL` says — so using the tunnel URL avoids unnecessary round-trips out the tunnel and back.
-* The QR code's `data-pay-callback` is built from `rest_url()`, so it automatically picks up the tunnel URL — no code change needed.
-* The tunnel URL changes every run (anonymous quick tunnel). For a stable URL you'd need a named cloudflared tunnel bound to a Cloudflare account — overkill for local dev.
+- Load the dev browser at the tunnel URL too, not `localhost:8888`. The page itself still loads either way, but the polling `fetch()` and other `rest_url()`-derived calls go to whatever `WP_SITEURL` says — so using the tunnel URL avoids unnecessary round-trips out the tunnel and back.
+- The QR code's `data-pay-callback` is built from `rest_url()`, so it automatically picks up the tunnel URL — no code change needed.
+- The tunnel URL changes every run (anonymous quick tunnel). For a stable URL you'd need a named cloudflared tunnel bound to a Cloudflare account — overkill for local dev.
+
+### Live end-to-end smoke tests (Playwright)
+
+`npm run check` covers the unit and integration suites (PHP + TS) but cannot exercise a real settlement — that needs a real mint, a real Lightning payment, and the browser-side mint/melt actually running. Two Playwright specs in `tests/e2e/` drive a real store through checkout and **block waiting for a human to pay** the invoice they print:
+
+- `live-checkout.spec.ts` — places an order and settles it, used to verify both the Lightning leg (browser mints + melts) and the cashu/NUT-18 leg.
+- `live-recovery.spec.ts` — the funds-at-risk path: it pays, lets the browser mint proofs, then **blocks the melt** (simulating a tab death / dropped connection) to strand them, clears `localStorage`, and reloads to force **NUT-09 deterministic-seed recovery** — asserting a `/v1/restore` call fired and the order settled with no second payment.
+
+These are deliberately **not** part of `npm run check` or CI: they require a human and move real sats.
+
+#### One-time setup
+
+```bash
+npx playwright install chromium
+```
+
+#### Running
+
+The store must be reachable by your wallet, so run them against the Cloudflare tunnel (see above), not `localhost`:
+
+```bash
+# wp-env running + tunnel up (npm run wp-env:tunnel), then in another terminal:
+CASHU_E2E_BASE_URL=https://<your-tunnel>.trycloudflare.com npx playwright test --headed
+
+# or a single spec
+CASHU_E2E_BASE_URL=https://<your-tunnel>.trycloudflare.com npx playwright test live-recovery --headed
+```
+
+`--headed` opens a visible browser so you can scan the QR; either way the runner prints the BOLT11 invoice (and a NUT-18 `creq`) to the console and into `tests/e2e/artifacts/` (gitignored). Pay it from any Lightning/cashu wallet — the spec watches the status box, follows the redirect, and asserts the order settled. Use a low-priced test product (the seeded **Beanie** works well — set it to a few pence so each run costs ~50 sats).
+
+#### Gotchas
+
+- A fresh WooCommerce install defaults to **"coming soon" mode**, which blanks the storefront for the anonymous test browser and the run will hang on the product page. Disable it once: `npx wp-env run cli -- wp option update woocommerce_coming_soon no`.
+- The default 14-minute pay window sits just inside the 15-minute spot-quote expiry. Override with `CASHU_E2E_PAY_WAIT_MS` if you need longer.
+- The configured mint must advertise NUT-09 or `live-recovery` can't pass — the trusted-mint settings probe enforces this at save time, so a mint that gets past configuration will support it.
 
 ### Stopping and cleaning the environment
 
@@ -261,13 +297,13 @@ The plugin is fully translation-ready using the `cashu-for-woocommerce` text dom
 
 When adding or updating strings in PHP
 
-* Use standard WordPress translation functions, for example `__()`, `_e()`, `_x()`, `esc_html__()`, `esc_html_e()`, `esc_attr__()` and so on
-* Always pass `cashu-for-woocommerce` as the text domain
+- Use standard WordPress translation functions, for example `__()`, `_e()`, `_x()`, `esc_html__()`, `esc_html_e()`, `esc_attr__()` and so on
+- Always pass `cashu-for-woocommerce` as the text domain
 
 Example
 
 ```php
-__( 'Pay with Cashu', 'cashu-for-woocommerce' );
+__('Pay with Cashu', 'cashu-for-woocommerce');
 ```
 
 To contribute a translation, please use translate.wordpress.org. For offline tooling, you can extract a fresh POT with wp-cli: `wp i18n make-pot . cashu-for-woocommerce.pot`.
@@ -282,18 +318,18 @@ A typical workflow for a small change might look like this
 
 3. Run the tools
 
-	```bash
-	# Runs build, format, lint, etc
-	# Ensure it completes with "Done"
-	npm run build
-	```
+   ```bash
+   # Runs build, format, lint, etc
+   # Ensure it completes with "Done"
+   npm run build
+   ```
 
 4. Start or update the wp-env WordPress site and test the plugin in a WooCommerce store
 
-	```bash
-	npm run wp-env:start
-	npm run wp-env:seed-store   # optional, to get demo products
-	```
+   ```bash
+   npm run wp-env:start
+   npm run wp-env:seed-store   # optional, to get demo products
+   ```
 
 5. Commit your changes with a clear message
 
@@ -305,10 +341,10 @@ Please keep pull requests focused on a single change where possible, for example
 
 If you find a bug or have a feature request, please include
 
-* A clear description of the problem or idea
-* Steps to reproduce the issue if it is a bug
-* Your WordPress version, WooCommerce version and PHP version
-* Any relevant error messages or logs
+- A clear description of the problem or idea
+- Steps to reproduce the issue if it is a bug
+- Your WordPress version, WooCommerce version and PHP version
+- Any relevant error messages or logs
 
 This information helps us understand and address the issue more quickly.
 
