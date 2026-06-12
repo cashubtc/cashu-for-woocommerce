@@ -1,0 +1,29 @@
+name: Update WordPress.org assets and readme
+
+permissions:
+  contents: read
+
+# Pushes ONLY readme.txt and the .wordpress-org/ page assets (graphics,
+# blueprints) to wp.org SVN — no plugin code, no new version. This exists
+# because wporg-deploy.yml's action bails early when the SVN tag already
+# exists, so re-dispatching it can never refresh assets. Manual-only by
+# design: readme.txt edits mid-cycle shouldn't race to wp.org on merge.
+on:
+  workflow_dispatch:
+
+jobs:
+  assets:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+
+      - name: Push readme + assets to WordPress.org
+        uses: 10up/action-wordpress-plugin-asset-update@2480306f6f693672726d08b5917ea114cb2825f7  # v2.2.0
+        env:
+          SVN_USERNAME: ${{ secrets.WPORG_SVN_USERNAME }}
+          SVN_PASSWORD: ${{ secrets.WPORG_SVN_PASSWORD }}
+          SLUG: cashu-for-woocommerce
+          # Abort rather than touch SVN if anything outside readme.txt /
+          # .wordpress-org/ somehow differs in the checkout.
+          IGNORE_OTHER_FILES: true
