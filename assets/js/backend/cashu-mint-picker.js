@@ -99,7 +99,8 @@
     select.textContent = '';
     var placeholder = doc.createElement('option');
     placeholder.value = '';
-    placeholder.textContent = l10n.i18n.placeholder;
+    // Post-discovery the list is the auditor's, not our "popular" pick.
+    placeholder.textContent = withSentinel ? l10n.i18n.placeholder : l10n.i18n.discovered;
     select.appendChild(placeholder);
     mints.forEach(function (mint) {
       var opt = doc.createElement('option');

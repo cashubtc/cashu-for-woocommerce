@@ -102,7 +102,7 @@ final class AdminEnqueueContractTest extends IntegrationTestCase {
 
 		// Keys consumed by cashu-mint-picker.js — keep in sync, that's the point.
 		$this->assertSame(
-			array( 'placeholder', 'discover', 'discovering', 'failed' ),
+			array( 'placeholder', 'discovered', 'discover', 'discovering', 'failed' ),
 			array_keys( $picker['i18n'] )
 		);
 	}

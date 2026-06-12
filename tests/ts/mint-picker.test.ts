@@ -29,6 +29,7 @@ const L10N = {
   ],
   i18n: {
     placeholder: '— Choose a popular mint —',
+    discovered: '— Choose from discovered mints —',
     discover: 'Discover more mints…',
     discovering: 'Discovering mints…',
     failed: 'Mint discovery failed — please try again later.',
@@ -146,7 +147,7 @@ describe('discovery', () => {
 
     expect(fetcher).toHaveBeenCalledWith('https://auditor.example/mints/');
     expect(labels(select)).toEqual([
-      '— Choose a popular mint —',
+      '— Choose from discovered mints —', // no "popular" claim for auditor results
       'mint.solid.example/Bitcoin', // no name → host+path label
       'Flaky — mint.flaky.example',
     ]);
@@ -161,6 +162,7 @@ describe('discovery', () => {
 
     expect(labels(select)).toContain('Discover more mints…');
     expect(labels(select)).toContain('Minibits — mint.minibits.cash/Bitcoin');
+    expect(labels(select)).toContain('— Choose a popular mint —'); // starter placeholder restored
     expect(notice.hidden).toBe(false);
     expect(notice.textContent).toBe(L10N.i18n.failed);
   });

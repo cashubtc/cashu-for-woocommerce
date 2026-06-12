@@ -84,6 +84,7 @@ class GlobalSettings extends \WC_Settings_Page {
 				),
 				'i18n'         => array(
 					'placeholder' => __( '— Choose a popular mint —', 'cashu-for-woocommerce' ),
+					'discovered'  => __( '— Choose from discovered mints —', 'cashu-for-woocommerce' ),
 					'discover'    => __( 'Discover more mints…', 'cashu-for-woocommerce' ),
 					'discovering' => __( 'Discovering mints…', 'cashu-for-woocommerce' ),
 					'failed'      => __( 'Mint discovery failed — please try again later.', 'cashu-for-woocommerce' ),
