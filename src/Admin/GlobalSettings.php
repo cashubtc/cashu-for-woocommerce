@@ -47,6 +47,50 @@ class GlobalSettings extends \WC_Settings_Page {
 				'requiresBoth' => __( 'Requires Cashu + Lightning', 'cashu-for-woocommerce' ),
 			)
 		);
+		wp_enqueue_script(
+			'cashu-mint-picker',
+			CASHU_WC_URL . 'assets/js/backend/cashu-mint-picker.js',
+			array(),
+			CASHU_WC_VERSION,
+			true
+		);
+		wp_localize_script(
+			'cashu-mint-picker',
+			'cashuMintPickerL10n',
+			array(
+				'auditorApi'   => 'https://api.audit.8333.space',
+				// Starter mints offered before discovery. Same set as numo's
+				// defaults; first entry matches the trusted-mint field default.
+				'starterMints' => apply_filters(
+					'cashu_wc_starter_mints',
+					array(
+						array(
+							'name' => 'Minibits',
+							'url'  => 'https://mint.minibits.cash/Bitcoin',
+						),
+						array(
+							'name' => 'Chorus',
+							'url'  => 'https://mint.chorus.community',
+						),
+						array(
+							'name' => 'Cuba Bitcoin',
+							'url'  => 'https://mint.cubabitcoin.org',
+						),
+						array(
+							'name' => 'Coinos',
+							'url'  => 'https://mint.coinos.io',
+						),
+					)
+				),
+				'i18n'         => array(
+					'placeholder' => __( '— Choose a popular mint —', 'cashu-for-woocommerce' ),
+					'discovered'  => __( '— Choose from discovered mints —', 'cashu-for-woocommerce' ),
+					'discover'    => __( 'Discover more mints…', 'cashu-for-woocommerce' ),
+					'discovering' => __( 'Discovering mints…', 'cashu-for-woocommerce' ),
+					'failed'      => __( 'Mint discovery failed — please try again later.', 'cashu-for-woocommerce' ),
+				),
+			)
+		);
 	}
 
 	public function get_settings_for_default_section(): array {
@@ -188,13 +232,24 @@ class GlobalSettings extends \WC_Settings_Page {
 		if ( '' === $current || MintClient::normalize_url( (string) ( $block['url'] ?? '' ) ) !== $current ) {
 			return '';
 		}
-		return sprintf(
+		$limits_line = sprintf(
 			/* translators: 1: customer pay-in limits (e.g. "100–10,000 sat"), 2: merchant pay-out limits, 3: human-readable age (e.g. "5 mins") */
 			__( 'Advertised Lightning limits — customer pay-in: %1$s; pay-out: %2$s (checked %3$s ago).', 'cashu-for-woocommerce' ),
 			MintLimits::format_range( $this->limit_int( $block, 'mint_min' ), $this->limit_int( $block, 'mint_max' ) ),
 			MintLimits::format_range( $this->limit_int( $block, 'melt_min' ), $this->limit_int( $block, 'melt_max' ) ),
 			human_time_diff( absint( $block['fetched_at'] ?? 0 ), time() )
 		);
+
+		// Lead with the mint's own words (mint-authored text — escape it).
+		$description = trim( (string) ( $block['description'] ?? '' ) );
+		if ( '' === $description ) {
+			return $limits_line;
+		}
+		return sprintf(
+			/* translators: %s: the mint's self-description from its /v1/info */
+			__( 'Mint says: “%s”', 'cashu-for-woocommerce' ),
+			esc_html( $description )
+		) . '<br>' . $limits_line;
 	}
 
 	/**

@@ -48,6 +48,9 @@ final class MintLimits {
 	private const MINT_LEG_HEADROOM_PCT  = 0.02;
 	private const MINT_LEG_HEADROOM_SATS = 4;
 
+	/** Cap for the stored NUT-06 self-description (one mint ships >1k chars). */
+	private const DESCRIPTION_MAX_CHARS = 400;
+
 	/**
 	 * Extract {min,max} sats from the bolt11/sat method entry under
 	 * nuts[$nut_key]. Returns null when the method isn't advertised.
@@ -115,12 +118,13 @@ final class MintLimits {
 		$melt_range = self::extract_bolt11_sat_range( $nuts, '5' );
 
 		$block = array(
-			'url'        => MintClient::normalize_url( $mint_url ),
-			'mint_min'   => $mint_range['min'] ?? null,
-			'mint_max'   => $mint_range['max'] ?? null,
-			'melt_min'   => $melt_range['min'] ?? null,
-			'melt_max'   => $melt_range['max'] ?? null,
-			'fetched_at' => time(),
+			'url'         => MintClient::normalize_url( $mint_url ),
+			'mint_min'    => $mint_range['min'] ?? null,
+			'mint_max'    => $mint_range['max'] ?? null,
+			'melt_min'    => $melt_range['min'] ?? null,
+			'melt_max'    => $melt_range['max'] ?? null,
+			'description' => self::mint_description( $info_body ),
+			'fetched_at'  => time(),
 		);
 
 		$snapshot         = self::snapshot();
@@ -128,6 +132,31 @@ final class MintLimits {
 		update_option( self::OPTION, $snapshot );
 
 		return $block;
+	}
+
+	/**
+	 * The mint's NUT-06 self-description as one capped plain-text line.
+	 * Both fields are combined because warnings often live only in
+	 * description_long (a "we rug monthly" mint may keep its short
+	 * description innocuous); when the long text starts with the short
+	 * one, the long text alone is used. Mint-authored — callers must
+	 * escape at render.
+	 */
+	public static function mint_description( array $info_body ): string {
+		$short = trim( (string) ( $info_body['description'] ?? '' ) );
+		$long  = trim( (string) ( $info_body['description_long'] ?? '' ) );
+
+		if ( '' !== $long && 0 === mb_stripos( $long, $short ) ) {
+			$combined = $long;
+		} else {
+			$combined = trim( $short . ' ' . $long );
+		}
+
+		$combined = (string) preg_replace( '/\s+/u', ' ', $combined );
+		if ( mb_strlen( $combined ) > self::DESCRIPTION_MAX_CHARS ) {
+			$combined = rtrim( mb_substr( $combined, 0, self::DESCRIPTION_MAX_CHARS - 1 ) ) . '…';
+		}
+		return $combined;
 	}
 
 	/**
