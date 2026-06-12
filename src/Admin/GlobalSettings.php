@@ -231,13 +231,24 @@ class GlobalSettings extends \WC_Settings_Page {
 		if ( '' === $current || MintClient::normalize_url( (string) ( $block['url'] ?? '' ) ) !== $current ) {
 			return '';
 		}
-		return sprintf(
+		$limits_line = sprintf(
 			/* translators: 1: customer pay-in limits (e.g. "100–10,000 sat"), 2: merchant pay-out limits, 3: human-readable age (e.g. "5 mins") */
 			__( 'Advertised Lightning limits — customer pay-in: %1$s; pay-out: %2$s (checked %3$s ago).', 'cashu-for-woocommerce' ),
 			MintLimits::format_range( $this->limit_int( $block, 'mint_min' ), $this->limit_int( $block, 'mint_max' ) ),
 			MintLimits::format_range( $this->limit_int( $block, 'melt_min' ), $this->limit_int( $block, 'melt_max' ) ),
 			human_time_diff( absint( $block['fetched_at'] ?? 0 ), time() )
 		);
+
+		// Lead with the mint's own words (mint-authored text — escape it).
+		$description = trim( (string) ( $block['description'] ?? '' ) );
+		if ( '' === $description ) {
+			return $limits_line;
+		}
+		return sprintf(
+			/* translators: %s: the mint's self-description from its /v1/info */
+			__( 'Mint says: “%s”', 'cashu-for-woocommerce' ),
+			esc_html( $description )
+		) . '<br>' . $limits_line;
 	}
 
 	/**

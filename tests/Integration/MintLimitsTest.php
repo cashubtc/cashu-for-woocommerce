@@ -332,4 +332,68 @@ final class MintLimitsTest extends IntegrationTestCase {
 
 		$this->assertArrayNotHasKey( MintLimits::OPTION, $this->optionStore );
 	}
+
+	// ── mint_description: the NUT-06 self-description combine rule ───────
+
+	public function test_mint_description_combines_short_and_long(): void {
+		$this->assertSame(
+			'Cashu.cz mint. It will eventually rug pull you.',
+			MintLimits::mint_description(
+				array(
+					'description'      => 'Cashu.cz mint.',
+					'description_long' => 'It will eventually rug pull you.',
+				)
+			)
+		);
+	}
+
+	public function test_mint_description_uses_long_alone_when_it_repeats_short(): void {
+		$this->assertSame(
+			'No cloud providers used. ONLY SMALL AMOUNTS.',
+			MintLimits::mint_description(
+				array(
+					'description'      => 'No cloud providers used.',
+					'description_long' => 'No cloud providers used. ONLY SMALL AMOUNTS.',
+				)
+			)
+		);
+	}
+
+	public function test_mint_description_handles_missing_fields_and_whitespace(): void {
+		$this->assertSame( '', MintLimits::mint_description( array() ) );
+		$this->assertSame(
+			'long only',
+			MintLimits::mint_description( array( 'description_long' => '  long   only  ' ) )
+		);
+		$this->assertSame(
+			'short only',
+			MintLimits::mint_description( array( 'description' => "short\nonly" ) )
+		);
+	}
+
+	public function test_mint_description_caps_combined_length_with_ellipsis(): void {
+		$result = MintLimits::mint_description(
+			array( 'description' => str_repeat( 'palabras y más palabras ', 60 ) )
+		);
+
+		$this->assertLessThanOrEqual( 400, mb_strlen( $result ) );
+		$this->assertGreaterThan( 390, mb_strlen( $result ) );
+		$this->assertSame( '…', mb_substr( $result, -1 ) );
+	}
+
+	public function test_store_mint_limits_snapshots_the_description(): void {
+		MintLimits::store_mint_limits(
+			'https://mint.example',
+			array(
+				'nuts'             => array(),
+				'description'      => 'A fine mint.',
+				'description_long' => 'Truly.',
+			)
+		);
+
+		$this->assertSame(
+			'A fine mint. Truly.',
+			$this->optionStore[ MintLimits::OPTION ]['mint']['description']
+		);
+	}
 }

@@ -87,6 +87,21 @@ final class GlobalSettingsTest extends IntegrationTestCase {
 		$this->assertStringContainsString( '1–500,000 sat', $fields['lightning_address']['desc'] );
 	}
 
+	public function test_mint_desc_leads_with_the_mints_self_description(): void {
+		Functions\when( 'esc_html' )->returnArg( 1 );
+		$this->optionStore['cashu_trusted_mint'] = 'https://mint.example/Bitcoin';
+		$this->seedSnapshot( 'https://mint.example/Bitcoin', 'me@example.com' );
+		$this->optionStore[ MintLimits::OPTION ]['mint']['description'] = 'It will eventually rug pull you.';
+
+		$desc = $this->fields()['trusted_mint']['desc'];
+
+		$this->assertStringContainsString( 'Mint says:', $desc );
+		$this->assertStringContainsString( 'It will eventually rug pull you.', $desc );
+		// Description leads, limits follow on their own line.
+		$this->assertStringContainsString( '<br>', $desc );
+		$this->assertStringContainsString( '100–1,000,000 sat', $desc );
+	}
+
 	public function test_limit_descs_empty_when_snapshot_is_for_other_source(): void {
 		// Admin changed mint/address since the snapshot was taken — showing
 		// the old source's limits under the new value would mislead.

@@ -201,6 +201,19 @@ final class ValidateGlobalSettings {
 				MintLimits::format_range( $limits['melt_min'], $limits['melt_max'] )
 			)
 		);
+		// Echo the mint's own words back to the merchant — a test/joke mint
+		// usually says so in its NUT-06 description, and save time is the
+		// moment to read it.
+		$description = (string) ( $limits['description'] ?? '' );
+		if ( '' !== $description ) {
+			WC_Admin_Settings::add_message(
+				sprintf(
+					/* translators: %s: the mint's self-description from its /v1/info */
+					__( 'Mint says: “%s”', 'cashu-for-woocommerce' ),
+					$description
+				)
+			);
+		}
 		self::maybe_flag_lnurl_narrower();
 
 		return null;

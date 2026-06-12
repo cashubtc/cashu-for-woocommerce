@@ -567,6 +567,31 @@ final class ValidateGlobalSettingsTest extends IntegrationTestCase {
 		$this->assertStringContainsString( '100–10,000 sat', WC_Admin_Settings::$messages[0] );
 	}
 
+	public function test_successful_mint_probe_announces_the_mints_self_description(): void {
+		Functions\expect( 'wp_remote_get' )->once()->andReturn(
+			$this->mintInfoResponse(
+				$this->validNut06Body(
+					array(
+						'description'      => 'DEVELOPMENT MINT.',
+						'description_long' => 'All sats will be rugged monthly.',
+					)
+				)
+			)
+		);
+
+		ValidateGlobalSettings::sanitize_trusted_mint( 'https://rugs.example/' );
+
+		$snapshot = $this->optionStore[ \Cashu\WC\Helpers\MintLimits::OPTION ] ?? array();
+		$this->assertSame(
+			'DEVELOPMENT MINT. All sats will be rugged monthly.',
+			$snapshot['mint']['description'] ?? null
+		);
+
+		$this->assertCount( 2, WC_Admin_Settings::$messages );
+		$this->assertStringContainsString( 'Mint says:', WC_Admin_Settings::$messages[1] );
+		$this->assertStringContainsString( 'All sats will be rugged monthly.', WC_Admin_Settings::$messages[1] );
+	}
+
 	public function test_successful_lnurl_probe_stores_limits_and_announces_them(): void {
 		Functions\when( 'is_email' )->alias( static fn ( $v ) => $v );
 		Functions\expect( 'wp_remote_get' )->once()->andReturn(
