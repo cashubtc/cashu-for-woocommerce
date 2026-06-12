@@ -9,8 +9,14 @@ type Picker = {
     l10n: typeof L10N,
     fetcher: (url: string) => Promise<unknown>,
   ) => { select: HTMLSelectElement; notice: HTMLElement } | null;
-  auditorMints: (list: unknown[]) => Array<{ name: string; url: string }>;
+  auditorMints: (
+    list: unknown[],
+  ) => Array<{ name: string; url: string; description: string }>;
   mintLabel: (mint: { name?: string; url: string }) => string;
+  combineDescription: (info: {
+    description?: string;
+    description_long?: string;
+  }) => string;
 };
 
 const picker = (window as unknown as { CashuMintPicker: Picker }).CashuMintPicker;
@@ -82,9 +88,24 @@ describe('init', () => {
 
 describe('discovery', () => {
   const AUDITOR = [
-    { url: 'https://mint.flaky.example', state: 'OK', n_errors: 7, name: 'Flaky' },
+    {
+      url: 'https://mint.flaky.example',
+      state: 'OK',
+      n_errors: 7,
+      name: 'Flaky',
+      info: JSON.stringify({
+        description: 'We rug monthly.',
+        description_long: 'We rug monthly. Donations go to charity.',
+      }),
+    },
     { url: 'https://mint.down.example', state: 'ERROR', n_errors: 0, name: 'Down' },
-    { url: 'https://mint.solid.example/Bitcoin', state: 'OK', n_errors: 0, name: '' },
+    {
+      url: 'https://mint.solid.example/Bitcoin',
+      state: 'OK',
+      n_errors: 0,
+      name: '',
+      info: '{not json', // malformed auditor cache must not break discovery
+    },
   ];
 
   function discover(select: HTMLSelectElement) {
@@ -134,6 +155,39 @@ describe('discovery', () => {
     expect(labels(select)).toContain('Discover more mints…');
   });
 
+  test('discovered options carry the description as tooltip and surface it on pick', async () => {
+    const fetcher = vi.fn(() => okResponse(AUDITOR));
+    const { select, notice, input } = setup(fetcher);
+
+    discover(select);
+    await vi.waitFor(() => expect(select.disabled).toBe(false));
+
+    const flaky = Array.from(select.options).find(
+      (o) => o.value === 'https://mint.flaky.example',
+    )!;
+    expect(flaky.title).toBe('We rug monthly. Donations go to charity.');
+
+    select.value = 'https://mint.flaky.example';
+    select.dispatchEvent(new Event('change'));
+
+    expect(input.value).toBe('https://mint.flaky.example');
+    expect(notice.hidden).toBe(false);
+    expect(notice.textContent).toBe('We rug monthly. Donations go to charity.');
+  });
+
+  test('picking a mint without a description keeps the notice hidden', async () => {
+    const fetcher = vi.fn(() => okResponse(AUDITOR));
+    const { select, notice } = setup(fetcher);
+
+    discover(select);
+    await vi.waitFor(() => expect(select.disabled).toBe(false));
+
+    select.value = 'https://mint.solid.example/Bitcoin'; // malformed info blob
+    select.dispatchEvent(new Event('change'));
+
+    expect(notice.hidden).toBe(true);
+  });
+
   test('a later pick clears the failure notice', async () => {
     const fetcher = vi.fn(() => Promise.reject(new Error('offline')));
     const { select, notice, input } = setup(fetcher);
@@ -166,6 +220,41 @@ describe('pure helpers', () => {
     ).toBe('Minibits — mint.minibits.cash/Bitcoin');
     expect(picker.mintLabel({ name: '', url: 'https://mint.x.example/' })).toBe(
       'mint.x.example',
+    );
+  });
+
+  // Mirrors MintLimits::mint_description() on the PHP side.
+  test('combineDescription joins short and long, collapsing whitespace', () => {
+    expect(
+      picker.combineDescription({
+        description: 'Cashu.cz mint.',
+        description_long: 'It will  eventually\nrug pull you.',
+      }),
+    ).toBe('Cashu.cz mint. It will eventually rug pull you.');
+  });
+
+  test('combineDescription uses long alone when it repeats the short text', () => {
+    expect(
+      picker.combineDescription({
+        description: 'We rug monthly.',
+        description_long: 'We rug monthly. Donations go to charity.',
+      }),
+    ).toBe('We rug monthly. Donations go to charity.');
+  });
+
+  test('combineDescription caps at 400 chars with an ellipsis', () => {
+    const result = picker.combineDescription({
+      description: 'palabras y más palabras '.repeat(60),
+    });
+    expect(result.length).toBeLessThanOrEqual(400);
+    expect(result.length).toBeGreaterThan(390);
+    expect(result.endsWith('…')).toBe(true);
+  });
+
+  test('combineDescription tolerates missing fields', () => {
+    expect(picker.combineDescription({})).toBe('');
+    expect(picker.combineDescription({ description_long: ' long only ' })).toBe(
+      'long only',
     );
   });
 });

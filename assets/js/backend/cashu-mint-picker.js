@@ -17,7 +17,26 @@
     return name ? name + ' — ' + host : host;
   }
 
-  // Auditor /mints/ payload -> [{name, url}]: OK-state only, fewest errors first.
+  // NUT-06 description + description_long as one capped line; the long
+  // text wins outright when it repeats the short one as its prefix.
+  // Mirrors MintLimits::mint_description() on the PHP side.
+  function combineDescription(info) {
+    var short = (info.description || '').trim();
+    var long = (info.description_long || '').trim();
+    var combined =
+      long && 0 === long.toLowerCase().indexOf(short.toLowerCase())
+        ? long
+        : (short + ' ' + long).trim();
+    combined = combined.replace(/\s+/g, ' ');
+    if (combined.length > 400) {
+      combined = combined.slice(0, 399).replace(/\s+$/, '') + '…';
+    }
+    return combined;
+  }
+
+  // Auditor /mints/ payload -> [{name, url, description}]: OK-state only,
+  // fewest errors first. `info` is the auditor's cached /v1/info as a JSON
+  // string; missing or malformed blobs read as "no description".
   function auditorMints(list) {
     return list
       .filter(function (m) {
@@ -27,7 +46,13 @@
         return (a.n_errors || 0) - (b.n_errors || 0);
       })
       .map(function (m) {
-        return { name: m.name || '', url: m.url };
+        var info = {};
+        try {
+          info = JSON.parse(m.info || '{}') || {};
+        } catch (e) {
+          info = {};
+        }
+        return { name: m.name || '', url: m.url, description: combineDescription(info) };
       });
   }
 
@@ -41,6 +66,9 @@
       var opt = doc.createElement('option');
       opt.value = mint.url;
       opt.textContent = mintLabel(mint);
+      if (mint.description) {
+        opt.title = mint.description;
+      }
       select.appendChild(opt);
     });
     if (withSentinel) {
@@ -114,13 +142,25 @@
       }
       input.value = value;
       input.dispatchEvent(new Event('change', { bubbles: true }));
+      // Surface what the picked mint says about itself (e.g. "we rug
+      // monthly") before the merchant saves; carried on the option title.
+      var description = select.options[select.selectedIndex].title;
+      if (description) {
+        notice.textContent = description;
+        notice.hidden = false;
+      }
       select.value = ''; // back to the placeholder: the select is an action, not a value
     });
 
     return { select: select, notice: notice };
   }
 
-  var api = { init: init, auditorMints: auditorMints, mintLabel: mintLabel };
+  var api = {
+    init: init,
+    auditorMints: auditorMints,
+    mintLabel: mintLabel,
+    combineDescription: combineDescription,
+  };
 
   if ('undefined' !== typeof window) {
     window.CashuMintPicker = api;
