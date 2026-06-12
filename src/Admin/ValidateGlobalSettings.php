@@ -192,8 +192,11 @@ final class ValidateGlobalSettings {
 		// body (the hourly cron keeps them fresh from here), and set the
 		// merchant's expectations up front — a high-ticket store should
 		// learn about a 10k-sat melt cap now, not from a customer.
+		// Probe results use leveled WP notices, not WC's green messages, so
+		// they read apart from "settings saved" instead of blending into it.
 		$limits = MintLimits::store_mint_limits( $mint_url, $body );
-		WC_Admin_Settings::add_message(
+		Notice::addNotice(
+			'info',
 			sprintf(
 				/* translators: 1: customer pay-in limits (e.g. "100–10,000 sat"), 2: merchant pay-out limits */
 				__( 'Mint Lightning limits — customer pay-in: %1$s; pay-out to your Lightning address: %2$s. Checkout hides Cashu for order totals outside these ranges.', 'cashu-for-woocommerce' ),
@@ -203,14 +206,16 @@ final class ValidateGlobalSettings {
 		);
 		// Echo the mint's own words back to the merchant — a test/joke mint
 		// usually says so in its NUT-06 description, and save time is the
-		// moment to read it.
+		// moment to read it. Mint-authored text inside a kses-rendered
+		// notice, hence the esc_html.
 		$description = (string) ( $limits['description'] ?? '' );
 		if ( '' !== $description ) {
-			WC_Admin_Settings::add_message(
+			Notice::addNotice(
+				'warning',
 				sprintf(
 					/* translators: %s: the mint's self-description from its /v1/info */
 					__( 'Mint says: “%s”', 'cashu-for-woocommerce' ),
-					$description
+					esc_html( $description )
 				)
 			);
 		}
@@ -351,7 +356,8 @@ final class ValidateGlobalSettings {
 		}
 
 		$limits = MintLimits::store_lnurl_limits( $address, $body );
-		WC_Admin_Settings::add_message(
+		Notice::addNotice(
+			'info',
 			sprintf(
 				/* translators: %s: send-amount limits (e.g. "1–500,000 sat") */
 				__( 'Lightning address accepts %s. Checkout hides Cashu for order totals outside this range.', 'cashu-for-woocommerce' ),
@@ -395,7 +401,8 @@ final class ValidateGlobalSettings {
 		}
 
 		self::$lnurl_narrower_flagged = true;
-		WC_Admin_Settings::add_message(
+		Notice::addNotice(
+			'warning',
 			sprintf(
 				/* translators: 1: Lightning address limits, 2: mint pay-out limits */
 				__( 'Note: your Lightning address (%1$s) is narrower than the mint\'s pay-out range (%2$s) — the Lightning address is the effective limit at checkout.', 'cashu-for-woocommerce' ),

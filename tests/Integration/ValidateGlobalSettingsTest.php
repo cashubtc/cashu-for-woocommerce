@@ -14,15 +14,35 @@ final class ValidateGlobalSettingsTest extends IntegrationTestCase {
 
 	private array $optionStore = array();
 
+	/**
+	 * Rendered output of every admin notice queued via Notice::addNotice
+	 * (probe results use WP notices for their level styling — info/warning —
+	 * which WC_Admin_Settings messages can't express).
+	 */
+	private array $notices = array();
+
 	protected function setUp(): void {
 		parent::setUp();
 		$this->optionStore = array();
+		$this->notices     = array();
 		WC_Admin_Settings::reset();
 
 		Functions\when( '__' )->returnArg( 1 );
 		Functions\when( 'esc_html__' )->returnArg( 1 );
 		Functions\when( 'esc_html' )->returnArg( 1 );
+		Functions\when( 'esc_attr' )->returnArg( 1 );
+		Functions\when( 'wp_kses_post' )->returnArg( 1 );
 		Functions\when( 'wp_unslash' )->returnArg( 1 );
+		Functions\when( 'add_action' )->alias(
+			function ( string $hook, $callback ) {
+				if ( 'admin_notices' === $hook && is_callable( $callback ) ) {
+					ob_start();
+					$callback();
+					$this->notices[] = (string) ob_get_clean();
+				}
+				return true;
+			}
+		);
 
 		Functions\when( 'get_option' )->alias(
 			function ( string $key, $default = false ) {
@@ -562,9 +582,11 @@ final class ValidateGlobalSettingsTest extends IntegrationTestCase {
 		$this->assertSame( 100, $snapshot['mint']['melt_min'] ?? null );
 		$this->assertSame( 10000, $snapshot['mint']['melt_max'] ?? null );
 
-		$this->assertCount( 1, WC_Admin_Settings::$messages );
-		$this->assertStringContainsString( 'Mint Lightning limits', WC_Admin_Settings::$messages[0] );
-		$this->assertStringContainsString( '100–10,000 sat', WC_Admin_Settings::$messages[0] );
+		$this->assertCount( 0, WC_Admin_Settings::$messages );
+		$this->assertCount( 1, $this->notices );
+		$this->assertStringContainsString( 'notice-info', $this->notices[0] );
+		$this->assertStringContainsString( 'Mint Lightning limits', $this->notices[0] );
+		$this->assertStringContainsString( '100–10,000 sat', $this->notices[0] );
 	}
 
 	public function test_successful_mint_probe_announces_the_mints_self_description(): void {
@@ -587,9 +609,10 @@ final class ValidateGlobalSettingsTest extends IntegrationTestCase {
 			$snapshot['mint']['description'] ?? null
 		);
 
-		$this->assertCount( 2, WC_Admin_Settings::$messages );
-		$this->assertStringContainsString( 'Mint says:', WC_Admin_Settings::$messages[1] );
-		$this->assertStringContainsString( 'All sats will be rugged monthly.', WC_Admin_Settings::$messages[1] );
+		$this->assertCount( 2, $this->notices );
+		$this->assertStringContainsString( 'notice-warning', $this->notices[1] );
+		$this->assertStringContainsString( 'Mint says:', $this->notices[1] );
+		$this->assertStringContainsString( 'All sats will be rugged monthly.', $this->notices[1] );
 	}
 
 	public function test_successful_lnurl_probe_stores_limits_and_announces_them(): void {
@@ -604,8 +627,9 @@ final class ValidateGlobalSettingsTest extends IntegrationTestCase {
 		$this->assertSame( 1, $snapshot['lnurl']['min'] ?? null );
 		$this->assertSame( 100000, $snapshot['lnurl']['max'] ?? null );
 
-		$this->assertCount( 1, WC_Admin_Settings::$messages );
-		$this->assertStringContainsString( 'Lightning address accepts 1–100,000 sat', WC_Admin_Settings::$messages[0] );
+		$this->assertCount( 1, $this->notices );
+		$this->assertStringContainsString( 'notice-info', $this->notices[0] );
+		$this->assertStringContainsString( 'Lightning address accepts 1–100,000 sat', $this->notices[0] );
 	}
 
 	public function test_lnurl_probe_flags_address_narrower_than_melt_range(): void {
@@ -628,8 +652,9 @@ final class ValidateGlobalSettingsTest extends IntegrationTestCase {
 
 		ValidateGlobalSettings::sanitize_lightning_address( 'me@example.com' );
 
-		$this->assertCount( 2, WC_Admin_Settings::$messages );
-		$this->assertStringContainsString( 'narrower than the mint', WC_Admin_Settings::$messages[1] );
+		$this->assertCount( 2, $this->notices );
+		$this->assertStringContainsString( 'notice-warning', $this->notices[1] );
+		$this->assertStringContainsString( 'narrower than the mint', $this->notices[1] );
 	}
 
 	public function test_failed_mint_probe_does_not_touch_limits_snapshot(): void {
