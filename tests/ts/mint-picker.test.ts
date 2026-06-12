@@ -86,6 +86,14 @@ describe('init', () => {
   });
 });
 
+// nuts blob advertising everything the save-time probe requires:
+// bolt11/sat on NUT-04 + NUT-05, NUT-09 restore.
+const CAPS = {
+  '4': { methods: [{ method: 'bolt11', unit: 'sat' }], disabled: false },
+  '5': { methods: [{ method: 'bolt11', unit: 'sat' }], disabled: false },
+  '9': { supported: true },
+};
+
 describe('discovery', () => {
   const AUDITOR = [
     {
@@ -94,6 +102,7 @@ describe('discovery', () => {
       n_errors: 7,
       name: 'Flaky',
       info: JSON.stringify({
+        nuts: CAPS,
         description: 'We rug monthly.',
         description_long: 'We rug monthly. Donations go to charity.',
       }),
@@ -104,7 +113,21 @@ describe('discovery', () => {
       state: 'OK',
       n_errors: 0,
       name: '',
-      info: '{not json', // malformed auditor cache must not break discovery
+      info: JSON.stringify({ nuts: CAPS }), // capable, but no description
+    },
+    {
+      url: 'https://mint.nomelt.example',
+      state: 'OK',
+      n_errors: 0,
+      name: 'NoMelt',
+      info: JSON.stringify({ nuts: { ...CAPS, '5': { disabled: true } } }),
+    },
+    {
+      url: 'https://mint.opaque.example',
+      state: 'OK',
+      n_errors: 0,
+      name: 'Opaque',
+      info: '{not json', // unverifiable capabilities — excluded, must not break discovery
     },
   ];
 
@@ -182,10 +205,22 @@ describe('discovery', () => {
     discover(select);
     await vi.waitFor(() => expect(select.disabled).toBe(false));
 
-    select.value = 'https://mint.solid.example/Bitcoin'; // malformed info blob
+    select.value = 'https://mint.solid.example/Bitcoin';
     select.dispatchEvent(new Event('change'));
 
     expect(notice.hidden).toBe(true);
+  });
+
+  test('mints not advertising bolt11 mint+melt+restore are excluded', async () => {
+    const fetcher = vi.fn(() => okResponse(AUDITOR));
+    const { select } = setup(fetcher);
+
+    discover(select);
+    await vi.waitFor(() => expect(select.disabled).toBe(false));
+
+    const urls = Array.from(select.options).map((o) => o.value);
+    expect(urls).not.toContain('https://mint.nomelt.example'); // NUT-05 disabled
+    expect(urls).not.toContain('https://mint.opaque.example'); // unverifiable info
   });
 
   test('a later pick clears the failure notice', async () => {
@@ -204,12 +239,21 @@ describe('discovery', () => {
 });
 
 describe('pure helpers', () => {
-  test('auditorMints filters non-OK and sorts by n_errors ascending', () => {
+  test('auditorMints keeps OK + fully-capable mints, fewest errors first', () => {
+    const info = JSON.stringify({ nuts: CAPS });
     const sorted = picker.auditorMints([
-      { url: 'https://b.example', state: 'OK', n_errors: 3, name: 'B' },
-      { url: 'https://a.example', state: 'OK', n_errors: 1, name: 'A' },
-      { url: 'https://c.example', state: 'UNKNOWN', n_errors: 0, name: 'C' },
-      { url: '', state: 'OK', n_errors: 0, name: 'no url' },
+      { url: 'https://b.example', state: 'OK', n_errors: 3, name: 'B', info },
+      { url: 'https://a.example', state: 'OK', n_errors: 1, name: 'A', info },
+      { url: 'https://c.example', state: 'UNKNOWN', n_errors: 0, name: 'C', info },
+      { url: '', state: 'OK', n_errors: 0, name: 'no url', info },
+      { url: 'https://d.example', state: 'OK', n_errors: 0, name: 'D' }, // no info blob
+      {
+        url: 'https://e.example',
+        state: 'OK',
+        n_errors: 0,
+        name: 'E', // restore (NUT-09) missing — save-time probe would reject it
+        info: JSON.stringify({ nuts: { ...CAPS, '9': { supported: false } } }),
+      },
     ]);
     expect(sorted.map((m) => m.name)).toEqual(['A', 'B']);
   });

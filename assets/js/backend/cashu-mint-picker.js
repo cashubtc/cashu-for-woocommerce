@@ -34,25 +34,64 @@
     return combined;
   }
 
-  // Auditor /mints/ payload -> [{name, url, description}]: OK-state only,
-  // fewest errors first. `info` is the auditor's cached /v1/info as a JSON
-  // string; missing or malformed blobs read as "no description".
+  // True when the NUT advertises a bolt11/sat method and isn't disabled.
+  function nutBolt11Sat(info, key) {
+    var nut = (info.nuts || {})[key];
+    if (!nut || 'object' !== typeof nut || nut.disabled) {
+      return false;
+    }
+    return (nut.methods || []).some(function (m) {
+      return (
+        !!m &&
+        'bolt11' === String(m.method).toLowerCase() &&
+        'sat' === String(m.unit).toLowerCase()
+      );
+    });
+  }
+
+  function nut9Supported(info) {
+    var nut = (info.nuts || {})['9'];
+    return true === nut || (!!nut && 'object' === typeof nut && !!nut.supported);
+  }
+
+  // Auditor /mints/ payload -> [{name, url, description}]: OK-state mints
+  // that advertise everything the save-time probe will demand — bolt11/sat
+  // on NUT-04 + NUT-05 and NUT-09 restore — fewest errors first. `info` is
+  // the auditor's cached /v1/info as a JSON string; mints whose blob is
+  // missing or malformed can't be verified, so they're excluded too.
   function auditorMints(list) {
     return list
-      .filter(function (m) {
-        return !!m && 'OK' === m.state && !!m.url;
+      .map(function (m) {
+        if (!m || 'OK' !== m.state || !m.url) {
+          return null;
+        }
+        var info;
+        try {
+          info = JSON.parse(m.info || '') || null;
+        } catch (e) {
+          info = null;
+        }
+        if (
+          !info ||
+          !nutBolt11Sat(info, '4') ||
+          !nutBolt11Sat(info, '5') ||
+          !nut9Supported(info)
+        ) {
+          return null;
+        }
+        return {
+          name: m.name || '',
+          url: m.url,
+          description: combineDescription(info),
+          errors: m.n_errors || 0,
+        };
       })
+      .filter(Boolean)
       .sort(function (a, b) {
-        return (a.n_errors || 0) - (b.n_errors || 0);
+        return a.errors - b.errors;
       })
       .map(function (m) {
-        var info = {};
-        try {
-          info = JSON.parse(m.info || '{}') || {};
-        } catch (e) {
-          info = {};
-        }
-        return { name: m.name || '', url: m.url, description: combineDescription(info) };
+        return { name: m.name, url: m.url, description: m.description };
       });
   }
 
