@@ -1,5 +1,18 @@
 # Changelog
 
+## [v0.4.0](https://github.com/cashubtc/cashu-for-woocommerce/compare/v0.3.2...v0.4.0) (2026-06-12)
+
+### Bug Fixes
+
+- ship the Playground blueprint in the plugin-page assets ([#26](https://github.com/cashubtc/cashu-for-woocommerce/pull/26))
+- guard rest_api_init route registration against the in-place upgrade race ([#27](https://github.com/cashubtc/cashu-for-woocommerce/pull/27))
+
+
+### Features
+
+- respect mint and LNURL amount limits ([#16](https://github.com/cashubtc/cashu-for-woocommerce/pull/16))
+- trusted-mint picker with auditor discovery and mint self-description ([#25](https://github.com/cashubtc/cashu-for-woocommerce/pull/25))
+
 ## [v0.3.2](https://github.com/cashubtc/cashu-for-woocommerce/compare/v0.3.1...v0.3.2) (2026-06-11)
 
 ### Bug Fixes
