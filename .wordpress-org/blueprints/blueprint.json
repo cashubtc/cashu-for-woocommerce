@@ -1,0 +1,77 @@
+{
+	"$schema": "https://playground.wordpress.net/blueprint-schema.json",
+	"meta": {
+		"title": "Cashu for WooCommerce",
+		"description": "Try the plugin in a disposable WordPress + WooCommerce sandbox.",
+		"author": "cashubtc"
+	},
+	"preferredVersions": {
+		"php": "8.3",
+		"wp": "latest"
+	},
+	"phpExtensionBundles": ["kitchen-sink"],
+	"features": {
+		"networking": true
+	},
+	"landingPage": "/wp-admin/admin.php?page=wc-settings&tab=cashu_settings",
+	"login": true,
+	"steps": [
+		{
+			"step": "installPlugin",
+			"pluginData": {
+				"resource": "wordpress.org/plugins",
+				"slug": "woocommerce"
+			}
+		},
+		{
+			"step": "installPlugin",
+			"pluginData": {
+				"resource": "wordpress.org/plugins",
+				"slug": "wordpress-importer"
+			}
+		},
+		{
+			"step": "installPlugin",
+			"pluginData": {
+				"resource": "wordpress.org/plugins",
+				"slug": "cashu-for-woocommerce"
+			}
+		},
+		{
+			"step": "setSiteOptions",
+			"options": {
+				"blogname": "Cashu Demo Store",
+				"woocommerce_store_address": "1 Demo Street",
+				"woocommerce_store_city": "London",
+				"woocommerce_default_country": "GB",
+				"woocommerce_store_postcode": "SW1A 1AA",
+				"woocommerce_currency": "GBP",
+				"woocommerce_onboarding_profile": {
+					"completed": true,
+					"skipped": true
+				},
+				"woocommerce_task_list_hidden": "yes",
+				"woocommerce_task_list_welcome_modal_dismissed": "yes",
+				"woocommerce_show_marketplace_suggestions": "no",
+				"woocommerce_allow_tracking": "no",
+				"woocommerce_cashu_default_settings": {
+					"enabled": "yes"
+				},
+				"cashu_paths": {
+					"unified": "no",
+					"cashu": "no",
+					"lightning": "yes"
+				},
+				"cashu_default_path": "lightning"
+			}
+		},
+		{
+			"step": "wp-cli",
+			"command": "wp import wp-content/plugins/woocommerce/sample-data/sample_products.xml --authors=create"
+		},
+		{
+			"step": "runPHP",
+			"code": "<?php require_once 'wordpress/wp-load.php'; delete_transient( '_wc_activation_redirect' ); delete_transient( 'wc_activation_redirect' ); delete_transient( 'woocommerce_activation_redirect' ); delete_option( 'woocommerce_admin_install_timestamp' );"
+		}
+	]
+}
