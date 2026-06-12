@@ -55,10 +55,16 @@ final class CashuWCPlugin {
 		// Blocks support.
 		add_action( 'woocommerce_blocks_loaded', array( self::class, 'blocksSupport' ) );
 
-		// REST Routes
+		// REST routes. class_exists() guards the in-place upgrade race: WP
+		// swaps the plugin files mid-request, and WooCommerce's admin REST
+		// preload can fire rest_api_init while the old code is in memory
+		// but the new files aren't yet readable by the autoloader.
 		add_action(
 			'rest_api_init',
 			function (): void {
+				if ( ! class_exists( ConfirmMeltQuoteController::class ) || ! class_exists( PayController::class ) ) {
+					return;
+				}
 				( new ConfirmMeltQuoteController() )->register_routes();
 				( new PayController() )->register_routes();
 			}
