@@ -21,12 +21,17 @@ Publishing a non-prerelease GitHub release fires both `release-zip.yml` (uploads
 
 **Re-running a deploy manually:**
 
-If a deploy fails partway, or you need to re-push a tag without cutting a new GitHub release, run `wporg-deploy.yml` manually with the same `vX.Y.Z` tag and `dry_run = false`.
+If a deploy fails partway, or you need to re-push a tag without cutting a new GitHub release, run `wporg-deploy.yml` manually with the same `vX.Y.Z` tag and `dry_run = false`. **Caveat:** if the version already made it to SVN `/tags/`, the deploy action bails early ("already published") — it will NOT refresh anything, assets included. That's what `wporg-assets-update.yml` is for.
+
+**Updating readme/assets without a release:**
+
+Run `wporg-assets-update.yml` (manual dispatch, no inputs). It pushes ONLY `readme.txt` and `.wordpress-org/` (page graphics + the Live Preview blueprint) to wp.org SVN — no plugin code, no version bump, no GitHub release needed. Use it after merging changes to banners, screenshots, the blueprint, or readme copy edits.
 
 **Gotchas to watch for:**
 
 - The workflow refuses to deploy unless the tag, `package.json` version, plugin header version, **and** `Stable tag:` in `readme.txt` all agree. Forgetting to bump `Stable tag` is the classic wp.org footgun — the install page would still show the old version even after /trunk/ updates.
-- wp.org plugin page graphics (banner, icon, screenshots) live in the `.wordpress-org/` directory at repo root, following [10up's asset spec](https://github.com/10up/action-wordpress-plugin-deploy#wordpressorg-assets). The deploy syncs it to SVN `/assets/` destructively — it must always hold the complete set, and asset changes only reach wp.org when a release tag containing them is deployed.
+- wp.org plugin page graphics (banner, icon, screenshots) live in the `.wordpress-org/` directory at repo root, following [10up's asset spec](https://github.com/10up/action-wordpress-plugin-deploy#wordpressorg-assets). Both deploy paths sync it to SVN `/assets/` destructively — it must always hold the complete set.
+- The wp.org **Live Preview** (Playground) blueprint must live at `.wordpress-org/blueprints/blueprint.json` — wp.org only reads it from SVN `/assets/blueprints/`. It installs the plugin by wp.org slug (the preview should run what the directory distributes). The repo-root `blueprint.json` is a separate artifact: the README's Playground link targets it by URL and installs the latest GitHub release zip instead. Keep both in sync when demo steps change.
 
 ## Project specifics
 
