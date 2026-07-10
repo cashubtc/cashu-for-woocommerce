@@ -283,9 +283,7 @@ export function selectPollIntervalMs(
  * separate throw, or a state we don't recognise).
  */
 export type MeltFailureBranch =
-  | 'paid_inputs_spent'
-  | 'unpaid_inputs_safe'
-  | 'unknown_let_server_probe';
+  'paid_inputs_spent' | 'unpaid_inputs_safe' | 'unknown_let_server_probe';
 
 export function deriveMeltFailureBranch(
   postState: string | null | undefined,

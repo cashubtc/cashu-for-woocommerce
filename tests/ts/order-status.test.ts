@@ -22,8 +22,7 @@ const findAction = <T extends OrderStatusAction['type']>(
   type: T,
 ): Extract<OrderStatusAction, { type: T }> | undefined =>
   actions.find((a) => a.type === type) as
-    | Extract<OrderStatusAction, { type: T }>
-    | undefined;
+    Extract<OrderStatusAction, { type: T }> | undefined;
 
 // ----------------------------------------------------------------------------
 // Empty / null
