@@ -5,7 +5,7 @@ Tags: payments, bitcoin, lightning, checkout, cashu
 Requires at least: 6.5
 Tested up to: 7.0
 Requires PHP: 8.3
-Stable tag: 0.4.0
+Stable tag: 0.5.0
 License: MIT
 License URI: https://github.com/cashubtc/cashu-for-woocommerce/blob/main/license.txt
 
@@ -110,6 +110,12 @@ Cashu is a free and open-source project, supported by donations. If you love thi
 - Donate to OpenCash: https://opencash.dev
 
 == Changelog ==
+
+= 0.5.0 =
+Fixed: Lightning payments that settle after the checkout window are now detected and completed. An hourly watch follows every invoice to its real expiry, emails the customer a completion link when a late payment arrives, holds unpaid orders while their invoice is still payable, and reopens the payment page for a cancelled order whose payment was found.
+New: the checkout window extends itself while the exchange rate stays steady, so slow payers keep a stable invoice instead of losing it after 15 minutes.
+New: a hint under the checkout QR explains tap-to-copy, and copying shows an animated confirmation.
+Changed: the mint disclosure moved below the payment card.
 
 = 0.4.0 =
 New: trusted-mint picker in settings, with auditor discovery and each mint's self-description shown before you save.
