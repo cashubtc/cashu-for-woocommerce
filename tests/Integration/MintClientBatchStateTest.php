@@ -32,6 +32,9 @@ final class MintClientBatchStateTest extends IntegrationTestCase {
 				return true;
 			}
 		);
+		// Logger::debug() gates on this; keep it off so new debug-log calls
+		// don't need a WC_Logger stub.
+		Functions\when( 'get_option' )->justReturn( '' );
 	}
 
 	public function test_batch_endpoint_maps_states_by_quote_id(): void {
@@ -153,5 +156,44 @@ final class MintClientBatchStateTest extends IntegrationTestCase {
 			),
 			$states
 		);
+	}
+
+	public function test_transport_error_does_not_flag_mint(): void {
+		$this->stubBaseline();
+		Functions\expect( 'wp_remote_post' )->twice()->andReturn(
+			new \WP_Error( 'http_request_failed', 'timeout' )
+		);
+		Functions\expect( 'wp_remote_get' )->times( 2 )->andReturn(
+			array(
+				'response' => array( 'code' => 200 ),
+				'body'     => (string) json_encode( array( 'state' => 'PAID' ) ),
+			)
+		);
+
+		$states = MintClient::mint_quote_states( self::MINT, array( 'a' ) );
+		$this->assertSame( array( 'a' => 'PAID' ), $states );
+		// No flag set: the second call POSTs the batch endpoint again.
+		MintClient::mint_quote_states( self::MINT, array( 'a' ) );
+	}
+
+	public function test_server_error_does_not_flag_mint(): void {
+		$this->stubBaseline();
+		Functions\expect( 'wp_remote_post' )->twice()->andReturn(
+			array(
+				'response' => array( 'code' => 500 ),
+				'body'     => '',
+			)
+		);
+		Functions\expect( 'wp_remote_get' )->times( 2 )->andReturn(
+			array(
+				'response' => array( 'code' => 200 ),
+				'body'     => (string) json_encode( array( 'state' => 'PAID' ) ),
+			)
+		);
+
+		$states = MintClient::mint_quote_states( self::MINT, array( 'a' ) );
+		$this->assertSame( array( 'a' => 'PAID' ), $states );
+		// No flag set: the second call POSTs the batch endpoint again.
+		MintClient::mint_quote_states( self::MINT, array( 'a' ) );
 	}
 }

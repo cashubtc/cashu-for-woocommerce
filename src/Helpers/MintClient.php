@@ -157,8 +157,10 @@ final class MintClient {
 	 * back to per-quote lookups for mints without batch support. Returns
 	 * quote_id => state ('' when unknown). Never throws.
 	 *
-	 * A transport error also sets the unsupported flag for a day; the
-	 * per-quote fallback covers the gap and the flag self-heals.
+	 * Only HTTP 404/405/400 (endpoint genuinely absent) sets the unsupported
+	 * flag; a transport error or another status falls back per-quote for
+	 * this call only, without flagging, so a mint having a bad moment
+	 * doesn't get punished with a day of the much chattier per-quote path.
 	 */
 	public static function mint_quote_states( string $mint_url, array $quote_ids ): array {
 		$quote_ids = array_values( array_unique( array_filter( array_map( 'strval', $quote_ids ) ) ) );
@@ -167,43 +169,72 @@ final class MintClient {
 		}
 		$flag_key = 'cashu_wc_no_nut29_' . md5( self::normalize_url( $mint_url ) );
 		if ( false === get_transient( $flag_key ) ) {
-			$res = wp_remote_post(
-				rtrim( $mint_url, '/' ) . '/v1/mint/quote/bolt11/check',
-				array(
-					'timeout' => 15,
-					'headers' => array( 'Content-Type' => 'application/json' ),
-					'body'    => wp_json_encode( array( 'quotes' => $quote_ids ) ),
-				)
-			);
-			if ( ! is_wp_error( $res ) && 200 === (int) wp_remote_retrieve_response_code( $res ) ) {
-				$json = json_decode( (string) wp_remote_retrieve_body( $res ), true );
-				// Some implementations wrap the list in a "quotes" key.
-				$list = is_array( $json ) && isset( $json['quotes'] ) && is_array( $json['quotes'] )
-					? $json['quotes']
-					: $json;
-				if ( is_array( $list ) ) {
-					$out = array_fill_keys( $quote_ids, '' );
-					foreach ( $list as $entry ) {
-						// Skip entries without an explicit quote id: a mint
-						// that omits it, or returns fewer entries than
-						// requested, must never let a state be misattributed
-						// to the wrong quote.
-						if ( ! is_array( $entry ) || empty( $entry['quote'] ) ) {
-							continue;
-						}
-						$id = (string) $entry['quote'];
-						if ( isset( $out[ $id ] ) ) {
-							$out[ $id ] = (string) ( $entry['state'] ?? '' );
-						}
-					}
-					return $out;
-				}
+			$batch = self::batch_quote_states( $mint_url, $quote_ids, $flag_key );
+			if ( null !== $batch ) {
+				return $batch;
 			}
-			set_transient( $flag_key, '1', self::NUT29_UNSUPPORTED_TTL );
 		}
 		$out = array();
 		foreach ( $quote_ids as $id ) {
 			$out[ $id ] = self::mint_quote_state( $mint_url, $id );
+		}
+		return $out;
+	}
+
+	/**
+	 * One NUT-29 batch attempt. Returns the state map on a usable 200
+	 * response, or null to fall back per-quote for this call.
+	 */
+	private static function batch_quote_states( string $mint_url, array $quote_ids, string $flag_key ): ?array {
+		$res = wp_remote_post(
+			rtrim( $mint_url, '/' ) . '/v1/mint/quote/bolt11/check',
+			array(
+				'timeout' => 15,
+				'headers' => array( 'Content-Type' => 'application/json' ),
+				'body'    => wp_json_encode( array( 'quotes' => $quote_ids ) ),
+			)
+		);
+		if ( is_wp_error( $res ) ) {
+			Logger::debug( 'Mint quote batch check failed: ' . $res->get_error_message() );
+			return null;
+		}
+		$code = (int) wp_remote_retrieve_response_code( $res );
+		if ( 200 !== $code ) {
+			if ( in_array( $code, array( 400, 404, 405 ), true ) ) {
+				set_transient( $flag_key, '1', self::NUT29_UNSUPPORTED_TTL );
+			} else {
+				Logger::debug( 'Mint quote batch check HTTP ' . $code );
+			}
+			return null;
+		}
+
+		$json = json_decode( (string) wp_remote_retrieve_body( $res ), true );
+		// Some implementations wrap the list in a "quotes" key.
+		$list = is_array( $json ) && isset( $json['quotes'] ) && is_array( $json['quotes'] )
+			? $json['quotes']
+			: $json;
+		if ( ! is_array( $list ) ) {
+			Logger::debug( 'Mint quote batch check returned an unparsable body' );
+			return null;
+		}
+
+		$out     = array_fill_keys( $quote_ids, '' );
+		$matched = false;
+		foreach ( $list as $entry ) {
+			// Skip entries without an explicit quote id: a mint that omits
+			// it, or returns fewer entries than requested, must never let a
+			// state be misattributed to the wrong quote.
+			if ( ! is_array( $entry ) || empty( $entry['quote'] ) ) {
+				continue;
+			}
+			$id = (string) $entry['quote'];
+			if ( isset( $out[ $id ] ) ) {
+				$out[ $id ] = (string) ( $entry['state'] ?? '' );
+				$matched    = true;
+			}
+		}
+		if ( ! $matched ) {
+			Logger::debug( 'Mint quote batch check returned no usable entries' );
 		}
 		return $out;
 	}
