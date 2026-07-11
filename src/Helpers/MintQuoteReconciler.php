@@ -346,6 +346,11 @@ final class MintQuoteReconciler {
 	 * first. Each entry keeps the mint it was issued at, so a later
 	 * trusted-mint change can never misroute the probe; legacy entries
 	 * written before archiving stored a mint fall back to $default_mint.
+	 *
+	 * Each entry's expiry is resolved to an EFFECTIVE value here, so both
+	 * callers (the age-out deadline and archived_still_payable()) can use
+	 * it directly without re-deriving it: a 0/absent expiry is spec-legal,
+	 * not "already dead", same as everywhere else in the plugin.
 	 */
 	private static function archived_quote_entries( WC_Order $order, string $default_mint ): array {
 		$raw = (string) $order->get_meta( '_cashu_archived_mint_quotes', true );
@@ -356,16 +361,39 @@ final class MintQuoteReconciler {
 		if ( ! is_array( $archive ) ) {
 			return array();
 		}
+		// Fallback for archive entries written before the entry carried its
+		// own 'created' stamp: the order's CURRENT quote was created at or
+		// after that rotation, so capping from it only ever over-watches.
+		$order_created = absint( $order->get_meta( '_cashu_mint_quote_created', true ) );
+
 		$entries = array();
 		foreach ( $archive as $entry ) {
 			if ( ! is_array( $entry ) || empty( $entry['quote'] ) ) {
 				continue;
 			}
 			$entry_mint = isset( $entry['mint'] ) ? (string) $entry['mint'] : '';
-			$entries[]  = array(
+
+			// Resolution chain: raw expiry when the mint advertised one;
+			// else this entry's own created stamp plus the max window;
+			// else the order's current-quote created stamp plus the max
+			// window (legacy entry, conservative over-watch); else 0,
+			// dead, matching SpotWindow's own legacy fallback.
+			$raw_expiry    = absint( $entry['expiry'] ?? 0 );
+			$entry_created = absint( $entry['created'] ?? 0 );
+			if ( $raw_expiry > 0 ) {
+				$expiry = $raw_expiry;
+			} elseif ( $entry_created > 0 ) {
+				$expiry = $entry_created + SpotWindow::MAX_WINDOW_SECS;
+			} elseif ( $order_created > 0 ) {
+				$expiry = $order_created + SpotWindow::MAX_WINDOW_SECS;
+			} else {
+				$expiry = 0;
+			}
+
+			$entries[] = array(
 				'quote'  => (string) $entry['quote'],
 				'mint'   => '' !== $entry_mint ? $entry_mint : $default_mint,
-				'expiry' => absint( $entry['expiry'] ?? 0 ),
+				'expiry' => $expiry,
 			);
 		}
 		return $entries;

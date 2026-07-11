@@ -392,7 +392,8 @@ final class QuoteRotationGuardsTest extends IntegrationTestCase {
 
 	public function test_mint_unpaid_quote_archived_then_rotated(): void {
 		$this->stubGatewayBaseline();
-		$order = $this->mockOrder(
+		$created = time() - 1000;
+		$order   = $this->mockOrder(
 			42,
 			array(
 				'_cashu_mint_quote_id'      => 'mq_old',
@@ -400,6 +401,7 @@ final class QuoteRotationGuardsTest extends IntegrationTestCase {
 				'_cashu_mint_quote_amount'  => '4000',
 				'_cashu_mint_quote_expiry'  => (string) ( time() - 600 ),
 				'_cashu_mint_quote_mint'    => self::MINT,
+				'_cashu_mint_quote_created' => (string) $created,
 			)
 		);
 		$order->shouldReceive( 'add_order_note' )->once()->andReturn( 1 );
@@ -430,6 +432,7 @@ final class QuoteRotationGuardsTest extends IntegrationTestCase {
 		$this->assertSame( 'mq_old', $archive[0]['quote'] );
 		$this->assertSame( 'lnbc_old_request', $archive[0]['request'] );
 		$this->assertSame( 4000, $archive[0]['amount'] );
+		$this->assertSame( $created, $archive[0]['created'] );
 
 		$this->assertSame( 'mq_new', $order->get_meta( '_cashu_mint_quote_id' ) );
 		$this->assertSame( 'lnbc_new_request', $order->get_meta( '_cashu_mint_quote_request' ) );

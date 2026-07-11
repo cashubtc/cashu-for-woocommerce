@@ -571,6 +571,87 @@ final class MintQuoteReconcilerTest extends IntegrationTestCase {
 		$this->assertSame( '', (string) $order->get_meta( MintQuoteReconciler::DONE_META ) );
 	}
 
+	public function test_archived_entry_with_zero_expiry_and_recent_created_stays_watched(): void {
+		$this->stubBaseline();
+		$this->setUpFakeWpdb();
+		$meta                                 = $this->watchedMeta();
+		// A 0 expiry is spec-legal, not "already dead": with a recent
+		// created stamp of its own, the entry's effective expiry is
+		// created + the 24h max window, still far in the future.
+		$meta['_cashu_archived_mint_quotes']  = (string) json_encode(
+			array(
+				array(
+					'quote'   => 'mq_old',
+					'amount'  => 5000,
+					'expiry'  => 0,
+					'created' => time() - 100,
+				),
+			)
+		);
+		$order = $this->mockOrder( 42, $meta );
+		$order->shouldReceive( 'is_paid' )->andReturn( false );
+		$order->shouldReceive( 'get_checkout_payment_url' )->andReturn( 'https://s.example/pay' );
+		$order->shouldReceive( 'save' )->once()->andReturn( 42 );
+		$order->shouldReceive( 'add_order_note' )
+			->with( \Mockery::type( 'string' ) )->once()->andReturn( 1 );
+		$order->shouldReceive( 'add_order_note' )
+			->with( \Mockery::type( 'string' ), 1 )->once()->andReturn( 2 );
+		Functions\when( 'wc_get_order' )->justReturn( $order );
+		Functions\expect( 'wp_remote_post' )->once()->andReturn(
+			$this->batchResponse(
+				array(
+					'mq1'    => 'PAID',
+					'mq_old' => 'UNPAID',
+				)
+			)
+		);
+
+		MintQuoteReconciler::sweep_one( $order );
+
+		$this->assertNotSame( '', (string) $order->get_meta( MintQuoteReconciler::DETECTED_META ) );
+		$this->assertSame( '', (string) $order->get_meta( MintQuoteReconciler::DONE_META ) );
+	}
+
+	public function test_archived_entry_with_zero_expiry_and_no_created_falls_back_to_order_created(): void {
+		$this->stubBaseline();
+		$this->setUpFakeWpdb();
+		$meta                                 = $this->watchedMeta();
+		// Legacy archive entry, predating the 'created' field: falls back to
+		// the ORDER's current-quote created stamp, well past the 24h cap.
+		$meta['_cashu_mint_quote_created']    = (string) ( time() - 3 * DAY_IN_SECONDS - HOUR_IN_SECONDS );
+		$meta['_cashu_archived_mint_quotes']  = (string) json_encode(
+			array(
+				array(
+					'quote'  => 'mq_old',
+					'amount' => 5000,
+					'expiry' => 0,
+				),
+			)
+		);
+		$order = $this->mockOrder( 42, $meta );
+		$order->shouldReceive( 'is_paid' )->andReturn( false );
+		$order->shouldReceive( 'get_checkout_payment_url' )->andReturn( 'https://s.example/pay' );
+		$order->shouldReceive( 'save' )->twice()->andReturn( 42 );
+		$order->shouldReceive( 'add_order_note' )
+			->with( \Mockery::type( 'string' ) )->once()->andReturn( 1 );
+		$order->shouldReceive( 'add_order_note' )
+			->with( \Mockery::type( 'string' ), 1 )->once()->andReturn( 2 );
+		Functions\when( 'wc_get_order' )->justReturn( $order );
+		Functions\expect( 'wp_remote_post' )->once()->andReturn(
+			$this->batchResponse(
+				array(
+					'mq1'    => 'PAID',
+					'mq_old' => 'UNPAID',
+				)
+			)
+		);
+
+		MintQuoteReconciler::sweep_one( $order );
+
+		$this->assertNotSame( '', (string) $order->get_meta( MintQuoteReconciler::DETECTED_META ) );
+		$this->assertNotSame( '', (string) $order->get_meta( MintQuoteReconciler::DONE_META ) );
+	}
+
 	public function test_paid_once_then_cancelled_order_is_marked_done_without_probing_or_notifying(): void {
 		$this->stubBaseline();
 		$this->setUpFakeWpdb();

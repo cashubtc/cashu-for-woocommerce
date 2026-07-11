@@ -763,6 +763,7 @@ class CashuGateway extends \WC_Payment_Gateway {
 				'mint'    => $existing_mint,
 				'amount'  => $existing_amount,
 				'expiry'  => $existing_expiry,
+				'created' => absint( $order->get_meta( '_cashu_mint_quote_created', true ) ),
 			);
 			$encoded     = wp_json_encode( $archive );
 			if ( is_string( $encoded ) ) {
