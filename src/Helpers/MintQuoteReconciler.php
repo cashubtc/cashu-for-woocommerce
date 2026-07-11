@@ -187,9 +187,11 @@ final class MintQuoteReconciler {
 			$archived_ids = self::archived_quote_ids( $fresh );
 			$states       = MintClient::mint_quote_states( $mint, array_merge( array( $current ), $archived_ids ) );
 
-			$current_state = (string) ( $states[ $current ] ?? '' );
+			$current_state   = (string) ( $states[ $current ] ?? '' );
+			$found_this_tick = false;
 			if ( 'PAID' === $current_state || 'ISSUED' === $current_state ) {
 				self::record_detection( $fresh, $current, $current_state );
+				$found_this_tick = true;
 			}
 
 			foreach ( $archived_ids as $id ) {
@@ -211,6 +213,7 @@ final class MintQuoteReconciler {
 							$state
 						)
 					);
+					$found_this_tick = true;
 				}
 			}
 
@@ -224,9 +227,18 @@ final class MintQuoteReconciler {
 			}
 
 			if ( $aged_out ) {
-				$fresh->add_order_note(
-					__( 'Cashu settlement watch closed: final mint check saw no customer payment inside the watch window.', 'cashu-for-woocommerce' )
-				);
+				// A hit on either meta this tick or a prior one means a
+				// payment WAS seen; the "no customer payment" note would
+				// contradict the recovery note just written above (or on an
+				// earlier tick).
+				if ( ! $found_this_tick
+					&& '' === (string) $fresh->get_meta( self::DETECTED_META, true )
+					&& '' === (string) $fresh->get_meta( self::ARCHIVE_NOTED_META, true )
+				) {
+					$fresh->add_order_note(
+						__( 'Cashu settlement watch closed: final mint check saw no customer payment inside the watch window.', 'cashu-for-woocommerce' )
+					);
+				}
 				$fresh->update_meta_data( self::DONE_META, (string) time() );
 				$fresh->save();
 			}

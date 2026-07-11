@@ -208,6 +208,46 @@ final class MintQuoteReconcilerTest extends IntegrationTestCase {
 		$this->assertNotSame( '', (string) $order->get_meta( MintQuoteReconciler::DONE_META ) );
 	}
 
+	public function test_aged_out_tick_with_archived_hit_notes_recovery_not_watch_closed(): void {
+		$this->stubBaseline();
+		$this->setUpFakeWpdb();
+		$meta = $this->watchedMeta();
+		// Payable window ended two days ago: past window + 24h grace, so this
+		// tick both runs the archived-quote pass and reaches the aged-out
+		// close check.
+		$meta['_cashu_mint_quote_expiry']  = (string) ( time() - 2 * DAY_IN_SECONDS );
+		$meta['_cashu_mint_quote_created'] = (string) ( time() - 3 * DAY_IN_SECONDS );
+		$meta['_cashu_archived_mint_quotes'] = (string) json_encode(
+			array(
+				array(
+					'quote'  => 'mq_old',
+					'amount' => 5000,
+				),
+			)
+		);
+		$order = $this->mockOrder( 42, $meta );
+		$order->shouldReceive( 'is_paid' )->andReturn( false );
+		// Only the archived-quote recovery note, never the contradictory
+		// "no customer payment" watch-closed note in the same tick.
+		$order->shouldReceive( 'add_order_note' )
+			->with( \Mockery::type( 'string' ) )->once()->andReturn( 1 );
+		Functions\when( 'wc_get_order' )->justReturn( $order );
+		Functions\expect( 'wp_remote_post' )->once()->andReturn(
+			$this->batchResponse(
+				array(
+					'mq1'    => 'UNPAID',
+					'mq_old' => 'PAID',
+				)
+			)
+		);
+
+		MintQuoteReconciler::sweep_one( $order );
+
+		$this->assertSame( '', (string) $order->get_meta( MintQuoteReconciler::DETECTED_META ) );
+		$this->assertNotSame( '', (string) $order->get_meta( '_cashu_archived_paid_noted' ) );
+		$this->assertNotSame( '', (string) $order->get_meta( MintQuoteReconciler::DONE_META ) );
+	}
+
 	public function test_paid_once_then_cancelled_order_is_marked_done_without_probing_or_notifying(): void {
 		$this->stubBaseline();
 		$this->setUpFakeWpdb();
