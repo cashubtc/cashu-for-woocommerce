@@ -41,7 +41,8 @@
 }
 
 .cashu-payamount,
-.cashu-feenote {
+.cashu-feenote,
+.cashu-qr-hint {
   color: var(--cashu-muted);
   font-size: 0.9rem;
   margin: 6px 0;

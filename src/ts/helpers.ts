@@ -579,6 +579,16 @@ export function actionsForMeltOutcome(outcome: MeltOutcome): MeltAction[] {
 
 export type QrMode = 'unified' | 'cashu' | 'lightning';
 
+/**
+ * Map the active QR tab to its i18n key for the tap-to-copy hint caption.
+ * Anything other than 'cashu' / 'lightning' falls back to the unified hint.
+ */
+export function qrHintKeyForMode(mode: QrMode): string {
+  if (mode === 'cashu') return 'qr_hint_cashu';
+  if (mode === 'lightning') return 'qr_hint_lightning';
+  return 'qr_hint_unified';
+}
+
 export type RootData = {
   orderId: number;
   orderKey: string;

@@ -206,6 +206,9 @@ class CashuGateway extends \WC_Payment_Gateway {
 					'copied'                  => __( 'Copied!', 'cashu-for-woocommerce' ),
 					'waiting_for_payment'     => __( 'Waiting for payment...', 'cashu-for-woocommerce' ),
 					'connecting_to_mint'      => __( 'Connecting to mint...', 'cashu-for-woocommerce' ),
+					'qr_hint_unified'         => __( 'Scan with your wallet, or tap the code to copy it and paste it into your wallet.', 'cashu-for-woocommerce' ),
+					'qr_hint_cashu'           => __( 'Scan with your Cashu wallet, or tap the code to copy the payment request and paste it into your wallet.', 'cashu-for-woocommerce' ),
+					'qr_hint_lightning'       => __( 'Scan with your Lightning wallet, or tap the code to copy the invoice and paste it into your wallet.', 'cashu-for-woocommerce' ),
 
 					// Tabs
 					'tab_unified'             => __( 'Auto', 'cashu-for-woocommerce' ),
@@ -1011,6 +1014,8 @@ class CashuGateway extends \WC_Payment_Gateway {
 					<div class="cashu-qr-icon" data-cashu-qr-icon hidden aria-hidden="true">
 						<img src="<?php echo esc_url( $this->icon ); ?>" alt="">
 					</div>
+
+					<p class="cashu-qr-hint" data-cashu-qr-hint></p>
 				</div>
 
 				<div class="cashu-recovery" data-cashu-recovery hidden>
