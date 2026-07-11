@@ -148,7 +148,12 @@ final class MintQuoteReconciler {
 				if ( ( 'PAID' === $state || 'ISSUED' === $state )
 					&& '' === (string) $fresh->get_meta( self::ARCHIVE_NOTED_META, true )
 				) {
+					// Save the guard before the note, same reasoning as
+					// record_detection(): add_order_note() persists
+					// immediately, so a crash after save but before the note
+					// costs at most that note, never a duplicate.
 					$fresh->update_meta_data( self::ARCHIVE_NOTED_META, (string) time() );
+					$fresh->save();
 					$fresh->add_order_note(
 						sprintf(
 							/* translators: %1$s: archived mint quote id, %2$s: state reported by the mint */
@@ -159,8 +164,6 @@ final class MintQuoteReconciler {
 					);
 				}
 			}
-
-			$fresh->save();
 		} finally {
 			OrderLock::release( $order_id, 'pay', $lock_token );
 		}
@@ -187,8 +190,28 @@ final class MintQuoteReconciler {
 
 	/** Mark the detection once, note once, email the customer once. */
 	private static function record_detection( WC_Order $order, string $quote_id, string $state ): void {
-		if ( '' === (string) $order->get_meta( self::DETECTED_META, true ) ) {
+		$need_admin_note = '' === (string) $order->get_meta( self::DETECTED_META, true );
+		$need_email      = '' === (string) $order->get_meta( self::NOTIFIED_META, true );
+		if ( ! $need_admin_note && ! $need_email ) {
+			return;
+		}
+
+		// Persist the guard metas before writing either note. add_order_note()
+		// persists immediately and durably (the customer one also sends an
+		// email), while this method's own changes only reach the database on
+		// save(). Saving first keeps delivery at-most-once: a crash after
+		// save but before the note loses that note (recoverable, the
+		// detection marker still surfaces in the admin meta box) but never
+		// re-sends a customer email.
+		if ( $need_admin_note ) {
 			$order->update_meta_data( self::DETECTED_META, (string) time() );
+		}
+		if ( $need_email ) {
+			$order->update_meta_data( self::NOTIFIED_META, (string) time() );
+		}
+		$order->save();
+
+		if ( $need_admin_note ) {
 			$order->add_order_note(
 				sprintf(
 					/* translators: %1$s: mint quote id, %2$s: state reported by the mint */
@@ -198,8 +221,7 @@ final class MintQuoteReconciler {
 				)
 			);
 		}
-		if ( '' === (string) $order->get_meta( self::NOTIFIED_META, true ) ) {
-			$order->update_meta_data( self::NOTIFIED_META, (string) time() );
+		if ( $need_email ) {
 			// Customer note: WooCommerce emails these to the billing
 			// address when the "Customer note" email is enabled (default).
 			$order->add_order_note(

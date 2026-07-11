@@ -82,11 +82,14 @@ final class MintQuoteReconcilerTest extends IntegrationTestCase {
 		$order = $this->mockOrder( 42, $this->watchedMeta() );
 		$order->shouldReceive( 'is_paid' )->andReturn( false );
 		$order->shouldReceive( 'get_checkout_payment_url' )->andReturn( 'https://s.example/pay' );
+		// Guard metas must persist before either note: a crash between an
+		// emailed note and save() must never re-send it on the next sweep.
+		$order->shouldReceive( 'save' )->once()->ordered()->andReturn( 42 );
 		// One admin note and one customer note (the email), never again.
 		$order->shouldReceive( 'add_order_note' )
-			->with( \Mockery::type( 'string' ) )->once()->andReturn( 1 );
+			->with( \Mockery::type( 'string' ) )->once()->ordered()->andReturn( 1 );
 		$order->shouldReceive( 'add_order_note' )
-			->with( \Mockery::type( 'string' ), 1 )->once()->andReturn( 2 );
+			->with( \Mockery::type( 'string' ), 1 )->once()->ordered()->andReturn( 2 );
 		Functions\when( 'wc_get_order' )->justReturn( $order );
 		Functions\expect( 'wp_remote_post' )->twice()
 			->andReturn( $this->batchResponse( array( 'mq1' => 'PAID' ) ) );
