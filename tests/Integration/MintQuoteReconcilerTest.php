@@ -6,6 +6,7 @@ namespace Cashu\WC\Tests\Integration;
 
 use Brain\Monkey\Functions;
 use Cashu\WC\Helpers\MintQuoteReconciler;
+use Cashu\WC\Helpers\SettlementGuard;
 use Cashu\WC\Tests\IntegrationTestCase;
 
 /**
@@ -142,6 +143,23 @@ final class MintQuoteReconcilerTest extends IntegrationTestCase {
 		$order = $this->mockOrder( 42, $meta );
 		$order->shouldReceive( 'is_paid' )->andReturn( false );
 		$order->shouldReceive( 'add_order_note' )->once()->andReturn( 1 );
+		Functions\when( 'wc_get_order' )->justReturn( $order );
+		Functions\expect( 'wp_remote_post' )->never();
+		Functions\expect( 'wp_remote_get' )->never();
+
+		MintQuoteReconciler::sweep_one( $order );
+
+		$this->assertNotSame( '', (string) $order->get_meta( MintQuoteReconciler::DONE_META ) );
+	}
+
+	public function test_paid_once_then_cancelled_order_is_marked_done_without_probing_or_notifying(): void {
+		$this->stubBaseline();
+		$this->setUpFakeWpdb();
+		$meta = $this->watchedMeta();
+		$meta[ SettlementGuard::PAID_ONCE_META ] = (string) ( time() - HOUR_IN_SECONDS );
+		$order                                   = $this->mockOrder( 42, $meta );
+		$order->shouldReceive( 'is_paid' )->andReturn( false );
+		$order->shouldReceive( 'add_order_note' )->never();
 		Functions\when( 'wc_get_order' )->justReturn( $order );
 		Functions\expect( 'wp_remote_post' )->never();
 		Functions\expect( 'wp_remote_get' )->never();

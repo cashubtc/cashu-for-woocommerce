@@ -97,6 +97,15 @@ final class MintQuoteReconciler {
 				$fresh->save();
 				return;
 			}
+			if ( '' !== (string) $fresh->get_meta( SettlementGuard::PAID_ONCE_META, true ) ) {
+				// Paid once, then cancelled/refunded out-of-band: a later
+				// mint read of PAID/ISSUED only re-proves that same dead
+				// quote. Never notify the customer on a settlement the
+				// merchant explicitly killed.
+				$fresh->update_meta_data( self::DONE_META, (string) time() );
+				$fresh->save();
+				return;
+			}
 
 			$current = (string) $fresh->get_meta( '_cashu_mint_quote_id', true );
 			$mint    = (string) $fresh->get_meta( '_cashu_mint_quote_mint', true );
