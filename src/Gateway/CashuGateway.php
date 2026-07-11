@@ -1015,6 +1015,10 @@ class CashuGateway extends \WC_Payment_Gateway {
 						<img src="<?php echo esc_url( $this->icon ); ?>" alt="">
 					</div>
 
+					<div class="cashu-qr-check" data-cashu-qr-check aria-hidden="true">
+						<svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" /><path pathLength="1" d="M15.5 27.5l7.5 7.5L36.5 20" /></svg>
+					</div>
+
 					<p class="cashu-qr-hint" data-cashu-qr-hint></p>
 				</div>
 

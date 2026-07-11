@@ -310,15 +310,20 @@ jQuery(function ($) {
 
     drawQr(qrTexts[currentMode]);
 
-    // Copy current tab's paste-friendly text on click.
+    // Copy current tab's paste-friendly text on click. Feedback is a green
+    // tint + checkmark overlay on the QR itself; the status line is left
+    // alone and keeps showing waiting/expiry state throughout.
     const $qrWrap = $qr.parent();
+    const qrWrapEl = $qrWrap.get(0) as HTMLElement | undefined;
     $qrWrap.off('click').on('click', async () => {
       const txt = copyTexts[currentMode];
       if (!txt) return;
       copyTextToClipboard(txt);
-      setStatus(t('copied'));
-      await delay(500);
-      setStatus(t('waiting_for_payment'));
+      $qrWrap.removeClass('copied');
+      if (qrWrapEl) void qrWrapEl.offsetWidth; // restart the CSS animation on rapid re-copy
+      $qrWrap.addClass('copied');
+      await delay(1600);
+      $qrWrap.removeClass('copied');
     });
   }
 
