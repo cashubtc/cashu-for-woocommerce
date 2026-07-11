@@ -167,15 +167,27 @@ final class MintQuoteReconciler {
 				return;
 			}
 
+			$archived = self::archived_quote_entries( $fresh, $mint );
+
 			// Age out past the invoice's REAL payability plus the stuck-HTLC
 			// grace. Raw mint expiry, not the 24h-capped offer window: some
 			// mints keep quotes payable for days (coinos observed at 7d) and
 			// the watch must cover the invoice's whole payable life. The cap
 			// only bounds what we offer (slide, cancel veto), never what we
-			// watch. Decided here but acted on AFTER the probe below, so
-			// every order gets at least one final check before its watch
-			// closes.
-			$until = absint( $fresh->get_meta( '_cashu_mint_quote_expiry', true ) );
+			// watch. Take the LATEST expiry across the current quote and
+			// every archived one: a trusted-mint change (old quote outlives
+			// the new one) or a mint shortening its TTL can leave an
+			// archived invoice payable well past the current quote's window.
+			// Same-mint rotation can never produce archived > current
+			// (rotation only issues a newer quote with the same TTL), so
+			// this only changes behaviour across a mint or TTL change.
+			// Decided here but acted on AFTER the probe below, so every
+			// order gets at least one final check before its watch closes.
+			$expiries = array( absint( $fresh->get_meta( '_cashu_mint_quote_expiry', true ) ) );
+			foreach ( $archived as $entry ) {
+				$expiries[] = $entry['expiry'];
+			}
+			$until = max( $expiries );
 			if ( 0 === $until ) {
 				$until = SpotWindow::payable_until( $fresh );
 			}
@@ -184,8 +196,33 @@ final class MintQuoteReconciler {
 			}
 			$aged_out = time() > $until + self::GRACE_SECS;
 
-			$archived_ids = self::archived_quote_ids( $fresh );
-			$states       = MintClient::mint_quote_states( $mint, array_merge( array( $current ), $archived_ids ) );
+			// Group the current quote and every archived entry by the mint
+			// that issued them, then probe each mint once. Use the mint the
+			// quote was issued at, never the current gateway setting, same
+			// rule as ConfirmMeltQuoteController::resolve_pending_melt: after
+			// a trusted-mint change an archived quote lives at a different
+			// host than $mint, and querying the wrong server would never see
+			// its payment.
+			$groups = array(
+				MintClient::normalize_url( $mint ) => array(
+					'url' => $mint,
+					'ids' => array( $current ),
+				),
+			);
+			foreach ( $archived as $entry ) {
+				$key = MintClient::normalize_url( $entry['mint'] );
+				if ( ! isset( $groups[ $key ] ) ) {
+					$groups[ $key ] = array(
+						'url' => $entry['mint'],
+						'ids' => array(),
+					);
+				}
+				$groups[ $key ]['ids'][] = $entry['quote'];
+			}
+			$states = array();
+			foreach ( $groups as $group ) {
+				$states = array_merge( $states, MintClient::mint_quote_states( $group['url'], $group['ids'] ) );
+			}
 
 			$current_state   = (string) ( $states[ $current ] ?? '' );
 			$found_this_tick = false;
@@ -194,7 +231,8 @@ final class MintQuoteReconciler {
 				$found_this_tick = true;
 			}
 
-			foreach ( $archived_ids as $id ) {
+			foreach ( $archived as $entry ) {
+				$id    = $entry['quote'];
 				$state = (string) ( $states[ $id ] ?? '' );
 				if ( ( 'PAID' === $state || 'ISSUED' === $state )
 					&& '' === (string) $fresh->get_meta( self::ARCHIVE_NOTED_META, true )
@@ -247,8 +285,13 @@ final class MintQuoteReconciler {
 		}
 	}
 
-	/** Archived quote ids from the order's rotation archive, oldest first. */
-	private static function archived_quote_ids( WC_Order $order ): array {
+	/**
+	 * Archived quote entries from the order's rotation archive, oldest
+	 * first. Each entry keeps the mint it was issued at, so a later
+	 * trusted-mint change can never misroute the probe; legacy entries
+	 * written before archiving stored a mint fall back to $default_mint.
+	 */
+	private static function archived_quote_entries( WC_Order $order, string $default_mint ): array {
 		$raw = (string) $order->get_meta( '_cashu_archived_mint_quotes', true );
 		if ( '' === $raw ) {
 			return array();
@@ -257,13 +300,19 @@ final class MintQuoteReconciler {
 		if ( ! is_array( $archive ) ) {
 			return array();
 		}
-		$ids = array();
+		$entries = array();
 		foreach ( $archive as $entry ) {
-			if ( is_array( $entry ) && ! empty( $entry['quote'] ) ) {
-				$ids[] = (string) $entry['quote'];
+			if ( ! is_array( $entry ) || empty( $entry['quote'] ) ) {
+				continue;
 			}
+			$entry_mint = isset( $entry['mint'] ) ? (string) $entry['mint'] : '';
+			$entries[]  = array(
+				'quote'  => (string) $entry['quote'],
+				'mint'   => '' !== $entry_mint ? $entry_mint : $default_mint,
+				'expiry' => absint( $entry['expiry'] ?? 0 ),
+			);
 		}
-		return $ids;
+		return $entries;
 	}
 
 	/** Mark the detection once, note once, email the customer once. */

@@ -248,6 +248,84 @@ final class MintQuoteReconcilerTest extends IntegrationTestCase {
 		$this->assertNotSame( '', (string) $order->get_meta( MintQuoteReconciler::DONE_META ) );
 	}
 
+	public function test_archived_quote_from_a_different_mint_is_probed_at_its_own_mint(): void {
+		$this->stubBaseline();
+		$this->setUpFakeWpdb();
+		$meta                                 = $this->watchedMeta();
+		$meta['_cashu_mint_quote_mint']       = 'https://new.example';
+		$meta['_cashu_archived_mint_quotes']  = (string) json_encode(
+			array(
+				array(
+					'quote'  => 'mq_old',
+					'mint'   => 'https://old.example',
+					'amount' => 5000,
+					'expiry' => time() + 2 * DAY_IN_SECONDS,
+				),
+			)
+		);
+		$order = $this->mockOrder( 42, $meta );
+		$order->shouldReceive( 'is_paid' )->andReturn( false );
+		$order->shouldReceive( 'add_order_note' )->once()->andReturn( 1 );
+		Functions\when( 'wc_get_order' )->justReturn( $order );
+
+		// Two mints, two batch calls: the current quote's mint (new.example)
+		// reports UNPAID, the archived quote's own mint (old.example, where
+		// it was actually issued) reports PAID.
+		$urls = array();
+		Functions\when( 'wp_remote_post' )->alias(
+			function ( string $url ) use ( &$urls ): array {
+				$urls[] = $url;
+				return false !== strpos( $url, 'new.example' )
+					? $this->batchResponse( array( 'mq1' => 'UNPAID' ) )
+					: $this->batchResponse( array( 'mq_old' => 'PAID' ) );
+			}
+		);
+
+		MintQuoteReconciler::sweep_one( $order );
+
+		$this->assertCount( 2, $urls );
+		$this->assertContains( 'https://new.example/v1/mint/quote/bolt11/check', $urls );
+		$this->assertContains( 'https://old.example/v1/mint/quote/bolt11/check', $urls );
+		$this->assertSame( '', (string) $order->get_meta( MintQuoteReconciler::DETECTED_META ) );
+		$this->assertNotSame( '', (string) $order->get_meta( '_cashu_archived_paid_noted' ) );
+	}
+
+	public function test_age_out_honours_the_latest_archived_expiry(): void {
+		$this->stubBaseline();
+		$this->setUpFakeWpdb();
+		$meta = $this->watchedMeta();
+		// The current quote alone would have aged out (past window + grace),
+		// but an archived quote at a different mint is still payable for
+		// another day: the watch must stay open for it.
+		$meta['_cashu_mint_quote_expiry']    = (string) ( time() - 3 * DAY_IN_SECONDS );
+		$meta['_cashu_mint_quote_created']   = (string) ( time() - 4 * DAY_IN_SECONDS );
+		$meta['_cashu_archived_mint_quotes'] = (string) json_encode(
+			array(
+				array(
+					'quote'  => 'mq_old',
+					'mint'   => 'https://old.example',
+					'amount' => 5000,
+					'expiry' => time() + DAY_IN_SECONDS,
+				),
+			)
+		);
+		$order = $this->mockOrder( 42, $meta );
+		$order->shouldReceive( 'is_paid' )->andReturn( false );
+		$order->shouldReceive( 'add_order_note' )->never();
+		Functions\when( 'wc_get_order' )->justReturn( $order );
+		Functions\when( 'wp_remote_post' )->alias(
+			function ( string $url ): array {
+				return false !== strpos( $url, 'old.example' )
+					? $this->batchResponse( array( 'mq_old' => 'UNPAID' ) )
+					: $this->batchResponse( array( 'mq1' => 'UNPAID' ) );
+			}
+		);
+
+		MintQuoteReconciler::sweep_one( $order );
+
+		$this->assertSame( '', (string) $order->get_meta( MintQuoteReconciler::DONE_META ) );
+	}
+
 	public function test_paid_once_then_cancelled_order_is_marked_done_without_probing_or_notifying(): void {
 		$this->stubBaseline();
 		$this->setUpFakeWpdb();
