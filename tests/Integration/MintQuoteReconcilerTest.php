@@ -126,28 +126,32 @@ final class MintQuoteReconcilerTest extends IntegrationTestCase {
 		$this->assertSame( 15, $calls[1]['limit'] );
 	}
 
-	public function test_paid_current_quote_marks_notes_and_emails_once(): void {
+	public function test_paid_current_quote_marks_notes_emails_and_closes_the_watch(): void {
 		$this->stubBaseline();
 		$this->setUpFakeWpdb();
 		$order = $this->mockOrder( 42, $this->watchedMeta() );
 		$order->shouldReceive( 'is_paid' )->andReturn( false );
 		$order->shouldReceive( 'get_checkout_payment_url' )->andReturn( 'https://s.example/pay' );
-		// Guard metas must persist before either note: a crash between an
-		// emailed note and save() must never re-send it on the next sweep.
+		// Guard metas persist before either note (record_detection), then a
+		// second save closes the watch once detection + the archived pass
+		// are both done for this tick (nothing left to watch for).
 		$order->shouldReceive( 'save' )->once()->ordered()->andReturn( 42 );
 		// One admin note and one customer note (the email), never again.
 		$order->shouldReceive( 'add_order_note' )
 			->with( \Mockery::type( 'string' ) )->once()->ordered()->andReturn( 1 );
 		$order->shouldReceive( 'add_order_note' )
 			->with( \Mockery::type( 'string' ), 1 )->once()->ordered()->andReturn( 2 );
+		$order->shouldReceive( 'save' )->once()->ordered()->andReturn( 42 );
 		Functions\when( 'wc_get_order' )->justReturn( $order );
-		Functions\expect( 'wp_remote_post' )->twice()
+		Functions\expect( 'wp_remote_post' )->once()
 			->andReturn( $this->batchResponse( array( 'mq1' => 'PAID' ) ) );
 
 		MintQuoteReconciler::sweep_one( $order );
 		$this->assertNotSame( '', (string) $order->get_meta( MintQuoteReconciler::DETECTED_META ) );
+		$this->assertNotSame( '', (string) $order->get_meta( MintQuoteReconciler::DONE_META ) );
 
-		// Second pass: probe repeats, notes and email do not.
+		// Second pass: the watch is already closed, so it short-circuits
+		// before ever probing the mint again.
 		MintQuoteReconciler::sweep_one( $order );
 	}
 
@@ -182,7 +186,7 @@ final class MintQuoteReconcilerTest extends IntegrationTestCase {
 		$this->assertNotSame( '', (string) $order->get_meta( '_cashu_archived_paid_noted' ) );
 	}
 
-	public function test_aged_out_order_is_marked_done_without_probing(): void {
+	public function test_aged_out_order_gets_a_final_probe_before_closing(): void {
 		$this->stubBaseline();
 		$this->setUpFakeWpdb();
 		$meta = $this->watchedMeta();
@@ -193,8 +197,11 @@ final class MintQuoteReconcilerTest extends IntegrationTestCase {
 		$order->shouldReceive( 'is_paid' )->andReturn( false );
 		$order->shouldReceive( 'add_order_note' )->once()->andReturn( 1 );
 		Functions\when( 'wc_get_order' )->justReturn( $order );
-		Functions\expect( 'wp_remote_post' )->never();
-		Functions\expect( 'wp_remote_get' )->never();
+		// Every order gets at least one probe before the watch closes, even
+		// past its age-out point: a mint settlement landing right at the
+		// edge of the grace window must never be missed silently.
+		Functions\expect( 'wp_remote_post' )->once()
+			->andReturn( $this->batchResponse( array( 'mq1' => 'UNPAID' ) ) );
 
 		MintQuoteReconciler::sweep_one( $order );
 

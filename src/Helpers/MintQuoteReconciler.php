@@ -147,6 +147,12 @@ final class MintQuoteReconciler {
 				$fresh->save();
 				return;
 			}
+			if ( '' !== (string) $fresh->get_meta( self::DONE_META, true ) ) {
+				// Already closed by a prior tick. Guards direct callers
+				// (tests, a future admin button) that bypass sweep()'s
+				// query-level DONE_META exclusion.
+				return;
+			}
 
 			$current = (string) $fresh->get_meta( '_cashu_mint_quote_id', true );
 			$mint    = (string) $fresh->get_meta( '_cashu_mint_quote_mint', true );
@@ -166,7 +172,9 @@ final class MintQuoteReconciler {
 			// mints keep quotes payable for days (coinos observed at 7d) and
 			// the watch must cover the invoice's whole payable life. The cap
 			// only bounds what we offer (slide, cancel veto), never what we
-			// watch.
+			// watch. Decided here but acted on AFTER the probe below, so
+			// every order gets at least one final check before its watch
+			// closes.
 			$until = absint( $fresh->get_meta( '_cashu_mint_quote_expiry', true ) );
 			if ( 0 === $until ) {
 				$until = SpotWindow::payable_until( $fresh );
@@ -174,16 +182,7 @@ final class MintQuoteReconciler {
 			if ( 0 === $until ) {
 				$until = absint( $fresh->get_meta( '_cashu_spot_time', true ) ) + SpotWindow::MAX_WINDOW_SECS;
 			}
-			if ( time() > $until + self::GRACE_SECS ) {
-				if ( '' === (string) $fresh->get_meta( self::DETECTED_META, true ) ) {
-					$fresh->add_order_note(
-						__( 'Cashu settlement watch closed: no customer payment was seen at the mint inside the watch window.', 'cashu-for-woocommerce' )
-					);
-				}
-				$fresh->update_meta_data( self::DONE_META, (string) time() );
-				$fresh->save();
-				return;
-			}
+			$aged_out = time() > $until + self::GRACE_SECS;
 
 			$archived_ids = self::archived_quote_ids( $fresh );
 			$states       = MintClient::mint_quote_states( $mint, array_merge( array( $current ), $archived_ids ) );
@@ -213,6 +212,23 @@ final class MintQuoteReconciler {
 						)
 					);
 				}
+			}
+
+			if ( '' !== (string) $fresh->get_meta( self::DETECTED_META, true ) ) {
+				// Detected (this tick or a prior one) and the archived pass
+				// above is done: nothing left to watch for. Completion flips
+				// is_paid, which short-circuits above on the next tick.
+				$fresh->update_meta_data( self::DONE_META, (string) time() );
+				$fresh->save();
+				return;
+			}
+
+			if ( $aged_out ) {
+				$fresh->add_order_note(
+					__( 'Cashu settlement watch closed: final mint check saw no customer payment inside the watch window.', 'cashu-for-woocommerce' )
+				);
+				$fresh->update_meta_data( self::DONE_META, (string) time() );
+				$fresh->save();
 			}
 		} finally {
 			OrderLock::release( $order_id, 'pay', $lock_token );
