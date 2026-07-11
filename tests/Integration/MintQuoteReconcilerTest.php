@@ -550,6 +550,41 @@ final class MintQuoteReconcilerTest extends IntegrationTestCase {
 		$this->assertSame( '', (string) $order->get_meta( MintQuoteReconciler::DONE_META ) );
 	}
 
+	public function test_detected_order_with_unresolved_archived_state_closes_past_the_horizon(): void {
+		$this->stubBaseline();
+		$this->setUpFakeWpdb();
+		$meta                                       = $this->watchedMeta();
+		$meta[ MintQuoteReconciler::DETECTED_META ] = (string) ( time() - HOUR_IN_SECONDS );
+		$meta['_cashu_late_paid_notified']          = (string) ( time() - HOUR_IN_SECONDS );
+		// Placed past until + GRACE_SECS + UNRESOLVED_GRACE_SECS (1 + 3 days):
+		// a permanently unreachable mint must not pin a DETECTED order in the
+		// sweep forever.
+		$meta['_cashu_mint_quote_expiry']    = (string) ( time() - 5 * DAY_IN_SECONDS );
+		$meta['_cashu_mint_quote_created']   = (string) ( time() - 6 * DAY_IN_SECONDS );
+		$meta['_cashu_archived_mint_quotes'] = (string) json_encode(
+			array(
+				array(
+					'quote'  => 'mq_old',
+					'amount' => 5000,
+					'expiry' => time() - 5 * DAY_IN_SECONDS,
+				),
+			)
+		);
+		$order = $this->mockOrder( 42, $meta );
+		$order->shouldReceive( 'is_paid' )->andReturn( false );
+		$order->shouldReceive( 'add_order_note' )->never();
+		$order->shouldReceive( 'save' )->once()->andReturn( 42 );
+		Functions\when( 'wc_get_order' )->justReturn( $order );
+		// The batch response omits the archived quote entirely, so its
+		// state resolves to unknown ('').
+		Functions\expect( 'wp_remote_post' )->once()
+			->andReturn( $this->batchResponse( array( 'mq1' => 'UNPAID' ) ) );
+
+		MintQuoteReconciler::sweep_one( $order );
+
+		$this->assertNotSame( '', (string) $order->get_meta( MintQuoteReconciler::DONE_META ) );
+	}
+
 	public function test_aged_out_tick_with_archived_hit_notes_recovery_not_watch_closed(): void {
 		$this->stubBaseline();
 		$this->setUpFakeWpdb();

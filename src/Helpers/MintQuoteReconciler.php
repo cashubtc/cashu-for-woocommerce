@@ -341,6 +341,18 @@ final class MintQuoteReconciler {
 					return;
 				}
 				if ( ! $archived_authoritative ) {
+					if ( time() > $until + self::GRACE_SECS + self::UNRESOLVED_GRACE_SECS ) {
+						// Mirror of the aged-out unresolved horizon below: a
+						// dead mint that never resolves an archived quote's
+						// state would otherwise pin this DETECTED order in
+						// the sweep forever, permanently occupying the
+						// backlog's one guaranteed slot. No note: the
+						// detection note already told the admin about the
+						// real payment.
+						$fresh->update_meta_data( self::DONE_META, (string) time() );
+						$fresh->save();
+						return;
+					}
 					// At least one archived quote's state came back unknown
 					// this tick: burying it now could hide a payment a flaky
 					// probe just missed. Return without side effects; the
