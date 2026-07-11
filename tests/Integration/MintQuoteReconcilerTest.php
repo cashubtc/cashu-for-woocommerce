@@ -297,6 +297,7 @@ final class MintQuoteReconcilerTest extends IntegrationTestCase {
 		MintQuoteReconciler::sweep_one( $order );
 		$this->assertNotSame( '', (string) $order->get_meta( MintQuoteReconciler::DETECTED_META ) );
 		$this->assertNotSame( '', (string) $order->get_meta( MintQuoteReconciler::DONE_META ) );
+		$this->assertSame( '', (string) $order->get_meta( MintQuoteReconciler::UNRESOLVED_META ) );
 
 		// Second pass: the watch is already closed, so it short-circuits
 		// before ever probing the mint again.
@@ -461,6 +462,7 @@ final class MintQuoteReconcilerTest extends IntegrationTestCase {
 		MintQuoteReconciler::sweep_one( $order );
 
 		$this->assertNotSame( '', (string) $order->get_meta( MintQuoteReconciler::DONE_META ) );
+		$this->assertSame( '', (string) $order->get_meta( MintQuoteReconciler::UNRESOLVED_META ) );
 	}
 
 	public function test_aged_out_order_with_unresolved_mint_state_stays_open_within_the_unresolved_horizon(): void {
@@ -517,6 +519,7 @@ final class MintQuoteReconcilerTest extends IntegrationTestCase {
 		MintQuoteReconciler::sweep_one( $order );
 
 		$this->assertNotSame( '', (string) $order->get_meta( MintQuoteReconciler::DONE_META ) );
+		$this->assertNotSame( '', (string) $order->get_meta( MintQuoteReconciler::UNRESOLVED_META ) );
 	}
 
 	public function test_detected_order_with_unresolved_archived_state_stays_open(): void {
@@ -572,7 +575,11 @@ final class MintQuoteReconcilerTest extends IntegrationTestCase {
 		);
 		$order = $this->mockOrder( 42, $meta );
 		$order->shouldReceive( 'is_paid' )->andReturn( false );
-		$order->shouldReceive( 'add_order_note' )->never();
+		// The archived quote's own state was never verified, so the close
+		// flags it via one admin note, distinct from the earlier detection
+		// note (which already told the admin about the real payment).
+		$order->shouldReceive( 'add_order_note' )
+			->with( \Mockery::type( 'string' ) )->once()->andReturn( 1 );
 		$order->shouldReceive( 'save' )->once()->andReturn( 42 );
 		Functions\when( 'wc_get_order' )->justReturn( $order );
 		// The batch response omits the archived quote entirely, so its
@@ -583,6 +590,7 @@ final class MintQuoteReconcilerTest extends IntegrationTestCase {
 		MintQuoteReconciler::sweep_one( $order );
 
 		$this->assertNotSame( '', (string) $order->get_meta( MintQuoteReconciler::DONE_META ) );
+		$this->assertNotSame( '', (string) $order->get_meta( MintQuoteReconciler::UNRESOLVED_META ) );
 	}
 
 	public function test_aged_out_tick_with_archived_hit_notes_recovery_not_watch_closed(): void {

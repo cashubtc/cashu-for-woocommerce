@@ -29,6 +29,13 @@ final class MintQuoteReconciler {
 	/** Sweep exclusion marker: nothing left to watch on this order. */
 	public const DONE_META = '_cashu_mint_sweep_done';
 
+	/**
+	 * Set alongside DONE_META when a watch closes without a definitive mint
+	 * answer. Drives the admin meta-box warning; never set on an
+	 * authoritative close.
+	 */
+	public const UNRESOLVED_META = '_cashu_mint_watch_unresolved';
+
 	private const NOTIFIED_META      = '_cashu_late_paid_notified';
 	private const ARCHIVE_NOTED_META = '_cashu_archived_paid_noted';
 
@@ -346,11 +353,16 @@ final class MintQuoteReconciler {
 						// dead mint that never resolves an archived quote's
 						// state would otherwise pin this DETECTED order in
 						// the sweep forever, permanently occupying the
-						// backlog's one guaranteed slot. No note: the
-						// detection note already told the admin about the
-						// real payment.
+						// backlog's one guaranteed slot. The detection note
+						// already told the admin about the real payment, but
+						// the archived quote's own state was never verified,
+						// so flag that separately after the guard save.
+						$fresh->update_meta_data( self::UNRESOLVED_META, (string) time() );
 						$fresh->update_meta_data( self::DONE_META, (string) time() );
 						$fresh->save();
+						$fresh->add_order_note(
+							__( 'Cashu settlement watch closed, but an archived quote could not be verified at its mint. If the customer reports paying an old invoice, check the archived quotes in the Cashu meta box.', 'cashu-for-woocommerce' )
+						);
 						return;
 					}
 					// At least one archived quote's state came back unknown
@@ -395,6 +407,9 @@ final class MintQuoteReconciler {
 							? __( 'Cashu settlement watch closed: final mint check saw no customer payment inside the watch window.', 'cashu-for-woocommerce' )
 							: __( 'Cashu settlement watch closed without a definitive mint response. The mint could not be reached to verify the final quote state; check it manually.', 'cashu-for-woocommerce' )
 					);
+				}
+				if ( ! $all_authoritative ) {
+					$fresh->update_meta_data( self::UNRESOLVED_META, (string) time() );
 				}
 				$fresh->update_meta_data( self::DONE_META, (string) time() );
 				$fresh->save();

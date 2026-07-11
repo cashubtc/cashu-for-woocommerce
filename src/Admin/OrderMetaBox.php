@@ -102,6 +102,14 @@ final class OrderMetaBox {
 			echo '</p>';
 		}
 
+		$watch_unresolved = absint( $order->get_meta( \Cashu\WC\Helpers\MintQuoteReconciler::UNRESOLVED_META, true ) );
+		if ( $watch_unresolved > 0 && ! $order->is_paid() ) {
+			echo '<p style="margin:0 0 10px;padding:6px 8px;background:#fff8e6;border-left:3px solid #dba617;">';
+			echo '<strong>' . esc_html__( 'Settlement watch closed without a definitive mint response.', 'cashu-for-woocommerce' ) . '</strong><br>';
+			echo esc_html__( 'The final payment state could not be verified because the mint was unreachable. Open the customer payment page below to re-check and complete the order if it was paid.', 'cashu-for-woocommerce' );
+			echo '</p>';
+		}
+
 		$pending_quote = (string) $order->get_meta( '_cashu_melt_pending_quote_id', true );
 		$pending_at    = absint( $order->get_meta( '_cashu_melt_pending_at', true ) );
 		if ( '' !== $pending_quote && ! $order->is_paid() ) {
