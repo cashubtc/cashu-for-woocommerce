@@ -129,11 +129,16 @@ final class MintQuoteReconciler {
 
 		self::sweep_orders( $live );
 
-		$remaining = self::MAX_PER_RUN - $live_count;
-		if ( $remaining <= 0 ) {
-			return;
-		}
-		$backlog = wc_get_orders(
+		// A live cohort that is an exact multiple of MAX_PER_RUN fills every
+		// page forever (the wraparound retry above included), which would
+		// leave $remaining at 0 on every tick and starve the backlog
+		// permanently. Guarantee it one slot regardless: the per-tick cap
+		// effectively becomes MAX_PER_RUN + 1 under live saturation, one extra
+		// probe is immaterial to mint fan-out, and it makes any finite backlog
+		// drain unconditionally, since sweep_one() closes a backlog order
+		// after a single probe.
+		$remaining = max( 1, self::MAX_PER_RUN - $live_count );
+		$backlog   = wc_get_orders(
 			array_merge(
 				$base_args,
 				array(

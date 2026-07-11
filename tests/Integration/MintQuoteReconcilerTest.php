@@ -106,7 +106,7 @@ final class MintQuoteReconcilerTest extends IntegrationTestCase {
 		$this->assertStringStartsWith( '<', (string) $backlog['date_created'] );
 	}
 
-	public function test_sweep_skips_backlog_query_when_live_cohort_fills_cap(): void {
+	public function test_sweep_still_runs_backlog_query_with_one_slot_when_live_cohort_fills_cap(): void {
 		$this->stubBaseline();
 		$this->setUpFakeWpdb();
 		$calls = array();
@@ -123,7 +123,56 @@ final class MintQuoteReconcilerTest extends IntegrationTestCase {
 
 		MintQuoteReconciler::sweep();
 
-		$this->assertCount( 1, $calls );
+		// A saturated live cohort must never starve the backlog entirely: a
+		// full page still yields one guaranteed backlog slot.
+		$this->assertCount( 2, $calls );
+		$this->assertSame( 1, $calls[1]['limit'] );
+	}
+
+	public function test_sweep_gives_backlog_one_slot_even_when_a_full_live_page_is_real_orders(): void {
+		$this->stubBaseline();
+		$this->setUpFakeWpdb();
+
+		// One cheap already-paid order, reused 20 times for the live cohort:
+		// sweep_one() takes the DONE fast path (is_paid() short-circuit)
+		// without probing the mint. A pre-deployment backlog order sits
+		// behind it, past the watch horizon cutoff.
+		$live_order = $this->mockOrder( 42, $this->watchedMeta() );
+		$live_order->shouldReceive( 'is_paid' )->andReturn( true );
+
+		$backlog_meta                          = $this->watchedMeta();
+		$backlog_meta['_cashu_mint_quote_id']  = 'mq_backlog';
+		$backlog_order                         = $this->mockOrder( 99, $backlog_meta );
+		$backlog_order->shouldReceive( 'is_paid' )->andReturn( true );
+
+		Functions\when( 'wc_get_order' )->alias(
+			static function ( int $id ) use ( $live_order, $backlog_order ) {
+				return 99 === $id ? $backlog_order : $live_order;
+			}
+		);
+
+		$calls = array();
+		Functions\when( 'wc_get_orders' )->alias(
+			static function ( array $args ) use ( &$calls, $live_order, $backlog_order ): array {
+				$calls[] = $args;
+				return '>' === substr( (string) $args['date_created'], 0, 1 )
+					? array_fill( 0, 20, $live_order )
+					: array( $backlog_order );
+			}
+		);
+
+		MintQuoteReconciler::sweep();
+
+		$this->assertCount( 2, $calls );
+		$live    = $calls[0];
+		$backlog = $calls[1];
+		$this->assertSame( 20, $live['limit'] );
+		$this->assertStringStartsWith( '>', (string) $live['date_created'] );
+		$this->assertSame( 1, $backlog['limit'] );
+		$this->assertStringStartsWith( '<', (string) $backlog['date_created'] );
+
+		// The backlog order was actually probed and closed out, not skipped.
+		$this->assertNotSame( '', (string) $backlog_order->get_meta( MintQuoteReconciler::DONE_META ) );
 	}
 
 	public function test_sweep_backlog_query_uses_remaining_slots(): void {
@@ -172,9 +221,11 @@ final class MintQuoteReconcilerTest extends IntegrationTestCase {
 		$this->assertSame( 0, $calls[0]['offset'] );
 		$this->assertSame( 20, $options[ self::OFFSET_OPTION ] );
 
-		// Next tick's live-cohort query starts from the stored offset.
+		// Next tick's live-cohort query starts from the stored offset. A full
+		// live page still runs a one-slot backlog query (calls[1]) before the
+		// second tick's live query (calls[2]).
 		MintQuoteReconciler::sweep();
-		$this->assertSame( 20, $calls[1]['offset'] );
+		$this->assertSame( 20, $calls[2]['offset'] );
 	}
 
 	public function test_sweep_resets_the_offset_after_a_short_live_page(): void {
