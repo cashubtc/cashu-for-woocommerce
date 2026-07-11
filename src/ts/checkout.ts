@@ -673,23 +673,37 @@ jQuery(function ($) {
   // mint-side amplification by ~3-6x on a long-routing LN payment without
   // changing the no-PENDING UX. Resets on any non-PENDING response.
   const POLL_INTERVALS_MS = [5_000, 15_000, 30_000];
+  // Terminates only on abort, PAID, or EXPIRED (both carry their own
+  // redirect via checkOrderStatus). The local deadline alone never ends the
+  // loop: the server can slide the window (updateQuoteExpiry) between polls,
+  // and this is the NUT-18 leg's only completion signal — dying here would
+  // strand the tab on "waiting" forever.
   async function pollOrderStatus(): Promise<void> {
     if (pollOrderStatusRunning) return;
     pollOrderStatusRunning = true;
     try {
-      if (ac.signal.aborted || Date.now() > data.quoteExpiryMs) {
-        window.location.assign(String(data.returnUrl));
-        return;
-      }
       let pendingStreak = 0;
-      while (!ac.signal.aborted && Date.now() <= data.quoteExpiryMs) {
+      while (!ac.signal.aborted) {
+        if (Date.now() > data.quoteExpiryMs) {
+          // Local deadline passed. One more check distinguishes a genuine
+          // expiry from a server-side slide that happened since our last
+          // poll: only a slide that actually moves the deadline forward
+          // restarts the loop, everything else falls back to returnUrl.
+          const expiryBefore = data.quoteExpiryMs;
+          const r = await run(() => checkOrderStatus());
+          if (r?.state === 'PAID' || r?.state === 'EXPIRED') return;
+          if (data.quoteExpiryMs > expiryBefore && Date.now() <= data.quoteExpiryMs) {
+            pendingStreak = r?.state === 'PENDING' ? pendingStreak + 1 : 0;
+            continue;
+          }
+          window.location.assign(String(data.returnUrl));
+          return;
+        }
         await delay(selectPollIntervalMs(pendingStreak, POLL_INTERVALS_MS));
         const r = await run(() => checkOrderStatus());
         if (r?.state === 'PAID' || r?.state === 'EXPIRED') return;
         pendingStreak = r?.state === 'PENDING' ? pendingStreak + 1 : 0;
       }
-      await delay(500);
-      await run(() => checkOrderStatus());
     } finally {
       pollOrderStatusRunning = false;
     }
