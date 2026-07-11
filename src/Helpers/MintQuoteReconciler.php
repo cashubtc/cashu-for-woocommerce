@@ -42,6 +42,13 @@ final class MintQuoteReconciler {
 	private const GRACE_SECS = DAY_IN_SECONDS;
 
 	/**
+	 * Extra window of hourly retries past GRACE_SECS for a quote whose mint
+	 * never gives a definitive state. Long enough to survive a multi-day
+	 * mint outage; still bounds how long a dead mint can churn the sweep.
+	 */
+	private const UNRESOLVED_GRACE_SECS = 3 * DAY_IN_SECONDS;
+
+	/**
 	 * date_created cutoff separating the "live" and "backlog" cohorts in
 	 * sweep(). Longest observed quote TTL (coinos, 7d) + the grace tail +
 	 * a day's margin. Scheduling priority only, not a correctness gate:
@@ -274,7 +281,23 @@ final class MintQuoteReconciler {
 				$states = array_replace( $states, MintClient::mint_quote_states( $group['url'], $group['ids'] ) );
 			}
 
-			$current_state   = (string) ( $states[ $current ] ?? '' );
+			$current_state = (string) ( $states[ $current ] ?? '' );
+
+			// MintClient::mint_quote_states() returns '' for a state it
+			// could not verify (transport error, non-200, malformed body, a
+			// batch entry the mint omitted), never for a real mint answer.
+			// A CLOSE path claims a definitive answer about the ids it
+			// covers, so it must never fire on an unverified '' read: that
+			// would silently bury a quote a flaky probe just failed to see.
+			$archived_authoritative = true;
+			foreach ( $archived as $entry ) {
+				if ( '' === (string) ( $states[ $entry['quote'] ] ?? '' ) ) {
+					$archived_authoritative = false;
+					break;
+				}
+			}
+			$all_authoritative = $archived_authoritative && '' !== $current_state;
+
 			$found_this_tick = false;
 			if ( 'PAID' === $current_state || 'ISSUED' === $current_state ) {
 				self::record_detection( $fresh, $current, $current_state );
@@ -317,6 +340,14 @@ final class MintQuoteReconciler {
 					// branch on a later tick or the age-out check below.
 					return;
 				}
+				if ( ! $archived_authoritative ) {
+					// At least one archived quote's state came back unknown
+					// this tick: burying it now could hide a payment a flaky
+					// probe just missed. Return without side effects; the
+					// order stays in the sweep query and the next tick
+					// retries.
+					return;
+				}
 				// Detected and no archived invoice is still payable: nothing
 				// left to watch for. Completion flips is_paid, which
 				// short-circuits above on the next tick.
@@ -326,6 +357,19 @@ final class MintQuoteReconciler {
 			}
 
 			if ( $aged_out ) {
+				// The close claims a definitive answer about every invoice,
+				// so it needs every requested state to be authoritative,
+				// UNLESS the watch has now run so far past its own deadline
+				// that a permanently unreachable mint would otherwise pin
+				// the order in the sweep forever.
+				$close_now = $all_authoritative
+					|| time() > $until + self::GRACE_SECS + self::UNRESOLVED_GRACE_SECS;
+				if ( ! $close_now ) {
+					// Non-authoritative and still inside the unresolved
+					// retry horizon: return without side effects so the
+					// next tick retries.
+					return;
+				}
 				// A hit on either meta this tick or a prior one means a
 				// payment WAS seen; the "no customer payment" note would
 				// contradict the recovery note just written above (or on an
@@ -335,7 +379,9 @@ final class MintQuoteReconciler {
 					&& '' === (string) $fresh->get_meta( self::ARCHIVE_NOTED_META, true )
 				) {
 					$fresh->add_order_note(
-						__( 'Cashu settlement watch closed: final mint check saw no customer payment inside the watch window.', 'cashu-for-woocommerce' )
+						$all_authoritative
+							? __( 'Cashu settlement watch closed: final mint check saw no customer payment inside the watch window.', 'cashu-for-woocommerce' )
+							: __( 'Cashu settlement watch closed without a definitive mint response. The mint could not be reached to verify the final quote state; check it manually.', 'cashu-for-woocommerce' )
 					);
 				}
 				$fresh->update_meta_data( self::DONE_META, (string) time() );

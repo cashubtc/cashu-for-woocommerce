@@ -463,6 +463,93 @@ final class MintQuoteReconcilerTest extends IntegrationTestCase {
 		$this->assertNotSame( '', (string) $order->get_meta( MintQuoteReconciler::DONE_META ) );
 	}
 
+	public function test_aged_out_order_with_unresolved_mint_state_stays_open_within_the_unresolved_horizon(): void {
+		$this->stubBaseline();
+		$this->setUpFakeWpdb();
+		$meta = $this->watchedMeta();
+		// Payable window ended two days ago: past window + 24h grace, but
+		// well inside the bounded unresolved-retry horizon.
+		$meta['_cashu_mint_quote_expiry']  = (string) ( time() - 2 * DAY_IN_SECONDS );
+		$meta['_cashu_mint_quote_created'] = (string) ( time() - 3 * DAY_IN_SECONDS );
+		$order = $this->mockOrder( 42, $meta );
+		$order->shouldReceive( 'is_paid' )->andReturn( false );
+		$order->shouldReceive( 'add_order_note' )->never();
+		$order->shouldReceive( 'save' )->never();
+		Functions\when( 'wc_get_order' )->justReturn( $order );
+		// Batch POST fails outright and the per-quote GET fallback fails
+		// too: every requested state comes back unknown.
+		Functions\expect( 'wp_remote_post' )->once()
+			->andReturn( new \WP_Error( 'http_request_failed', 'timeout' ) );
+		Functions\expect( 'wp_remote_get' )->once()
+			->andReturn( new \WP_Error( 'http_request_failed', 'timeout' ) );
+
+		MintQuoteReconciler::sweep_one( $order );
+
+		$this->assertSame( '', (string) $order->get_meta( MintQuoteReconciler::DONE_META ) );
+	}
+
+	public function test_aged_out_order_closes_with_an_honest_note_past_the_unresolved_horizon(): void {
+		$this->stubBaseline();
+		$this->setUpFakeWpdb();
+		$meta = $this->watchedMeta();
+		// Placed past until + GRACE_SECS + UNRESOLVED_GRACE_SECS (1 + 3 days):
+		// a permanently unreachable mint must not pin the order forever.
+		$meta['_cashu_mint_quote_expiry']  = (string) ( time() - 5 * DAY_IN_SECONDS );
+		$meta['_cashu_mint_quote_created'] = (string) ( time() - 6 * DAY_IN_SECONDS );
+		$order = $this->mockOrder( 42, $meta );
+		$order->shouldReceive( 'is_paid' )->andReturn( false );
+		$order->shouldReceive( 'add_order_note' )
+			->with(
+				\Mockery::on(
+					static function ( string $note ): bool {
+						return false !== strpos( $note, 'without a definitive mint response' )
+							&& false === strpos( $note, 'saw no customer payment' );
+					}
+				)
+			)
+			->once()->andReturn( 1 );
+		Functions\when( 'wc_get_order' )->justReturn( $order );
+		Functions\expect( 'wp_remote_post' )->once()
+			->andReturn( new \WP_Error( 'http_request_failed', 'timeout' ) );
+		Functions\expect( 'wp_remote_get' )->once()
+			->andReturn( new \WP_Error( 'http_request_failed', 'timeout' ) );
+
+		MintQuoteReconciler::sweep_one( $order );
+
+		$this->assertNotSame( '', (string) $order->get_meta( MintQuoteReconciler::DONE_META ) );
+	}
+
+	public function test_detected_order_with_unresolved_archived_state_stays_open(): void {
+		$this->stubBaseline();
+		$this->setUpFakeWpdb();
+		$meta                                     = $this->watchedMeta();
+		$meta[ MintQuoteReconciler::DETECTED_META ] = (string) ( time() - HOUR_IN_SECONDS );
+		$meta['_cashu_late_paid_notified']          = (string) ( time() - HOUR_IN_SECONDS );
+		// Not payable: expiry is past its window plus the 24h grace.
+		$meta['_cashu_archived_mint_quotes'] = (string) json_encode(
+			array(
+				array(
+					'quote'  => 'mq_old',
+					'amount' => 5000,
+					'expiry' => time() - ( 2 * DAY_IN_SECONDS + 60 ),
+				),
+			)
+		);
+		$order = $this->mockOrder( 42, $meta );
+		$order->shouldReceive( 'is_paid' )->andReturn( false );
+		$order->shouldReceive( 'add_order_note' )->never();
+		$order->shouldReceive( 'save' )->never();
+		Functions\when( 'wc_get_order' )->justReturn( $order );
+		// The batch response omits the archived quote entirely, so its
+		// state resolves to unknown ('').
+		Functions\expect( 'wp_remote_post' )->once()
+			->andReturn( $this->batchResponse( array( 'mq1' => 'UNPAID' ) ) );
+
+		MintQuoteReconciler::sweep_one( $order );
+
+		$this->assertSame( '', (string) $order->get_meta( MintQuoteReconciler::DONE_META ) );
+	}
+
 	public function test_aged_out_tick_with_archived_hit_notes_recovery_not_watch_closed(): void {
 		$this->stubBaseline();
 		$this->setUpFakeWpdb();
