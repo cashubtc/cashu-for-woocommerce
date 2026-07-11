@@ -394,11 +394,13 @@ final class CashuWCPlugin {
 			return;
 		}
 
-		$status = $order->get_status();
+		$status     = $order->get_status();
+		$statusNote = '';
 
 		switch ( $status ) {
 			case 'pending':
 				$statusDesc = __( 'Waiting payment', 'cashu-for-woocommerce' );
+				$statusNote = __( 'If your payment is still on its way, we will detect it automatically and email you a confirmation link.', 'cashu-for-woocommerce' );
 				break;
 			case 'on-hold':
 				$statusDesc = __( 'Waiting for payment settlement', 'cashu-for-woocommerce' );
@@ -421,6 +423,9 @@ final class CashuWCPlugin {
 		echo '<section class="woocommerce-order-payment-status">';
 		echo '<h2 class="woocommerce-order-payment-status-title">' . esc_html__( 'Order Status', 'cashu-for-woocommerce' ) . '</h2>';
 		echo '<p><strong>' . esc_html( $statusDesc ) . '</strong></p>';
+		if ( '' !== $statusNote ) {
+			echo '<p>' . esc_html( $statusNote ) . '</p>';
+		}
 		echo '</section>';
 	}
 

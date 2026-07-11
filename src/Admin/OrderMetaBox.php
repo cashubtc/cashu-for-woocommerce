@@ -94,6 +94,14 @@ final class OrderMetaBox {
 			}
 		}
 
+		$paid_detected = absint( $order->get_meta( \Cashu\WC\Helpers\MintQuoteReconciler::DETECTED_META, true ) );
+		if ( $paid_detected > 0 && ! $order->is_paid() ) {
+			echo '<p style="margin:0 0 10px;padding:6px 8px;background:#e7f7ed;border-left:3px solid #2f8f3a;">';
+			echo '<strong>' . esc_html__( 'Customer payment detected at the mint.', 'cashu-for-woocommerce' ) . '</strong><br>';
+			echo esc_html__( 'Open the customer payment page below to complete the order.', 'cashu-for-woocommerce' );
+			echo '</p>';
+		}
+
 		$pending_quote = (string) $order->get_meta( '_cashu_melt_pending_quote_id', true );
 		$pending_at    = absint( $order->get_meta( '_cashu_melt_pending_at', true ) );
 		if ( '' !== $pending_quote && ! $order->is_paid() ) {
