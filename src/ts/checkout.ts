@@ -21,6 +21,7 @@ import {
   deriveWalletSeed,
   extractPaymentPreimage,
   loadStrandedProofs,
+  MINT_POLL_INTERVALS_MS,
   type MeltAction,
   type MeltOutcome,
   type QrMode,
@@ -447,19 +448,25 @@ jQuery(function ($) {
       return false;
     };
 
-    // Fallback: slow polling of the mint. 12s × ~15min = ~75 requests, well
-    // under typical mint rate limits.
+    // Fallback: slow polling of the mint, backing off as the wait grows.
+    // The deadline is live: a slid spot window (updateQuoteExpiry) extends
+    // it between iterations with no reload. The try/catch sits around the
+    // single probe, not the whole loop: one thrown check counts toward the
+    // backoff streak and the loop continues, rather than a single failure
+    // permanently ending the poll while the deadline may extend for hours.
     const pollPaid = async (): Promise<boolean> => {
-      try {
-        while (!ac.signal.aborted && Date.now() < deadlineMs()) {
-          await delay(12_000);
+      let streak = 0;
+      while (!ac.signal.aborted && Date.now() < deadlineMs()) {
+        await delay(selectPollIntervalMs(streak, MINT_POLL_INTERVALS_MS));
+        streak += 1;
+        try {
           const q = await wallet.checkMintQuoteBolt11(data.mintQuote.id);
           if (q.state === 'PAID') return true;
+        } catch (e) {
+          console.warn('Mint quote poll failed, retrying:', getErrorMessage(e));
         }
-        return false;
-      } catch {
-        return false;
       }
+      return false;
     };
 
     const paid = (await wsPaid()) || (!ac.signal.aborted && (await pollPaid()));
@@ -669,23 +676,37 @@ jQuery(function ($) {
   // mint-side amplification by ~3-6x on a long-routing LN payment without
   // changing the no-PENDING UX. Resets on any non-PENDING response.
   const POLL_INTERVALS_MS = [5_000, 15_000, 30_000];
+  // Terminates only on abort, PAID, or EXPIRED (both carry their own
+  // redirect via checkOrderStatus). The local deadline alone never ends the
+  // loop: the server can slide the window (updateQuoteExpiry) between polls,
+  // and this is the NUT-18 leg's only completion signal — dying here would
+  // strand the tab on "waiting" forever.
   async function pollOrderStatus(): Promise<void> {
     if (pollOrderStatusRunning) return;
     pollOrderStatusRunning = true;
     try {
-      if (ac.signal.aborted || Date.now() > data.quoteExpiryMs) {
-        window.location.assign(String(data.returnUrl));
-        return;
-      }
       let pendingStreak = 0;
-      while (!ac.signal.aborted && Date.now() <= data.quoteExpiryMs) {
+      while (!ac.signal.aborted) {
+        if (Date.now() > data.quoteExpiryMs) {
+          // Local deadline passed. One more check distinguishes a genuine
+          // expiry from a server-side slide that happened since our last
+          // poll: only a slide that actually moves the deadline forward
+          // restarts the loop, everything else falls back to returnUrl.
+          const expiryBefore = data.quoteExpiryMs;
+          const r = await run(() => checkOrderStatus());
+          if (r?.state === 'PAID' || r?.state === 'EXPIRED') return;
+          if (data.quoteExpiryMs > expiryBefore && Date.now() <= data.quoteExpiryMs) {
+            pendingStreak = r?.state === 'PENDING' ? pendingStreak + 1 : 0;
+            continue;
+          }
+          window.location.assign(String(data.returnUrl));
+          return;
+        }
         await delay(selectPollIntervalMs(pendingStreak, POLL_INTERVALS_MS));
         const r = await run(() => checkOrderStatus());
         if (r?.state === 'PAID' || r?.state === 'EXPIRED') return;
         pendingStreak = r?.state === 'PENDING' ? pendingStreak + 1 : 0;
       }
-      await delay(500);
-      await run(() => checkOrderStatus());
     } finally {
       pollOrderStatusRunning = false;
     }

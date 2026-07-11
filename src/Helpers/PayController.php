@@ -135,7 +135,12 @@ final class PayController {
 		$spot_time   = absint( $order->get_meta( '_cashu_spot_time', true ) );
 		$spot_expiry = $spot_time + CashuGateway::QUOTE_EXPIRY_SECS;
 		if ( time() >= $spot_expiry ) {
-			return new WP_Error( 'cashu_expired', 'Payment window expired.', array( 'status' => 410 ) );
+			// Same sliding rule as the polling endpoint, so a NUT-18 wallet
+			// paying after minute 15 is not rejected while the offer stands.
+			if ( ! SpotWindow::maybe_slide( $order ) ) {
+				return new WP_Error( 'cashu_expired', 'Payment window expired.', array( 'status' => 410 ) );
+			}
+			$order->save();
 		}
 
 		// Body — accept the NUT-18 PaymentRequestPayload shape.

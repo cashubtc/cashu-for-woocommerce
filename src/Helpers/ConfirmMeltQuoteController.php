@@ -176,13 +176,22 @@ final class ConfirmMeltQuoteController {
 		$spot_time   = absint( $order->get_meta( '_cashu_spot_time', true ) );
 		$spot_expiry = $spot_time + CashuGateway::QUOTE_EXPIRY_SECS;
 		if ( time() >= $spot_expiry ) {
-			return rest_ensure_response(
-				array(
-					'ok'     => true,
-					'state'  => 'EXPIRED',
-					'expiry' => $spot_expiry,
-				)
-			);
+			// Slide instead of expiring while the customer's BOLT11 is
+			// still payable and spot drift stays inside the tolerance
+			// band. The refreshed expiry rides back on the UNPAID response
+			// below, so a polling browser extends its own deadline with no
+			// reload; rotation stays a render-time action.
+			if ( ! SpotWindow::maybe_slide( $order ) ) {
+				return rest_ensure_response(
+					array(
+						'ok'     => true,
+						'state'  => 'EXPIRED',
+						'expiry' => $spot_expiry,
+					)
+				);
+			}
+			$order->save();
+			$spot_expiry = absint( $order->get_meta( '_cashu_spot_time', true ) ) + CashuGateway::QUOTE_EXPIRY_SECS;
 		}
 
 		// Surface the timestamp of the most recent failed payment attempt

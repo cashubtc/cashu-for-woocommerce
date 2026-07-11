@@ -276,6 +276,15 @@ export function selectPollIntervalMs(
 }
 
 /**
+ * Mint-quote poll fallback cadence. The first minute stays at 12s (quick
+ * settles catch fast); a long slid window (hours) backs off to 2 minutes
+ * so the fallback stays polite to the mint when the WS is down.
+ */
+export const MINT_POLL_INTERVALS_MS: readonly number[] = [
+  12_000, 12_000, 12_000, 12_000, 12_000, 30_000, 30_000, 60_000, 120_000,
+];
+
+/**
  * Classify the post-throw mint state probe inside meltTrustedProofsToVendor.
  * cashu-ts threw, we re-probed, and now need to decide whether the input
  * proofs were spent at the mint (PAID), are still safe (UNPAID), or

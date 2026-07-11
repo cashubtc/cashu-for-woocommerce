@@ -10,7 +10,9 @@ use Cashu\WC\Helpers\ConfirmMeltQuoteController;
 use Cashu\WC\Helpers\Logger;
 use Cashu\WC\Helpers\MeltReconciler;
 use Cashu\WC\Helpers\MintLimits;
+use Cashu\WC\Helpers\MintQuoteReconciler;
 use Cashu\WC\Helpers\PayController;
+use Cashu\WC\Helpers\SpotWindow;
 
 final class CashuWCPlugin {
 
@@ -49,6 +51,11 @@ final class CashuWCPlugin {
 		// routing; cancelling here would race the settlement.
 		add_filter( 'woocommerce_cancel_unpaid_order', array( self::class, 'preventCancelDuringSettlement' ), 10, 2 );
 
+		// Reopen the order-pay page for a cancelled cashu order once the
+		// sweep has detected a late settlement at the mint, so the customer
+		// can complete the payment that already happened.
+		add_filter( 'woocommerce_valid_order_statuses_for_payment', array( self::class, 'allowLateSettlementPayment' ), 10, 2 );
+
 		// Settings page.
 		add_filter( 'woocommerce_get_settings_pages', array( $this, 'registerSettingsPage' ) );
 
@@ -74,6 +81,10 @@ final class CashuWCPlugin {
 		// them via the mint's authoritative state. Scheduled on plugin activation.
 		add_action( MeltReconciler::HOOK, array( MeltReconciler::class, 'reconcile_pending' ) );
 
+		// Cron: watch customer mint quotes for settlements that arrive after
+		// the browser stopped watching (issue #36).
+		add_action( MintQuoteReconciler::HOOK, array( MintQuoteReconciler::class, 'sweep' ) );
+
 		// Cron: keep the cached mint/LNURL amount-limit snapshot fresh so
 		// is_available() can hide the gateway for out-of-range carts.
 		add_action( MintLimits::HOOK, array( MintLimits::class, 'refresh' ) );
@@ -90,6 +101,9 @@ final class CashuWCPlugin {
 				// habitually share a wp-cron request.
 				if ( ! wp_next_scheduled( MintLimits::HOOK ) ) {
 					wp_schedule_event( time() + 5 * MINUTE_IN_SECONDS, 'hourly', MintLimits::HOOK );
+				}
+				if ( ! wp_next_scheduled( MintQuoteReconciler::HOOK ) ) {
+					wp_schedule_event( time() + 2 * MINUTE_IN_SECONDS, 'hourly', MintQuoteReconciler::HOOK );
 				}
 			}
 		);
@@ -166,7 +180,42 @@ final class CashuWCPlugin {
 		if ( '' !== (string) $order->get_meta( '_cashu_melt_pending_quote_id', true ) ) {
 			return false;
 		}
+		// A late settlement was detected at the mint; the order is
+		// completable and must not be cancelled out from under it.
+		if ( '' !== (string) $order->get_meta( MintQuoteReconciler::DETECTED_META, true ) ) {
+			return false;
+		}
+		// The customer's BOLT11 is still payable at the mint. Cancelling
+		// now would leave a live invoice pointing at an order that can no
+		// longer accept it.
+		if ( SpotWindow::quote_payable( $order ) ) {
+			return false;
+		}
 		return $should_cancel;
+	}
+
+	/**
+	 * `woocommerce_valid_order_statuses_for_payment` filter. Opens the
+	 * order-pay page for a CANCELLED cashu order only when the sweep has
+	 * already detected the customer's settlement at the mint: the page
+	 * then completes a payment that already happened. It never invites a
+	 * fresh payment on a killed order.
+	 */
+	public static function allowLateSettlementPayment( $statuses, $order ) {
+		if ( ! is_array( $statuses ) || ! $order instanceof \WC_Order ) {
+			return $statuses;
+		}
+		if ( 'cashu_default' !== $order->get_payment_method() ) {
+			return $statuses;
+		}
+		if ( in_array( 'cancelled', $statuses, true ) ) {
+			return $statuses;
+		}
+		if ( '' === (string) $order->get_meta( MintQuoteReconciler::DETECTED_META, true ) ) {
+			return $statuses;
+		}
+		$statuses[] = 'cancelled';
+		return $statuses;
 	}
 
 	public function registerSettingsPage( array $pages ): array {
@@ -345,11 +394,13 @@ final class CashuWCPlugin {
 			return;
 		}
 
-		$status = $order->get_status();
+		$status     = $order->get_status();
+		$statusNote = '';
 
 		switch ( $status ) {
 			case 'pending':
 				$statusDesc = __( 'Waiting payment', 'cashu-for-woocommerce' );
+				$statusNote = __( 'If your payment is still on its way, we will detect it automatically and email you a confirmation link.', 'cashu-for-woocommerce' );
 				break;
 			case 'on-hold':
 				$statusDesc = __( 'Waiting for payment settlement', 'cashu-for-woocommerce' );
@@ -372,6 +423,9 @@ final class CashuWCPlugin {
 		echo '<section class="woocommerce-order-payment-status">';
 		echo '<h2 class="woocommerce-order-payment-status-title">' . esc_html__( 'Order Status', 'cashu-for-woocommerce' ) . '</h2>';
 		echo '<p><strong>' . esc_html( $statusDesc ) . '</strong></p>';
+		if ( '' !== $statusNote ) {
+			echo '<p>' . esc_html( $statusNote ) . '</p>';
+		}
 		echo '</section>';
 	}
 

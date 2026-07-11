@@ -24,6 +24,7 @@ final class OrderMetaBox {
 	public static function register(): void {
 		add_action( 'add_meta_boxes', array( self::class, 'add' ) );
 		add_action( 'admin_post_cashu_wc_retry_melt', array( self::class, 'handle_retry_melt' ) );
+		add_action( 'admin_post_cashu_wc_retry_watch', array( self::class, 'handle_retry_watch' ) );
 	}
 
 	public static function add(): void {
@@ -92,6 +93,40 @@ final class OrderMetaBox {
 				echo esc_html( $message );
 				echo '</p>';
 			}
+		}
+
+		$paid_detected = absint( $order->get_meta( \Cashu\WC\Helpers\MintQuoteReconciler::DETECTED_META, true ) );
+		if ( $paid_detected > 0 && ! $order->is_paid() ) {
+			echo '<p style="margin:0 0 10px;padding:6px 8px;background:#e7f7ed;border-left:3px solid #2f8f3a;">';
+			echo '<strong>' . esc_html__( 'Customer payment detected at the mint.', 'cashu-for-woocommerce' ) . '</strong><br>';
+			echo esc_html__( 'Open the customer payment page below to complete the order.', 'cashu-for-woocommerce' );
+			echo '</p>';
+		}
+
+		$watch_unresolved = absint( $order->get_meta( \Cashu\WC\Helpers\MintQuoteReconciler::UNRESOLVED_META, true ) );
+		if ( $watch_unresolved > 0 && ! $order->is_paid() ) {
+			echo '<p style="margin:0 0 10px;padding:6px 8px;background:#fff8e6;border-left:3px solid #dba617;">';
+			echo '<strong>' . esc_html__( 'Settlement watch closed without a definitive mint response.', 'cashu-for-woocommerce' ) . '</strong><br>';
+			echo esc_html__( 'The final payment state could not be verified because the mint was unreachable. Retry the settlement watch to check the mint again.', 'cashu-for-woocommerce' );
+			echo '</p>';
+
+			// Same GET-link + admin_post pattern as the "Retry mint probe"
+			// button below: nested <form> tags don't survive inside the WC
+			// order-edit screen's own form, so this can't be a POST form.
+			$retry_watch_url = wp_nonce_url(
+				add_query_arg(
+					array(
+						'action'   => 'cashu_wc_retry_watch',
+						'order_id' => $order->get_id(),
+					),
+					admin_url( 'admin-post.php' )
+				),
+				'cashu_wc_retry_watch_' . $order->get_id()
+			);
+			echo '<p style="margin:0 0 12px;">';
+			echo '<a class="button" href="' . esc_url( $retry_watch_url ) . '">';
+			echo esc_html__( 'Retry settlement watch', 'cashu-for-woocommerce' );
+			echo '</a></p>';
 		}
 
 		$pending_quote = (string) $order->get_meta( '_cashu_melt_pending_quote_id', true );
@@ -223,6 +258,52 @@ final class OrderMetaBox {
 			MeltReconciler::reconcile_one( $order, true );
 		} catch ( \Throwable $e ) {
 			Logger::error( 'Admin retry-melt failed for order ' . $order_id . ': ' . $e->getMessage() );
+		}
+
+		wp_safe_redirect( add_query_arg( 'cashu_retry', 'queued', $referer ) );
+		exit;
+	}
+
+	/**
+	 * admin_post handler for the "Retry settlement watch" button. Clears
+	 * the watch's closed markers so MintQuoteReconciler::sweep_one doesn't
+	 * short-circuit on its own DONE_META guard, then re-runs the sweep for
+	 * one more mint check. Always redirects back with a cashu_retry= notice
+	 * key, even on failure, so the admin gets feedback rather than a blank
+	 * page.
+	 */
+	public static function handle_retry_watch(): void {
+		// Link uses GET so the order_id arrives via $_GET. The nonce
+		// (also in the query string via wp_nonce_url) is checked below
+		// before any state mutation. Need order_id before the nonce
+		// check to compose the per-order nonce action name; the cap
+		// check above guards against unauthorised callers regardless.
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$order_id = isset( $_GET['order_id'] ) ? absint( wp_unslash( $_GET['order_id'] ) ) : 0;
+		$referer  = wp_get_referer() ?: admin_url();
+
+		if ( ! current_user_can( 'manage_woocommerce' ) ) {
+			wp_safe_redirect( add_query_arg( 'cashu_retry', 'forbidden', $referer ) );
+			exit;
+		}
+
+		// check_admin_referer wp_die's on failure, which is the correct
+		// behaviour for a nonce mismatch; no need to wrap with a notice.
+		check_admin_referer( 'cashu_wc_retry_watch_' . $order_id );
+
+		$order = wc_get_order( $order_id );
+		if ( ! $order ) {
+			wp_safe_redirect( add_query_arg( 'cashu_retry', 'no_order', $referer ) );
+			exit;
+		}
+
+		try {
+			$order->delete_meta_data( \Cashu\WC\Helpers\MintQuoteReconciler::DONE_META );
+			$order->delete_meta_data( \Cashu\WC\Helpers\MintQuoteReconciler::UNRESOLVED_META );
+			$order->save();
+			\Cashu\WC\Helpers\MintQuoteReconciler::sweep_one( $order );
+		} catch ( \Throwable $e ) {
+			Logger::error( 'Admin retry-watch failed for order ' . $order_id . ': ' . $e->getMessage() );
 		}
 
 		wp_safe_redirect( add_query_arg( 'cashu_retry', 'queued', $referer ) );

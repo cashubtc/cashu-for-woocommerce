@@ -15,6 +15,7 @@ use Cashu\WC\Helpers\MintClient;
 use Cashu\WC\Helpers\MintLimits;
 use Cashu\WC\Helpers\OrderLock;
 use Cashu\WC\Helpers\PayController;
+use Cashu\WC\Helpers\SpotWindow;
 use WC_Order;
 
 class CashuGateway extends \WC_Payment_Gateway {
@@ -520,6 +521,13 @@ class CashuGateway extends \WC_Payment_Gateway {
 			return $order_total_sats;
 		}
 
+		// Window lapsed. Before repricing, try to slide it: while the
+		// customer's BOLT11 is still payable and spot drift stays inside
+		// the tolerance band, the standing quote pair remains the offer.
+		if ( $order_total_sats > 0 && SpotWindow::maybe_slide( $order ) ) {
+			return $order_total_sats;
+		}
+
 		$total = (float) $order->get_total();
 		$quote = CashuHelper::fiatToSats( $total, $order->get_currency() );
 
@@ -755,6 +763,7 @@ class CashuGateway extends \WC_Payment_Gateway {
 				'mint'    => $existing_mint,
 				'amount'  => $existing_amount,
 				'expiry'  => $existing_expiry,
+				'created' => absint( $order->get_meta( '_cashu_mint_quote_created', true ) ),
 			);
 			$encoded     = wp_json_encode( $archive );
 			if ( is_string( $encoded ) ) {
@@ -777,6 +786,7 @@ class CashuGateway extends \WC_Payment_Gateway {
 		$order->update_meta_data( '_cashu_mint_quote_amount', $amount_sats );
 		$order->update_meta_data( '_cashu_mint_quote_expiry', $quote_expiry );
 		$order->update_meta_data( '_cashu_mint_quote_mint', $this->trusted_mint );
+		$order->update_meta_data( '_cashu_mint_quote_created', time() );
 
 		$order->add_order_note(
 			sprintf(
