@@ -149,6 +149,63 @@ final class MintClient {
 		return (string) $json['state'];
 	}
 
+	/** TTL for the per-mint "no NUT-29 batch support" flag. */
+	private const NUT29_UNSUPPORTED_TTL = DAY_IN_SECONDS;
+
+	/**
+	 * Fetch several mint-quote states in one round trip (NUT-29), falling
+	 * back to per-quote lookups for mints without batch support. Returns
+	 * quote_id => state ('' when unknown). Never throws.
+	 *
+	 * A transport error also sets the unsupported flag for a day; the
+	 * per-quote fallback covers the gap and the flag self-heals.
+	 */
+	public static function mint_quote_states( string $mint_url, array $quote_ids ): array {
+		$quote_ids = array_values( array_unique( array_filter( array_map( 'strval', $quote_ids ) ) ) );
+		if ( '' === $mint_url || array() === $quote_ids ) {
+			return array();
+		}
+		$flag_key = 'cashu_wc_no_nut29_' . md5( self::normalize_url( $mint_url ) );
+		if ( false === get_transient( $flag_key ) ) {
+			$res = wp_remote_post(
+				rtrim( $mint_url, '/' ) . '/v1/mint/quote/bolt11/check',
+				array(
+					'timeout' => 15,
+					'headers' => array( 'Content-Type' => 'application/json' ),
+					'body'    => wp_json_encode( array( 'quotes' => $quote_ids ) ),
+				)
+			);
+			if ( ! is_wp_error( $res ) && 200 === (int) wp_remote_retrieve_response_code( $res ) ) {
+				$json = json_decode( (string) wp_remote_retrieve_body( $res ), true );
+				// Some implementations wrap the list in a "quotes" key.
+				$list = is_array( $json ) && isset( $json['quotes'] ) && is_array( $json['quotes'] )
+					? $json['quotes']
+					: $json;
+				if ( is_array( $list ) ) {
+					$out = array_fill_keys( $quote_ids, '' );
+					foreach ( array_values( $list ) as $i => $entry ) {
+						if ( ! is_array( $entry ) ) {
+							continue;
+						}
+						// Entries come back in request order per the spec;
+						// prefer the explicit quote id when included.
+						$id = (string) ( $entry['quote'] ?? ( $quote_ids[ $i ] ?? '' ) );
+						if ( isset( $out[ $id ] ) ) {
+							$out[ $id ] = (string) ( $entry['state'] ?? '' );
+						}
+					}
+					return $out;
+				}
+			}
+			set_transient( $flag_key, '1', self::NUT29_UNSUPPORTED_TTL );
+		}
+		$out = array();
+		foreach ( $quote_ids as $id ) {
+			$out[ $id ] = self::mint_quote_state( $mint_url, $id );
+		}
+		return $out;
+	}
+
 	/**
 	 * Request a NUT-04 mint quote: the BOLT11 the customer pays to mint
 	 * proofs at the mint.
