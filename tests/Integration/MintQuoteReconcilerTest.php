@@ -17,10 +17,14 @@ final class MintQuoteReconcilerTest extends IntegrationTestCase {
 
 	private const MINT = 'https://mint.example';
 
+	/** Mirrors MintQuoteReconciler::OFFSET_OPTION (private, so duplicated here). */
+	private const OFFSET_OPTION = 'cashu_wc_mint_sweep_offset';
+
 	private function stubBaseline(): void {
 		Functions\when( '__' )->returnArg( 1 );
 		Functions\when( 'absint' )->alias( static fn ( $v ): int => abs( (int) $v ) );
 		Functions\when( 'get_option' )->justReturn( '' );
+		Functions\when( 'update_option' )->justReturn( true );
 		Functions\when( 'get_transient' )->justReturn( false );
 		Functions\when( 'set_transient' )->justReturn( true );
 		Functions\when( 'wp_parse_url' )->alias( 'parse_url' );
@@ -30,6 +34,21 @@ final class MintQuoteReconcilerTest extends IntegrationTestCase {
 			->alias( static fn ( $r ): int => is_array( $r ) ? ( $r['response']['code'] ?? 0 ) : 0 );
 		Functions\when( 'wp_remote_retrieve_body' )
 			->alias( static fn ( $r ): string => is_array( $r ) ? ( $r['body'] ?? '' ) : '' );
+	}
+
+	/** Stub get_option/update_option onto a shared backing array, keyed by option name. */
+	private function stubOptions( array &$options ): void {
+		Functions\when( 'get_option' )->alias(
+			static function ( string $key, $default = false ) use ( &$options ) {
+				return $options[ $key ] ?? $default;
+			}
+		);
+		Functions\when( 'update_option' )->alias(
+			static function ( string $key, $value ) use ( &$options ): bool {
+				$options[ $key ] = $value;
+				return true;
+			}
+		);
 	}
 
 	/** NUT-29 batch response for the given quote => state map. */
@@ -124,6 +143,84 @@ final class MintQuoteReconcilerTest extends IntegrationTestCase {
 
 		$this->assertCount( 2, $calls );
 		$this->assertSame( 15, $calls[1]['limit'] );
+	}
+
+	public function test_sweep_rotates_the_offset_after_a_full_live_page(): void {
+		$this->stubBaseline();
+		$this->setUpFakeWpdb();
+		$options = array();
+		$this->stubOptions( $options );
+
+		// One cheap already-paid order, reused 20 times: sweep_one() takes
+		// the DONE fast path (is_paid() short-circuit) without probing the
+		// mint, so a full-page tick stays cheap here too.
+		$order = $this->mockOrder( 42, $this->watchedMeta() );
+		$order->shouldReceive( 'is_paid' )->andReturn( true );
+		Functions\when( 'wc_get_order' )->justReturn( $order );
+
+		$calls = array();
+		Functions\when( 'wc_get_orders' )->alias(
+			static function ( array $args ) use ( &$calls, $order ): array {
+				$calls[] = $args;
+				return '>' === substr( (string) $args['date_created'], 0, 1 )
+					? array_fill( 0, 20, $order )
+					: array();
+			}
+		);
+
+		MintQuoteReconciler::sweep();
+		$this->assertSame( 0, $calls[0]['offset'] );
+		$this->assertSame( 20, $options[ self::OFFSET_OPTION ] );
+
+		// Next tick's live-cohort query starts from the stored offset.
+		MintQuoteReconciler::sweep();
+		$this->assertSame( 20, $calls[1]['offset'] );
+	}
+
+	public function test_sweep_resets_the_offset_after_a_short_live_page(): void {
+		$this->stubBaseline();
+		$this->setUpFakeWpdb();
+		$options = array( self::OFFSET_OPTION => 20 );
+		$this->stubOptions( $options );
+
+		Functions\when( 'wc_get_orders' )->alias(
+			static function ( array $args ): array {
+				// Short page (not a full 20): entries are not WC_Order so
+				// sweep_one() skips them harmlessly via its instanceof guard.
+				return '>' === substr( (string) $args['date_created'], 0, 1 )
+					? array_fill( 0, 5, new \stdClass() )
+					: array();
+			}
+		);
+
+		MintQuoteReconciler::sweep();
+
+		$this->assertSame( 0, $options[ self::OFFSET_OPTION ] );
+	}
+
+	public function test_sweep_retries_from_zero_when_the_cohort_shrank_below_the_offset(): void {
+		$this->stubBaseline();
+		$this->setUpFakeWpdb();
+		$options = array( self::OFFSET_OPTION => 20 );
+		$this->stubOptions( $options );
+
+		$live_offsets = array();
+		Functions\when( 'wc_get_orders' )->alias(
+			static function ( array $args ) use ( &$live_offsets ): array {
+				if ( '>' === substr( (string) $args['date_created'], 0, 1 ) ) {
+					$live_offsets[] = $args['offset'];
+				}
+				return array();
+			}
+		);
+
+		MintQuoteReconciler::sweep();
+
+		// The first page at offset 20 comes back empty (the cohort shrank),
+		// so sweep() retries once from offset 0 in the same tick rather than
+		// wasting it.
+		$this->assertSame( array( 20, 0 ), $live_offsets );
+		$this->assertSame( 0, $options[ self::OFFSET_OPTION ] );
 	}
 
 	public function test_paid_current_quote_marks_notes_emails_and_closes_the_watch(): void {

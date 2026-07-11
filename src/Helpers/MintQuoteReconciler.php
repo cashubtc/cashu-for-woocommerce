@@ -35,6 +35,9 @@ final class MintQuoteReconciler {
 	/** Hard cap per cron tick. Stops a backlog from fanning out to mint. */
 	private const MAX_PER_RUN = 20;
 
+	/** Persisted rotation cursor for the live cohort (see sweep()'s comment). */
+	private const OFFSET_OPTION = 'cashu_wc_mint_sweep_offset';
+
 	/** Keep watching this long past the payable window (stuck HTLC tail). */
 	private const GRACE_SECS = DAY_IN_SECONDS;
 
@@ -78,18 +81,55 @@ final class MintQuoteReconciler {
 		// Live cohort first, so a backlog of older watched orders (e.g. a
 		// burst right after this reconciler shipped) can never starve
 		// orders still inside their real watch window.
-		$live = wc_get_orders(
+		//
+		// The live population itself can outlive a single tick by days (a
+		// watch only leaves via payment, detection, or age-out), so an
+		// unrotated oldest-first query would return the SAME MAX_PER_RUN
+		// orders on every tick once the cohort passes the cap: order #21
+		// onward gets zero probes for up to its whole quote lifetime, and a
+		// saturated live cohort also permanently starves the backlog query.
+		// Rotating a persisted offset cursor through the cohort trades peak
+		// cadence for fairness under load, instead of silently leaving
+		// everything past the cap unwatched.
+		$offset     = (int) get_option( self::OFFSET_OPTION, 0 );
+		$live       = wc_get_orders(
 			array_merge(
 				$base_args,
 				array(
 					'date_created' => '>' . $cutoff,
 					'limit'        => self::MAX_PER_RUN,
+					'offset'       => $offset,
 				)
 			)
 		);
+		$live_count = is_array( $live ) ? count( $live ) : 0;
+
+		if ( 0 === $live_count && $offset > 0 ) {
+			// The cohort shrank below the stored offset since the last tick
+			// (orders left the watch via payment or age-out): retry once
+			// from the top rather than wasting this whole tick on a page
+			// that can never come back non-empty.
+			$offset     = 0;
+			$live       = wc_get_orders(
+				array_merge(
+					$base_args,
+					array(
+						'date_created' => '>' . $cutoff,
+						'limit'        => self::MAX_PER_RUN,
+						'offset'       => 0,
+					)
+				)
+			);
+			$live_count = is_array( $live ) ? count( $live ) : 0;
+		}
+		// A full page means more of the cohort is still unseen: advance past
+		// it for next tick. Anything shorter means this page reached the end
+		// of the cohort, so the next tick starts over from the top.
+		update_option( self::OFFSET_OPTION, self::MAX_PER_RUN === $live_count ? $offset + $live_count : 0 );
+
 		self::sweep_orders( $live );
 
-		$remaining = self::MAX_PER_RUN - ( is_array( $live ) ? count( $live ) : 0 );
+		$remaining = self::MAX_PER_RUN - $live_count;
 		if ( $remaining <= 0 ) {
 			return;
 		}
