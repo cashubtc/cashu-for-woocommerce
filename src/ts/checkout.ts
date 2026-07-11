@@ -24,6 +24,7 @@ import {
   MINT_POLL_INTERVALS_MS,
   type MeltAction,
   type MeltOutcome,
+  qrHintKeyForMode,
   type QrMode,
   readRootData,
   rememberChangeItem,
@@ -111,6 +112,7 @@ jQuery(function ($) {
   const $recoveryCopy = $scope.find('[data-cashu-recovery-copy]');
   const $qrIcon = $scope.find('[data-cashu-qr-icon]');
   const $qrIconImg = $qrIcon.find('img');
+  const $qrHint = $scope.find('[data-cashu-qr-hint]');
   let recoveryToken = '';
   const setStatus = (msg: string, isError: boolean = false) => {
     const color = isError ? 'var(--cashu-warning)' : 'var(--cashu-status)';
@@ -186,6 +188,7 @@ jQuery(function ($) {
     $tabs.removeClass('is-active').attr('aria-selected', 'false');
     $btn.addClass('is-active').attr('aria-selected', 'true');
     applyQrIconForMode(mode);
+    applyQrHintForMode(mode);
     if (qrTexts[mode]) drawQr(qrTexts[mode]);
   });
 
@@ -210,9 +213,16 @@ jQuery(function ($) {
     }
     $qrIcon.prop('hidden', false);
   }
-  // Apply the default mode's overlay immediately so the unified tab renders
-  // without an icon from first paint.
+
+  // Per-tab copy hint under the QR, mirroring applyQrIconForMode.
+  function applyQrHintForMode(mode: QrMode): void {
+    $qrHint.text(t(qrHintKeyForMode(mode)));
+  }
+
+  // Apply the default mode's overlay + hint immediately so the unified tab
+  // renders correctly from first paint.
   applyQrIconForMode(currentMode);
+  applyQrHintForMode(currentMode);
 
   $recoveryCopy.off('click').on('click', async () => {
     if (!recoveryToken) return;
@@ -300,15 +310,20 @@ jQuery(function ($) {
 
     drawQr(qrTexts[currentMode]);
 
-    // Copy current tab's paste-friendly text on click.
+    // Copy current tab's paste-friendly text on click. Feedback is a green
+    // tint + checkmark overlay on the QR itself; the status line is left
+    // alone and keeps showing waiting/expiry state throughout.
     const $qrWrap = $qr.parent();
+    const qrWrapEl = $qrWrap.get(0) as HTMLElement | undefined;
     $qrWrap.off('click').on('click', async () => {
       const txt = copyTexts[currentMode];
       if (!txt) return;
       copyTextToClipboard(txt);
-      setStatus(t('copied'));
-      await delay(500);
-      setStatus(t('waiting_for_payment'));
+      $qrWrap.removeClass('copied');
+      if (qrWrapEl) void qrWrapEl.offsetWidth; // restart the CSS animation on rapid re-copy
+      $qrWrap.addClass('copied');
+      await delay(1600);
+      $qrWrap.removeClass('copied');
     });
   }
 

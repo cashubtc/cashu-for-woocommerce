@@ -4,6 +4,7 @@ import {
   deriveMeltFailureBranch,
   extractPaymentPreimage,
   MINT_POLL_INTERVALS_MS,
+  qrHintKeyForMode,
   selectPollIntervalMs,
 } from '../../src/ts/helpers';
 
@@ -201,5 +202,23 @@ describe('composeRestUrl', () => {
   // subdir and a double-slashed route shouldn't break the join.
   test('route with multiple leading slashes preserves all but the first', () => {
     expect(composeRestUrl('https://x.test/', '//foo')).toBe('https://x.test//foo');
+  });
+});
+
+// ----------------------------------------------------------------------------
+// qrHintKeyForMode
+// ----------------------------------------------------------------------------
+
+describe('qrHintKeyForMode', () => {
+  test('unified mode', () => {
+    expect(qrHintKeyForMode('unified')).toBe('qr_hint_unified');
+  });
+
+  test('cashu mode', () => {
+    expect(qrHintKeyForMode('cashu')).toBe('qr_hint_cashu');
+  });
+
+  test('lightning mode', () => {
+    expect(qrHintKeyForMode('lightning')).toBe('qr_hint_lightning');
   });
 });

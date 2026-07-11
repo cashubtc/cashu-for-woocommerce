@@ -206,6 +206,9 @@ class CashuGateway extends \WC_Payment_Gateway {
 					'copied'                  => __( 'Copied!', 'cashu-for-woocommerce' ),
 					'waiting_for_payment'     => __( 'Waiting for payment...', 'cashu-for-woocommerce' ),
 					'connecting_to_mint'      => __( 'Connecting to mint...', 'cashu-for-woocommerce' ),
+					'qr_hint_unified'         => __( 'Scan or tap to copy, then paste into your wallet.', 'cashu-for-woocommerce' ),
+					'qr_hint_cashu'           => __( 'Scan or tap to copy, then paste into your Cashu wallet.', 'cashu-for-woocommerce' ),
+					'qr_hint_lightning'       => __( 'Scan or tap to copy, then paste into your Lightning wallet.', 'cashu-for-woocommerce' ),
 
 					// Tabs
 					'tab_unified'             => __( 'Auto', 'cashu-for-woocommerce' ),
@@ -1011,7 +1014,14 @@ class CashuGateway extends \WC_Payment_Gateway {
 					<div class="cashu-qr-icon" data-cashu-qr-icon hidden aria-hidden="true">
 						<img src="<?php echo esc_url( $this->icon ); ?>" alt="">
 					</div>
+
+					<div class="cashu-qr-check" data-cashu-qr-check aria-hidden="true">
+						<svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" /><path pathLength="1" d="M15.5 27.5l7.5 7.5L36.5 20" /></svg>
+					</div>
+
 				</div>
+
+				<p class="cashu-qr-hint" data-cashu-qr-hint></p>
 
 				<div class="cashu-recovery" data-cashu-recovery hidden>
 					<div class="cashu-recovery-label">
@@ -1022,17 +1032,19 @@ class CashuGateway extends \WC_Payment_Gateway {
 					</button>
 				</div>
 
-				<div class="cashu-feenote">
-					<?php
-					printf(
-						/* translators: %1$s: Mint hostname */
-						esc_html__( 'Payments are settled via our Cashu mint: %1$s', 'cashu-for-woocommerce' ),
-						'<strong>' . esc_html( $trusted_mint ) . '</strong>'
-					);
-					?>
-				</div>
 			</div>
+
 		</section>
+
+		<div class="cashu-feenote">
+			<?php
+			printf(
+				/* translators: %1$s: Mint hostname */
+				esc_html__( 'Payments are settled via our Cashu mint: %1$s', 'cashu-for-woocommerce' ),
+				'<strong>' . esc_html( $trusted_mint ) . '</strong>'
+			);
+			?>
+		</div>
 		<?php
 	}
 
