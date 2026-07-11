@@ -41,12 +41,27 @@
 }
 
 .cashu-payamount,
-.cashu-feenote,
 .cashu-qr-hint {
   color: var(--cashu-muted);
   font-size: 0.9rem;
   margin: 6px 0;
   text-align: center;
+}
+
+/* Sits OUTSIDE .cashu-checkout (a footnote under the card), so it cannot
+   use the card's custom properties and centres itself to the card width. */
+.cashu-feenote {
+  color: rgb(0 0 0 / 62%);
+  font-size: 0.9rem;
+  margin: -12px auto 24px;
+  max-width: 360px;
+  text-align: center;
+}
+
+/* The mint URL gets its own line; the label plus URL is too long for one. */
+.cashu-feenote strong {
+  display: block;
+  overflow-wrap: anywhere;
 }
 
 .cashu-tabs {
