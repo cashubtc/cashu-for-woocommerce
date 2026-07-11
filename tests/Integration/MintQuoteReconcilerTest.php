@@ -155,6 +155,31 @@ final class MintQuoteReconcilerTest extends IntegrationTestCase {
 		MintQuoteReconciler::sweep_one( $order );
 	}
 
+	public function test_numeric_quote_id_state_is_not_lost_by_key_renumbering(): void {
+		$this->stubBaseline();
+		$this->setUpFakeWpdb();
+		$meta                          = $this->watchedMeta();
+		$meta['_cashu_mint_quote_id']  = '12345';
+		$order = $this->mockOrder( 42, $meta );
+		$order->shouldReceive( 'is_paid' )->andReturn( false );
+		$order->shouldReceive( 'get_checkout_payment_url' )->andReturn( 'https://s.example/pay' );
+		$order->shouldReceive( 'save' )->twice()->andReturn( 42 );
+		$order->shouldReceive( 'add_order_note' )
+			->with( \Mockery::type( 'string' ) )->once()->andReturn( 1 );
+		$order->shouldReceive( 'add_order_note' )
+			->with( \Mockery::type( 'string' ), 1 )->once()->andReturn( 2 );
+		Functions\when( 'wc_get_order' )->justReturn( $order );
+		// A purely numeric quote id: PHP casts it to an integer array key, so
+		// array_merge() (unlike array_replace()) renumbers it away from 0 and
+		// the PAID state is lost at the $states[$current] lookup.
+		Functions\expect( 'wp_remote_post' )->once()
+			->andReturn( $this->batchResponse( array( '12345' => 'PAID' ) ) );
+
+		MintQuoteReconciler::sweep_one( $order );
+
+		$this->assertNotSame( '', (string) $order->get_meta( MintQuoteReconciler::DETECTED_META ) );
+	}
+
 	public function test_detection_keeps_watching_while_an_archived_invoice_is_payable(): void {
 		$this->stubBaseline();
 		$this->setUpFakeWpdb();
@@ -405,6 +430,47 @@ final class MintQuoteReconcilerTest extends IntegrationTestCase {
 
 		MintQuoteReconciler::sweep_one( $order );
 
+		$this->assertSame( '', (string) $order->get_meta( MintQuoteReconciler::DONE_META ) );
+	}
+
+	public function test_zero_expiry_current_quote_is_not_aged_out_by_a_stale_archived_expiry(): void {
+		$this->stubBaseline();
+		$this->setUpFakeWpdb();
+		$meta = $this->watchedMeta();
+		// No advertised expiry on the current quote (spec-legal, treated as
+		// still-valid elsewhere): its own deadline must fall through to
+		// SpotWindow::payable_until(), which is created (recent) + 24h, still
+		// in the future.
+		$meta['_cashu_mint_quote_expiry']    = '0';
+		$meta['_cashu_mint_quote_created']   = (string) ( time() - 100 );
+		// A stale archived expiry, long past its window plus grace: it must
+		// only ever extend the watch, never shorten the current quote's own
+		// deadline down to this.
+		$meta['_cashu_archived_mint_quotes'] = (string) json_encode(
+			array(
+				array(
+					'quote'  => 'mq_old',
+					'amount' => 5000,
+					'expiry' => time() - 3 * DAY_IN_SECONDS,
+				),
+			)
+		);
+		$order = $this->mockOrder( 42, $meta );
+		$order->shouldReceive( 'is_paid' )->andReturn( false );
+		$order->shouldReceive( 'add_order_note' )->never();
+		Functions\when( 'wc_get_order' )->justReturn( $order );
+		Functions\expect( 'wp_remote_post' )->once()->andReturn(
+			$this->batchResponse(
+				array(
+					'mq1'    => 'UNPAID',
+					'mq_old' => 'UNPAID',
+				)
+			)
+		);
+
+		MintQuoteReconciler::sweep_one( $order );
+
+		$this->assertSame( '', (string) $order->get_meta( MintQuoteReconciler::DETECTED_META ) );
 		$this->assertSame( '', (string) $order->get_meta( MintQuoteReconciler::DONE_META ) );
 	}
 

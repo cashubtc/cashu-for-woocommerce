@@ -174,25 +174,26 @@ final class MintQuoteReconciler {
 			// mints keep quotes payable for days (coinos observed at 7d) and
 			// the watch must cover the invoice's whole payable life. The cap
 			// only bounds what we offer (slide, cancel veto), never what we
-			// watch. Take the LATEST expiry across the current quote and
-			// every archived one: a trusted-mint change (old quote outlives
-			// the new one) or a mint shortening its TTL can leave an
-			// archived invoice payable well past the current quote's window.
-			// Same-mint rotation can never produce archived > current
-			// (rotation only issues a newer quote with the same TTL), so
-			// this only changes behaviour across a mint or TTL change.
-			// Decided here but acted on AFTER the probe below, so every
-			// order gets at least one final check before its watch closes.
-			$expiries = array( absint( $fresh->get_meta( '_cashu_mint_quote_expiry', true ) ) );
-			foreach ( $archived as $entry ) {
-				$expiries[] = $entry['expiry'];
-			}
-			$until = max( $expiries );
+			// watch. Resolve the CURRENT quote's own deadline through its
+			// full fallback chain first (raw expiry, else the spot-window
+			// cap, else the spot-time-plus-max-window floor): a 0 expiry is
+			// spec-legal and must never be treated as "already expired".
+			// THEN take the max with every archived entry's expiry: a
+			// trusted-mint change (old quote outlives the new one) or a mint
+			// shortening its TTL can leave an archived invoice payable well
+			// past the current quote's own deadline. Archived expiries can
+			// only ever EXTEND the watch, never shorten it. Decided here but
+			// acted on AFTER the probe below, so every order gets at least
+			// one final check before its watch closes.
+			$until = absint( $fresh->get_meta( '_cashu_mint_quote_expiry', true ) );
 			if ( 0 === $until ) {
 				$until = SpotWindow::payable_until( $fresh );
 			}
 			if ( 0 === $until ) {
 				$until = absint( $fresh->get_meta( '_cashu_spot_time', true ) ) + SpotWindow::MAX_WINDOW_SECS;
+			}
+			foreach ( $archived as $entry ) {
+				$until = max( $until, $entry['expiry'] );
 			}
 			$aged_out = time() > $until + self::GRACE_SECS;
 
@@ -219,9 +220,13 @@ final class MintQuoteReconciler {
 				}
 				$groups[ $key ]['ids'][] = $entry['quote'];
 			}
+			// array_replace(), not array_merge(): mint quote ids are opaque
+			// strings but a purely numeric one becomes an integer array key,
+			// and array_merge() renumbers integer keys instead of preserving
+			// them, silently dropping that quote's state from the map.
 			$states = array();
 			foreach ( $groups as $group ) {
-				$states = array_merge( $states, MintClient::mint_quote_states( $group['url'], $group['ids'] ) );
+				$states = array_replace( $states, MintClient::mint_quote_states( $group['url'], $group['ids'] ) );
 			}
 
 			$current_state   = (string) ( $states[ $current ] ?? '' );
