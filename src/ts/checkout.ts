@@ -450,20 +450,23 @@ jQuery(function ($) {
 
     // Fallback: slow polling of the mint, backing off as the wait grows.
     // The deadline is live: a slid spot window (updateQuoteExpiry) extends
-    // it between iterations with no reload.
+    // it between iterations with no reload. The try/catch sits around the
+    // single probe, not the whole loop: one thrown check counts toward the
+    // backoff streak and the loop continues, rather than a single failure
+    // permanently ending the poll while the deadline may extend for hours.
     const pollPaid = async (): Promise<boolean> => {
-      try {
-        let streak = 0;
-        while (!ac.signal.aborted && Date.now() < deadlineMs()) {
-          await delay(selectPollIntervalMs(streak, MINT_POLL_INTERVALS_MS));
-          streak += 1;
+      let streak = 0;
+      while (!ac.signal.aborted && Date.now() < deadlineMs()) {
+        await delay(selectPollIntervalMs(streak, MINT_POLL_INTERVALS_MS));
+        streak += 1;
+        try {
           const q = await wallet.checkMintQuoteBolt11(data.mintQuote.id);
           if (q.state === 'PAID') return true;
+        } catch (e) {
+          console.warn('Mint quote poll failed, retrying:', getErrorMessage(e));
         }
-        return false;
-      } catch {
-        return false;
       }
+      return false;
     };
 
     const paid = (await wsPaid()) || (!ac.signal.aborted && (await pollPaid()));
