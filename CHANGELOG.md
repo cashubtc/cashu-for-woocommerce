@@ -1,5 +1,16 @@
 # Changelog
 
+## [v0.5.0](https://github.com/cashubtc/cashu-for-woocommerce/compare/v0.4.0...v0.5.0) (2026-07-11)
+
+### Bug Fixes
+
+- detect and complete lightning payments that settle after checkout ([#38](https://github.com/cashubtc/cashu-for-woocommerce/pull/38))
+
+
+### Features
+
+- copy hint and confirmation animation on the checkout QR ([#39](https://github.com/cashubtc/cashu-for-woocommerce/pull/39))
+
 ## [v0.4.0](https://github.com/cashubtc/cashu-for-woocommerce/compare/v0.3.2...v0.4.0) (2026-06-12)
 
 ### Bug Fixes
