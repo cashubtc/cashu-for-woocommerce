@@ -100,4 +100,58 @@ final class MintClientBatchStateTest extends IntegrationTestCase {
 		$this->assertSame( array(), MintClient::mint_quote_states( '', array( 'a' ) ) );
 		$this->assertSame( array(), MintClient::mint_quote_states( self::MINT, array() ) );
 	}
+
+	public function test_idless_entry_is_never_positionally_attributed(): void {
+		$this->stubBaseline();
+		// A single entry with no 'quote' key, against two requested ids: the
+		// old positional fallback would have mapped this to quote_ids[0]
+		// ('a'), wrongly marking an unpaid quote PAID. Both must stay ''.
+		Functions\expect( 'wp_remote_post' )->once()->andReturn(
+			array(
+				'response' => array( 'code' => 200 ),
+				'body'     => (string) json_encode(
+					array(
+						array( 'state' => 'PAID' ),
+					)
+				),
+			)
+		);
+
+		$states = MintClient::mint_quote_states( self::MINT, array( 'a', 'b' ) );
+
+		$this->assertSame(
+			array(
+				'a' => '',
+				'b' => '',
+			),
+			$states
+		);
+	}
+
+	public function test_short_list_leaves_unmatched_quotes_empty(): void {
+		$this->stubBaseline();
+		Functions\expect( 'wp_remote_post' )->once()->andReturn(
+			array(
+				'response' => array( 'code' => 200 ),
+				'body'     => (string) json_encode(
+					array(
+						array(
+							'quote' => 'a',
+							'state' => 'PAID',
+						),
+					)
+				),
+			)
+		);
+
+		$states = MintClient::mint_quote_states( self::MINT, array( 'a', 'b' ) );
+
+		$this->assertSame(
+			array(
+				'a' => 'PAID',
+				'b' => '',
+			),
+			$states
+		);
+	}
 }

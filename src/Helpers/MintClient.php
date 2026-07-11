@@ -183,13 +183,15 @@ final class MintClient {
 					: $json;
 				if ( is_array( $list ) ) {
 					$out = array_fill_keys( $quote_ids, '' );
-					foreach ( array_values( $list ) as $i => $entry ) {
-						if ( ! is_array( $entry ) ) {
+					foreach ( $list as $entry ) {
+						// Skip entries without an explicit quote id: a mint
+						// that omits it, or returns fewer entries than
+						// requested, must never let a state be misattributed
+						// to the wrong quote.
+						if ( ! is_array( $entry ) || empty( $entry['quote'] ) ) {
 							continue;
 						}
-						// Entries come back in request order per the spec;
-						// prefer the explicit quote id when included.
-						$id = (string) ( $entry['quote'] ?? ( $quote_ids[ $i ] ?? '' ) );
+						$id = (string) $entry['quote'];
 						if ( isset( $out[ $id ] ) ) {
 							$out[ $id ] = (string) ( $entry['state'] ?? '' );
 						}
