@@ -21,6 +21,7 @@ import {
   deriveWalletSeed,
   extractPaymentPreimage,
   loadStrandedProofs,
+  MINT_POLL_INTERVALS_MS,
   type MeltAction,
   type MeltOutcome,
   type QrMode,
@@ -447,12 +448,15 @@ jQuery(function ($) {
       return false;
     };
 
-    // Fallback: slow polling of the mint. 12s × ~15min = ~75 requests, well
-    // under typical mint rate limits.
+    // Fallback: slow polling of the mint, backing off as the wait grows.
+    // The deadline is live: a slid spot window (updateQuoteExpiry) extends
+    // it between iterations with no reload.
     const pollPaid = async (): Promise<boolean> => {
       try {
+        let streak = 0;
         while (!ac.signal.aborted && Date.now() < deadlineMs()) {
-          await delay(12_000);
+          await delay(selectPollIntervalMs(streak, MINT_POLL_INTERVALS_MS));
+          streak += 1;
           const q = await wallet.checkMintQuoteBolt11(data.mintQuote.id);
           if (q.state === 'PAID') return true;
         }

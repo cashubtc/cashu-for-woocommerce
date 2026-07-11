@@ -3,6 +3,7 @@ import {
   composeRestUrl,
   deriveMeltFailureBranch,
   extractPaymentPreimage,
+  MINT_POLL_INTERVALS_MS,
   selectPollIntervalMs,
 } from '../../src/ts/helpers';
 
@@ -39,6 +40,19 @@ describe('selectPollIntervalMs', () => {
   test('single-element intervals array returns that one for any streak', () => {
     expect(selectPollIntervalMs(0, [42])).toBe(42);
     expect(selectPollIntervalMs(5, [42])).toBe(42);
+  });
+});
+
+// ----------------------------------------------------------------------------
+// MINT_POLL_INTERVALS_MS
+// ----------------------------------------------------------------------------
+
+describe('MINT_POLL_INTERVALS_MS', () => {
+  test('starts at 12s and caps at 120s for long slid windows', () => {
+    expect(selectPollIntervalMs(0, MINT_POLL_INTERVALS_MS)).toBe(12_000);
+    expect(selectPollIntervalMs(4, MINT_POLL_INTERVALS_MS)).toBe(12_000);
+    expect(selectPollIntervalMs(5, MINT_POLL_INTERVALS_MS)).toBe(30_000);
+    expect(selectPollIntervalMs(999, MINT_POLL_INTERVALS_MS)).toBe(120_000);
   });
 });
 
