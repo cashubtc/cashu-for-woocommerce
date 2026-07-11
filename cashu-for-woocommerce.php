@@ -50,6 +50,9 @@ register_activation_hook(
 		if ( ! wp_next_scheduled( \Cashu\WC\Helpers\MintLimits::HOOK ) ) {
 			wp_schedule_event( time() + 5 * MINUTE_IN_SECONDS, 'hourly', \Cashu\WC\Helpers\MintLimits::HOOK );
 		}
+		if ( ! wp_next_scheduled( \Cashu\WC\Helpers\MintQuoteReconciler::HOOK ) ) {
+			wp_schedule_event( time() + 2 * MINUTE_IN_SECONDS, 'hourly', \Cashu\WC\Helpers\MintQuoteReconciler::HOOK );
+		}
 	}
 );
 
@@ -62,6 +65,7 @@ register_deactivation_hook(
 		}
 		wp_clear_scheduled_hook( \Cashu\WC\Helpers\MeltReconciler::HOOK );
 		wp_clear_scheduled_hook( \Cashu\WC\Helpers\MintLimits::HOOK );
+		wp_clear_scheduled_hook( \Cashu\WC\Helpers\MintQuoteReconciler::HOOK );
 	}
 );
 

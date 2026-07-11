@@ -10,6 +10,7 @@ use Cashu\WC\Helpers\ConfirmMeltQuoteController;
 use Cashu\WC\Helpers\Logger;
 use Cashu\WC\Helpers\MeltReconciler;
 use Cashu\WC\Helpers\MintLimits;
+use Cashu\WC\Helpers\MintQuoteReconciler;
 use Cashu\WC\Helpers\PayController;
 
 final class CashuWCPlugin {
@@ -74,6 +75,10 @@ final class CashuWCPlugin {
 		// them via the mint's authoritative state. Scheduled on plugin activation.
 		add_action( MeltReconciler::HOOK, array( MeltReconciler::class, 'reconcile_pending' ) );
 
+		// Cron: watch customer mint quotes for settlements that arrive after
+		// the browser stopped watching (issue #36).
+		add_action( MintQuoteReconciler::HOOK, array( MintQuoteReconciler::class, 'sweep' ) );
+
 		// Cron: keep the cached mint/LNURL amount-limit snapshot fresh so
 		// is_available() can hide the gateway for out-of-range carts.
 		add_action( MintLimits::HOOK, array( MintLimits::class, 'refresh' ) );
@@ -90,6 +95,9 @@ final class CashuWCPlugin {
 				// habitually share a wp-cron request.
 				if ( ! wp_next_scheduled( MintLimits::HOOK ) ) {
 					wp_schedule_event( time() + 5 * MINUTE_IN_SECONDS, 'hourly', MintLimits::HOOK );
+				}
+				if ( ! wp_next_scheduled( MintQuoteReconciler::HOOK ) ) {
+					wp_schedule_event( time() + 2 * MINUTE_IN_SECONDS, 'hourly', MintQuoteReconciler::HOOK );
 				}
 			}
 		);

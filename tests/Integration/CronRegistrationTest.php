@@ -9,6 +9,7 @@ use Brain\Monkey\Functions;
 use Cashu\WC\CashuWCPlugin;
 use Cashu\WC\Helpers\MeltReconciler;
 use Cashu\WC\Helpers\MintLimits;
+use Cashu\WC\Helpers\MintQuoteReconciler;
 use Cashu\WC\Tests\IntegrationTestCase;
 
 /**
@@ -30,6 +31,10 @@ final class CronRegistrationTest extends IntegrationTestCase {
 		Actions\expectAdded( MeltReconciler::HOOK )
 			->once()
 			->with( array( MeltReconciler::class, 'reconcile_pending' ) );
+
+		Actions\expectAdded( MintQuoteReconciler::HOOK )
+			->once()
+			->with( array( MintQuoteReconciler::class, 'sweep' ) );
 
 		Actions\expectAdded( MintLimits::HOOK )
 			->once()
