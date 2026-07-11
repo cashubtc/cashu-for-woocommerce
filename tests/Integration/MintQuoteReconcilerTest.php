@@ -56,25 +56,74 @@ final class MintQuoteReconcilerTest extends IntegrationTestCase {
 		);
 	}
 
-	public function test_sweep_query_is_sparse_and_bounded(): void {
+	public function test_sweep_runs_live_cohort_then_backlog_cohort_query(): void {
 		$this->stubBaseline();
 		$this->setUpFakeWpdb();
-		$captured = array();
+		$calls = array();
 		Functions\when( 'wc_get_orders' )->alias(
-			static function ( array $args ) use ( &$captured ): array {
-				$captured = $args;
+			static function ( array $args ) use ( &$calls ): array {
+				$calls[] = $args;
 				return array();
 			}
 		);
 
 		MintQuoteReconciler::sweep();
 
-		$this->assertSame( 20, $captured['limit'] );
-		$this->assertSame( 'cashu_default', $captured['payment_method'] );
-		$this->assertContains( 'cancelled', $captured['status'] );
-		$keys = array_column( $captured['meta_query'], 'key' );
+		$this->assertCount( 2, $calls );
+		$live    = $calls[0];
+		$backlog = $calls[1];
+
+		$this->assertSame( 20, $live['limit'] );
+		$this->assertSame( 'cashu_default', $live['payment_method'] );
+		$this->assertContains( 'cancelled', $live['status'] );
+		$keys = array_column( $live['meta_query'], 'key' );
 		$this->assertContains( '_cashu_mint_quote_id', $keys );
 		$this->assertContains( MintQuoteReconciler::DONE_META, $keys );
+		$this->assertStringStartsWith( '>', (string) $live['date_created'] );
+
+		$this->assertSame( 20, $backlog['limit'] );
+		$this->assertSame( $live['payment_method'], $backlog['payment_method'] );
+		$this->assertSame( $live['meta_query'], $backlog['meta_query'] );
+		$this->assertStringStartsWith( '<', (string) $backlog['date_created'] );
+	}
+
+	public function test_sweep_skips_backlog_query_when_live_cohort_fills_cap(): void {
+		$this->stubBaseline();
+		$this->setUpFakeWpdb();
+		$calls = array();
+		Functions\when( 'wc_get_orders' )->alias(
+			static function ( array $args ) use ( &$calls ): array {
+				$calls[] = $args;
+				// Live cohort fills the cap; entries are not WC_Order so
+				// sweep_one() skips them harmlessly via its instanceof guard.
+				return '>' === substr( (string) $args['date_created'], 0, 1 )
+					? array_fill( 0, 20, new \stdClass() )
+					: array();
+			}
+		);
+
+		MintQuoteReconciler::sweep();
+
+		$this->assertCount( 1, $calls );
+	}
+
+	public function test_sweep_backlog_query_uses_remaining_slots(): void {
+		$this->stubBaseline();
+		$this->setUpFakeWpdb();
+		$calls = array();
+		Functions\when( 'wc_get_orders' )->alias(
+			static function ( array $args ) use ( &$calls ): array {
+				$calls[] = $args;
+				return '>' === substr( (string) $args['date_created'], 0, 1 )
+					? array_fill( 0, 5, new \stdClass() )
+					: array();
+			}
+		);
+
+		MintQuoteReconciler::sweep();
+
+		$this->assertCount( 2, $calls );
+		$this->assertSame( 15, $calls[1]['limit'] );
 	}
 
 	public function test_paid_current_quote_marks_notes_and_emails_once(): void {

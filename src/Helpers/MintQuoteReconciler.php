@@ -38,34 +38,75 @@ final class MintQuoteReconciler {
 	/** Keep watching this long past the payable window (stuck HTLC tail). */
 	private const GRACE_SECS = DAY_IN_SECONDS;
 
+	/**
+	 * date_created cutoff separating the "live" and "backlog" cohorts in
+	 * sweep(). Longest observed quote TTL (coinos, 7d) + the grace tail +
+	 * a day's margin. Scheduling priority only, not a correctness gate:
+	 * sweep_one() still ages a live-cohort order out from its own quote
+	 * expiry regardless of this cutoff.
+	 */
+	private const WATCH_HORIZON_SECS = 9 * DAY_IN_SECONDS;
+
 	/** Cron entry point. Wired in CashuWCPlugin::run(). */
 	public static function sweep(): void {
 		if ( ! function_exists( 'wc_get_orders' ) ) {
 			return;
 		}
-		// Sparse bounded sweep: DONE_META excludes settled and aged orders,
-		// so only orders inside their watch window are ever returned.
-		$orders = wc_get_orders(
-			array(
-				'status'         => array( 'pending', 'on-hold', 'cancelled', 'failed' ),
-				'payment_method' => 'cashu_default',
-				'limit'          => self::MAX_PER_RUN,
-				'orderby'        => 'date',
-				'order'          => 'ASC',
-				// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
-				'meta_query'     => array(
-					array(
-						'key'     => '_cashu_mint_quote_id',
-						'compare' => 'EXISTS',
-					),
-					array(
-						'key'     => self::DONE_META,
-						'compare' => 'NOT EXISTS',
-					),
+		$cutoff    = time() - self::WATCH_HORIZON_SECS;
+		$base_args = array(
+			'status'         => array( 'pending', 'on-hold', 'cancelled', 'failed' ),
+			'payment_method' => 'cashu_default',
+			'orderby'        => 'date',
+			'order'          => 'ASC',
+			// Sparse bounded sweep: DONE_META excludes settled and aged
+			// orders, so only orders inside their watch window are ever
+			// returned.
+			// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query
+			'meta_query'     => array(
+				array(
+					'key'     => '_cashu_mint_quote_id',
+					'compare' => 'EXISTS',
 				),
-				'return'         => 'objects',
+				array(
+					'key'     => self::DONE_META,
+					'compare' => 'NOT EXISTS',
+				),
+			),
+			'return'         => 'objects',
+		);
+
+		// Live cohort first, so a backlog of older watched orders (e.g. a
+		// burst right after this reconciler shipped) can never starve
+		// orders still inside their real watch window.
+		$live = wc_get_orders(
+			array_merge(
+				$base_args,
+				array(
+					'date_created' => '>' . $cutoff,
+					'limit'        => self::MAX_PER_RUN,
+				)
 			)
 		);
+		self::sweep_orders( $live );
+
+		$remaining = self::MAX_PER_RUN - ( is_array( $live ) ? count( $live ) : 0 );
+		if ( $remaining <= 0 ) {
+			return;
+		}
+		$backlog = wc_get_orders(
+			array_merge(
+				$base_args,
+				array(
+					'date_created' => '<' . $cutoff,
+					'limit'        => $remaining,
+				)
+			)
+		);
+		self::sweep_orders( $backlog );
+	}
+
+	/** Run sweep_one() over a wc_get_orders() result, ignoring non-order entries. */
+	private static function sweep_orders( $orders ): void {
 		if ( ! is_array( $orders ) ) {
 			return;
 		}
