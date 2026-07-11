@@ -155,6 +155,88 @@ final class MintQuoteReconcilerTest extends IntegrationTestCase {
 		MintQuoteReconciler::sweep_one( $order );
 	}
 
+	public function test_detection_keeps_watching_while_an_archived_invoice_is_payable(): void {
+		$this->stubBaseline();
+		$this->setUpFakeWpdb();
+		$meta                                 = $this->watchedMeta();
+		$meta['_cashu_archived_mint_quotes']  = (string) json_encode(
+			array(
+				array(
+					'quote'  => 'mq_old',
+					'amount' => 5000,
+					'expiry' => time() + DAY_IN_SECONDS,
+				),
+			)
+		);
+		$order = $this->mockOrder( 42, $meta );
+		$order->shouldReceive( 'is_paid' )->andReturn( false );
+		$order->shouldReceive( 'get_checkout_payment_url' )->andReturn( 'https://s.example/pay' );
+		// Only the first tick's detection saves and notes; the archived
+		// invoice is still payable, so the watch stays open and the second
+		// tick's record_detection() call is a guarded no-op.
+		$order->shouldReceive( 'save' )->once()->andReturn( 42 );
+		$order->shouldReceive( 'add_order_note' )
+			->with( \Mockery::type( 'string' ) )->once()->andReturn( 1 );
+		$order->shouldReceive( 'add_order_note' )
+			->with( \Mockery::type( 'string' ), 1 )->once()->andReturn( 2 );
+		Functions\when( 'wc_get_order' )->justReturn( $order );
+		Functions\expect( 'wp_remote_post' )->twice()->andReturn(
+			$this->batchResponse(
+				array(
+					'mq1'    => 'PAID',
+					'mq_old' => 'UNPAID',
+				)
+			)
+		);
+
+		MintQuoteReconciler::sweep_one( $order );
+		$this->assertNotSame( '', (string) $order->get_meta( MintQuoteReconciler::DETECTED_META ) );
+		$this->assertSame( '', (string) $order->get_meta( MintQuoteReconciler::DONE_META ) );
+
+		// Second tick: still watching the archived invoice, so it probes the
+		// mint again but adds no further notes.
+		MintQuoteReconciler::sweep_one( $order );
+		$this->assertSame( '', (string) $order->get_meta( MintQuoteReconciler::DONE_META ) );
+	}
+
+	public function test_detection_marks_done_when_archived_invoices_are_dead(): void {
+		$this->stubBaseline();
+		$this->setUpFakeWpdb();
+		$meta                                 = $this->watchedMeta();
+		// Archived expiry is past its payable window plus the 24h grace.
+		$meta['_cashu_archived_mint_quotes']  = (string) json_encode(
+			array(
+				array(
+					'quote'  => 'mq_old',
+					'amount' => 5000,
+					'expiry' => time() - ( 2 * DAY_IN_SECONDS + 60 ),
+				),
+			)
+		);
+		$order = $this->mockOrder( 42, $meta );
+		$order->shouldReceive( 'is_paid' )->andReturn( false );
+		$order->shouldReceive( 'get_checkout_payment_url' )->andReturn( 'https://s.example/pay' );
+		$order->shouldReceive( 'save' )->twice()->andReturn( 42 );
+		$order->shouldReceive( 'add_order_note' )
+			->with( \Mockery::type( 'string' ) )->once()->andReturn( 1 );
+		$order->shouldReceive( 'add_order_note' )
+			->with( \Mockery::type( 'string' ), 1 )->once()->andReturn( 2 );
+		Functions\when( 'wc_get_order' )->justReturn( $order );
+		Functions\expect( 'wp_remote_post' )->once()->andReturn(
+			$this->batchResponse(
+				array(
+					'mq1'    => 'PAID',
+					'mq_old' => 'UNPAID',
+				)
+			)
+		);
+
+		MintQuoteReconciler::sweep_one( $order );
+
+		$this->assertNotSame( '', (string) $order->get_meta( MintQuoteReconciler::DETECTED_META ) );
+		$this->assertNotSame( '', (string) $order->get_meta( MintQuoteReconciler::DONE_META ) );
+	}
+
 	public function test_paid_archived_quote_gets_a_note_but_no_detection_marker(): void {
 		$this->stubBaseline();
 		$this->setUpFakeWpdb();

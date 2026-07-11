@@ -256,9 +256,20 @@ final class MintQuoteReconciler {
 			}
 
 			if ( '' !== (string) $fresh->get_meta( self::DETECTED_META, true ) ) {
-				// Detected (this tick or a prior one) and the archived pass
-				// above is done: nothing left to watch for. Completion flips
-				// is_paid, which short-circuits above on the next tick.
+				if ( self::archived_still_payable( $archived ) ) {
+					// Detected, but an archived invoice is still inside its
+					// payable window: a customer double-paying that stale,
+					// rotated invoice would otherwise never be caught. Keep
+					// the order in the watch; record_detection()'s guards
+					// already keep this silent (no repeat note or email) on
+					// every later tick, and the watch closes once that
+					// archived invoice ages past its grace, either via this
+					// branch on a later tick or the age-out check below.
+					return;
+				}
+				// Detected and no archived invoice is still payable: nothing
+				// left to watch for. Completion flips is_paid, which
+				// short-circuits above on the next tick.
 				$fresh->update_meta_data( self::DONE_META, (string) time() );
 				$fresh->save();
 				return;
@@ -313,6 +324,17 @@ final class MintQuoteReconciler {
 			);
 		}
 		return $entries;
+	}
+
+	/** True if any archived entry is still inside its payable window (raw expiry plus the grace tail). */
+	private static function archived_still_payable( array $entries ): bool {
+		$now = time();
+		foreach ( $entries as $entry ) {
+			if ( $entry['expiry'] > 0 && $now <= $entry['expiry'] + self::GRACE_SECS ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** Mark the detection once, note once, email the customer once. */
