@@ -12,6 +12,7 @@ use Cashu\WC\Helpers\MeltReconciler;
 use Cashu\WC\Helpers\MintLimits;
 use Cashu\WC\Helpers\MintQuoteReconciler;
 use Cashu\WC\Helpers\PayController;
+use Cashu\WC\Helpers\SpotWindow;
 
 final class CashuWCPlugin {
 
@@ -49,6 +50,11 @@ final class CashuWCPlugin {
 		// at the mint. Proofs may already be committed and the LN payment
 		// routing; cancelling here would race the settlement.
 		add_filter( 'woocommerce_cancel_unpaid_order', array( self::class, 'preventCancelDuringSettlement' ), 10, 2 );
+
+		// Reopen the order-pay page for a cancelled cashu order once the
+		// sweep has detected a late settlement at the mint, so the customer
+		// can complete the payment that already happened.
+		add_filter( 'woocommerce_valid_order_statuses_for_payment', array( self::class, 'allowLateSettlementPayment' ), 10, 2 );
 
 		// Settings page.
 		add_filter( 'woocommerce_get_settings_pages', array( $this, 'registerSettingsPage' ) );
@@ -174,7 +180,42 @@ final class CashuWCPlugin {
 		if ( '' !== (string) $order->get_meta( '_cashu_melt_pending_quote_id', true ) ) {
 			return false;
 		}
+		// A late settlement was detected at the mint; the order is
+		// completable and must not be cancelled out from under it.
+		if ( '' !== (string) $order->get_meta( MintQuoteReconciler::DETECTED_META, true ) ) {
+			return false;
+		}
+		// The customer's BOLT11 is still payable at the mint. Cancelling
+		// now would leave a live invoice pointing at an order that can no
+		// longer accept it.
+		if ( SpotWindow::quote_payable( $order ) ) {
+			return false;
+		}
 		return $should_cancel;
+	}
+
+	/**
+	 * `woocommerce_valid_order_statuses_for_payment` filter. Opens the
+	 * order-pay page for a CANCELLED cashu order only when the sweep has
+	 * already detected the customer's settlement at the mint: the page
+	 * then completes a payment that already happened. It never invites a
+	 * fresh payment on a killed order.
+	 */
+	public static function allowLateSettlementPayment( $statuses, $order ) {
+		if ( ! is_array( $statuses ) || ! $order instanceof \WC_Order ) {
+			return $statuses;
+		}
+		if ( 'cashu_default' !== $order->get_payment_method() ) {
+			return $statuses;
+		}
+		if ( in_array( 'cancelled', $statuses, true ) ) {
+			return $statuses;
+		}
+		if ( '' === (string) $order->get_meta( MintQuoteReconciler::DETECTED_META, true ) ) {
+			return $statuses;
+		}
+		$statuses[] = 'cancelled';
+		return $statuses;
 	}
 
 	public function registerSettingsPage( array $pages ): array {
