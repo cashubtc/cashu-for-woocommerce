@@ -7,9 +7,10 @@ import { getErrorMessage } from './utils';
 
 export type CurrencyUnit = 'btc' | 'sat' | 'msat' | string;
 
-// Wallet cache: bounded so a long-lived tab doesn't reuse a Wallet with stale
-// keyset state. Mint keyset rotations are rare but possible, and a stale
-// wallet would silently produce proofs the mint rejects on next use.
+// Wallet cache: TTL-bounded as belt-and-braces against long-lived tabs.
+// Since cashu-ts 4.9 the wallet's keyset snapshot self-repairs on mint
+// keyset rotation, so a cached Wallet no longer risks minting into a
+// rotated-out keyset; the TTL just bounds memory and any other drift.
 // The cache key incorporates the seed fingerprint so two orders against
 // the same mint never share a Wallet (different seeds = different
 // deterministic counters; sharing a Wallet across seeds is a correctness bug).
@@ -77,12 +78,12 @@ export function createWalletGetter(
  * for wallet.batchRestore(300, 300, 0, keysetId) — same shape with
  * built-in gap-limit early-stop on consecutive empty batches.
  *
- * Filtering to active sat keysets avoids hammering the mint walking
- * msat/btc keysets we'd never have minted into, and skips inactive
- * keysets (the mint won't have signatures against them for this seed).
- *
- * API note: cashu-ts v4.5.1 exposes keysets via wallet.keyChain.getKeysets()
- * (unit-filtered to the wallet's unit) and Keyset.isActive (not .active).
+ * Walks ALL sat keysets, active first. The seed is per-order, so any sat
+ * keyset active at any point during the order can hold signatures — and a
+ * keyset that rotated out mid-order is inactive by the time we restore.
+ * Active-first ordering plus the targetAmount early-break keeps the
+ * common no-rotation case at one restore call. Non-sat keysets are still
+ * skipped: we never mint into them, walking them just hammers the mint.
  */
 export async function tryRestore(
   wallet: Wallet,
@@ -91,7 +92,8 @@ export async function tryRestore(
   const out: Proof[] = [];
   const keysets = wallet.keyChain
     .getKeysets()
-    .filter((k) => k.unit === 'sat' && k.isActive);
+    .filter((k) => k.unit === 'sat')
+    .sort((a, b) => Number(b.isActive) - Number(a.isActive));
   for (const ks of keysets) {
     try {
       const { proofs, lastCounterWithSignature } = await wallet.restore(0, 64, {

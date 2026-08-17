@@ -54,7 +54,7 @@ describe('tryRestore', () => {
     expect(await tryRestore(wallet)).toEqual([]);
   });
 
-  test('returns empty when no keysets are active sat', async () => {
+  test('returns empty when no sat keyset yields proofs', async () => {
     const wallet = makeStubWallet({
       keysets: [
         { id: 'inactive', unit: 'sat', isActive: false },
@@ -64,7 +64,7 @@ describe('tryRestore', () => {
     expect(await tryRestore(wallet)).toEqual([]);
   });
 
-  test('walks each active sat keyset exactly once with start=0 count=64', async () => {
+  test('walks each sat keyset exactly once with start=0 count=64', async () => {
     const calls: Array<{ start: number; count: number; keysetId: string }> = [];
     const wallet = makeStubWallet({
       keysets: [
@@ -212,7 +212,7 @@ describe('tryRestore', () => {
     expect(calls).toEqual(['sat']);
   });
 
-  test('skips inactive sat keysets', async () => {
+  test('walks inactive sat keysets after active ones (rotation recovery)', async () => {
     const calls: string[] = [];
     const wallet = makeStubWallet({
       keysets: [
@@ -225,7 +225,24 @@ describe('tryRestore', () => {
       },
     });
     await tryRestore(wallet);
+    expect(calls).toEqual(['new', 'old']);
+  });
+
+  test('stops before inactive keysets when active ones reach the target', async () => {
+    const calls: string[] = [];
+    const wallet = makeStubWallet({
+      keysets: [
+        { id: 'old', unit: 'sat', isActive: false },
+        { id: 'new', unit: 'sat', isActive: true },
+      ],
+      restore: async (_s, _c, cfg) => {
+        calls.push(cfg.keysetId);
+        return { proofs: [sampleProof(16)], lastCounterWithSignature: 0 };
+      },
+    });
+    const out = await tryRestore(wallet, 10);
     expect(calls).toEqual(['new']);
+    expect(out).toHaveLength(1);
   });
 });
 
