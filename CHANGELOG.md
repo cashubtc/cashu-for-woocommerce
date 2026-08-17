@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.5.1](https://github.com/cashubtc/cashu-for-woocommerce/compare/v0.5.0...v0.5.1) (2026-08-17)
+
+### Bug Fixes
+
+- recover proofs from rotated-out keysets (cashu-ts 4.9.0) ([#51](https://github.com/cashubtc/cashu-for-woocommerce/pull/51))
+
 ## [v0.5.0](https://github.com/cashubtc/cashu-for-woocommerce/compare/v0.4.0...v0.5.0) (2026-07-11)
 
 ### Bug Fixes
