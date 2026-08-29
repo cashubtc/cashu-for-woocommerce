@@ -44,3 +44,20 @@ updates:
     # Security updates bypass cooldown automatically.
     cooldown:
       default-days: 7
+
+  # composer: dev tooling only (linters, stubs, phpunit). `require` is empty
+  # and vendor/ is never committed, so nothing here reaches a released zip;
+  # grouped weekly to keep the lint and test stack current.
+  - package-ecosystem: composer
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      composer:
+        patterns: ['*']
+    commit-message:
+      prefix: chore
+      include: scope
+    cooldown:
+      default-days: 7
