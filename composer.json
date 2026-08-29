@@ -19,6 +19,9 @@
       "role": "Developer"
     }
   ],
+  "require": {
+    "php": ">=8.3"
+  },
   "require-dev": {
     "php-stubs/woocommerce-stubs": "^10.3",
     "php-stubs/wordpress-stubs": "^6.9",
@@ -38,6 +41,9 @@
     "test:integration": "vendor/bin/phpunit --testsuite=integration"
   },
   "config": {
+    "platform": {
+      "php": "8.3"
+    },
     "allow-plugins": {
       "phpstan/extension-installer": true,
       "dealerdirect/phpcodesniffer-composer-installer": true
