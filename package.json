@@ -18,7 +18,7 @@
     "@playwright/test": "^1.62.1",
     "@prettier/plugin-php": "^0.25.0",
     "@types/jquery": "^4.0.1",
-    "@vitest/coverage-v8": "^4.1.10",
+    "@vitest/coverage-v8": "^4.1.11",
     "@wordpress/env": "^11.13.0",
     "git-cliff": "^2.12.0",
     "jsdom": "^30.0.1",
@@ -27,7 +27,7 @@
     "stylelint-config-standard": "^40.0.0",
     "stylelint-order": "^8.1.1",
     "typescript": "^7.0.2",
-    "vite": "^8.2.1",
+    "vite": "^8.2.2",
     "vitest": "^4.1.8"
   },
   "prettier": {
