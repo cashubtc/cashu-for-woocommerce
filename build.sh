@@ -4,7 +4,7 @@ set -euo pipefail
 pkg="cashu-for-woocommerce.zip" # plugin name
 
 # Build packages
-composer install
+bash scripts/composer.sh install
 npm ci --include=dev
 npm run build
 

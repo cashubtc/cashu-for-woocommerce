@@ -9,18 +9,17 @@ This guide explains how to set up the development environment, run the tooling, 
 You will need
 
 - Node and npm for the build pipeline
-- PHP and Composer for running unit tests
 - Docker for the wp-env local WordPress environment
 - A local clone of this repository
 
-Optionally, you can also install wp-env either globally or as a dev dependency, so you can run a disposable WordPress and WooCommerce site for testing the gateway.
+PHP and Composer on the host are optional. Without them, the PHP steps (`composer install`, phpcs, PHPUnit) run inside the wp-env cli container via `scripts/composer.sh`, so start wp-env first with `npm run wp-env:start`.
 
 From your terminal
 
 ```bash
 cd /path/to/cashu-for-woocommerce
 npm install
-composer install
+bash scripts/composer.sh install
 ```
 
 This installs all the development dependencies, including Prettier, Vite and PHPUnit.

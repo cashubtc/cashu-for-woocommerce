@@ -41,8 +41,8 @@
     "braceStyle": "1tbs"
   },
   "scripts": {
-    "lint:php:check": "composer lint:check",
-    "lint:php": "composer lint:fix",
+    "lint:php:check": "bash scripts/composer.sh lint:check",
+    "lint:php": "bash scripts/composer.sh lint:fix",
     "lint:css:check": "stylelint \"assets/**/*.css\"",
     "lint:css": "stylelint \"assets/**/*.css\" --fix",
     "lint:ts:check": "tsc --noEmit",
@@ -55,7 +55,7 @@
     "format": "prettier -w cashu-for-woocommerce.php src tests assets",
     "changelog": "git-cliff -o CHANGELOG.md",
     "build": "vite build && npm run format && npm run lint && npm run lint:check",
-    "check": "npm run format:check && npm run lint:check && npm run test:ts && composer test",
+    "check": "npm run format:check && npm run lint:check && npm run test:ts && bash scripts/composer.sh test",
     "fix": "npm run format && npm run lint",
     "wp-env:start": "wp-env start",
     "wp-env:seed-store": "bash scripts/seed-store.sh",
