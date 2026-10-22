@@ -97,13 +97,9 @@ This will
 
 - Install and activate the WordPress importer inside the wp-env container
 - Import the `sample_products.xml` file that ships with WooCommerce into the development site
+- Dismiss the onboarding screens, take the store out of "coming soon" mode and enable the Cashu gateway
 
-After that, you will usually need to activate the Cashu for WooCommerce plugin and set it up:
-
-- Go to WooCommerce, Settings, Payments
-- Enable the Cashu ecash plugin
-
-You should now have a working dummy store where you can place test orders through the Cashu gateway straight away.
+Then add a Lightning address and a trusted mint on the WooCommerce, Settings, Cashu tab, and you can place test orders through the Cashu gateway.
 
 ### Reading logs
 
@@ -213,7 +209,7 @@ CASHU_E2E_BASE_URL=https://<your-tunnel>.trycloudflare.com npx playwright test l
 
 #### Gotchas
 
-- A fresh WooCommerce install defaults to **"coming soon" mode**, which blanks the storefront for the anonymous test browser and the run will hang on the product page. Disable it once: `npx wp-env run cli -- wp option update woocommerce_coming_soon no`.
+- A fresh WooCommerce install defaults to **"coming soon" mode**, which blanks the storefront for the anonymous test browser and the run will hang on the product page. `npm run wp-env:seed-store` turns it off.
 - The default 14-minute pay window sits just inside the 15-minute spot-quote expiry. Override with `CASHU_E2E_PAY_WAIT_MS` if you need longer.
 - The configured mint must advertise NUT-09 or `live-recovery` can't pass — the trusted-mint settings probe enforces this at save time, so a mint that gets past configuration will support it.
 

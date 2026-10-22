@@ -17,7 +17,7 @@ import { addBeanieToCart, fillCheckout } from './helpers';
 // Pass CASHU_E2E_PAY_WAIT_MS to control how long to wait for payment
 // (default 14 min — just inside the 15-min spot quote window).
 
-const ARTIFACTS = path.resolve(__dirname, 'artifacts');
+const ARTIFACTS = path.resolve(import.meta.dirname, 'artifacts');
 const PAY_WAIT_MS = Number(process.env.CASHU_E2E_PAY_WAIT_MS ?? 14 * 60_000);
 
 function save(name: string, contents: string): void {
