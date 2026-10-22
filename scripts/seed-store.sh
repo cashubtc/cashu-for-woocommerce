@@ -20,7 +20,14 @@ wp option update woocommerce_currency "GBP"
 
 # Dismiss the onboarding wizard / task list / welcome modal.
 wp option update woocommerce_onboarding_profile '{"completed":true,"skipped":true}' --format=json
-wp option update woocommerce_task_list_hidden yes
+# Set the list directly: WC's deprecated woocommerce_task_list_hidden shim
+# reports a failed update, which aborts this script.
+wp option update woocommerce_task_list_hidden_lists '["setup"]' --format=json
 wp option update woocommerce_task_list_welcome_modal_dismissed yes
 wp option update woocommerce_show_marketplace_suggestions no
 wp option update woocommerce_allow_tracking no
+
+# Open the storefront (fresh installs start in "coming soon" mode) and enable
+# the gateway so checkout offers Cashu once a mint and address are set.
+wp option update woocommerce_coming_soon no
+wp wc payment_gateway update cashu_default --enabled=true --user=admin

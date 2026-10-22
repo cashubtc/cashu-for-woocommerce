@@ -23,7 +23,7 @@ import { addBeanieToCart, fillCheckout, readReceiptData } from './helpers';
 // Run headed so a human can pay:
 //   CASHU_E2E_BASE_URL=<tunnel> npx playwright test live-recovery --headed
 
-const ARTIFACTS = path.resolve(__dirname, 'artifacts');
+const ARTIFACTS = path.resolve(import.meta.dirname, 'artifacts');
 const PAY_WAIT_MS = Number(process.env.CASHU_E2E_PAY_WAIT_MS ?? 14 * 60_000);
 
 // Only the melt POST (/v1/melt/bolt11). NOT the quote-state probe
