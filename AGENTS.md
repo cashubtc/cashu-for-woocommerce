@@ -42,9 +42,9 @@ Run `wporg-assets-update.yml` (manual dispatch, no inputs). It pushes ONLY `read
 
 ## Dev essentials
 
-- Tooling: Node/npm, PHP/Composer; Docker required for `wp-env`.
+- Tooling: Node/npm and Docker (for `wp-env`). Host PHP/Composer is optional: without it, `scripts/composer.sh` runs the PHP steps in the wp-env cli container, so start wp-env first.
 - Common scripts: `npm run build`, `npm run format`, `npm run lint`.
-- **Pre-push verification:** `npm run check` runs the full pipeline in ~5s, no wp-env required — prettier `--check`, `phpcs`, stylelint, `tsc --noEmit`, vitest (TS unit tests, jsdom), and phpunit (PHP integration tests). Use it before every push.
+- **Pre-push verification:** `npm run check` runs the full pipeline in ~5s (wp-env needed only without host PHP) — prettier `--check`, `phpcs`, stylelint, `tsc --noEmit`, vitest (TS unit tests, jsdom), and phpunit (PHP integration tests). Use it before every push.
 - **Live smoke tests (manual, not in `check`/CI):** `tests/e2e/` has Playwright specs that drive a real store to a real settlement and block on a human paying the printed invoice — `live-checkout` (both legs settle) and `live-recovery` (strand proofs mid-melt, force NUT-09 restore). Run against the tunnel: `CASHU_E2E_BASE_URL=https://<tunnel> npx playwright test --headed` (one-time `npx playwright install chromium`). Full how-to + gotchas in CONTRIBUTING.md → "Live end-to-end smoke tests".
 - Local WP env: `npm run wp-env:start`, `npm run wp-env:seed-store`, `npm run wp-env:stop`.
 - Logs: plugin PHP log is `debug.log`; WooCommerce logs in admin.
