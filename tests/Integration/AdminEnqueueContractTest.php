@@ -81,7 +81,7 @@ final class AdminEnqueueContractTest extends IntegrationTestCase {
 		$picker = $this->localized['cashuMintPickerL10n'];
 		$this->assertSame( array( 'auditorApi', 'starterMints', 'i18n' ), array_keys( $picker ) );
 
-		$this->assertSame( 'https://api.audit.8333.space', $picker['auditorApi'] );
+		$this->assertSame( 'https://audit.imf.gg/api', $picker['auditorApi'] );
 
 		// Starter set mirrors numo's defaults; first entry must match the
 		// trusted-mint field default in get_settings_for_default_section().
