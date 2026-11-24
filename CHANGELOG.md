@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.5.3](https://github.com/cashubtc/cashu-for-woocommerce/compare/v0.5.2...v0.5.3) (2026-11-24)
+
+### Bug Fixes
+
+- point mint discovery at audit.imf.gg ([#115](https://github.com/cashubtc/cashu-for-woocommerce/pull/115))
+
 ## [v0.5.2](https://github.com/cashubtc/cashu-for-woocommerce/compare/v0.5.1...v0.5.2) (2026-10-22)
 
 ### Bug Fixes

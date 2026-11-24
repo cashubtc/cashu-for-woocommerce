@@ -5,7 +5,7 @@ Tags: payments, bitcoin, lightning, checkout, cashu
 Requires at least: 6.5
 Tested up to: 7.1
 Requires PHP: 8.3
-Stable tag: 0.5.2
+Stable tag: 0.5.3
 License: MIT
 License URI: https://github.com/cashubtc/cashu-for-woocommerce/blob/main/license.txt
 
@@ -110,6 +110,10 @@ Cashu is a free and open-source project, supported by donations. If you love thi
 - Donate to OpenCash: https://opencash.dev
 
 == Changelog ==
+
+= 0.5.3 =
+Fixed: "Discover more mints" in the trusted-mint picker works again; the mint auditor it reads has moved to audit.imf.gg.
+Maintenance: updates the bundled Cashu library (cashu-ts 4.13.1).
 
 = 0.5.2 =
 Maintenance: tested with WordPress 7.1 and WooCommerce 11.2.
