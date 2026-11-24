@@ -58,7 +58,7 @@ class GlobalSettings extends \WC_Settings_Page {
 			'cashu-mint-picker',
 			'cashuMintPickerL10n',
 			array(
-				'auditorApi'   => 'https://api.audit.8333.space',
+				'auditorApi'   => 'https://audit.imf.gg/api',
 				// Starter mints offered before discovery. Same set as numo's
 				// defaults; first entry matches the trusted-mint field default.
 				'starterMints' => apply_filters(
